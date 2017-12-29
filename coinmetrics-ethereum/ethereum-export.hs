@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings #-}
 
 module Main(main) where
 
@@ -59,6 +59,12 @@ main = run =<< O.execParser parser where
 							<> O.metavar "OUTPUT_AVRO_FILE"
 							<> O.help "Output AVRO file"
 							)
+						<*> O.option O.auto
+							(  O.long "block-size"
+							<> O.value 100 <> O.showDefault
+							<> O.metavar "BLOCK_SIZE"
+							<> O.help "Number of blockchain blocks in Avro block"
+							)
 					) (O.fullDesc <> O.progDesc "Export blockchain into file")
 				)
 			<> O.command "print-bigquery-schema"
@@ -79,6 +85,7 @@ data OptionCommand
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
 		, options_outputAvroFile :: !String
+		, options_blockSize :: !Int
 		}
 	| OptionPrintBigQuerySchemaCommand
 
@@ -93,6 +100,7 @@ run Options
 		, options_beginBlock = beginBlock
 		, options_endBlock = endBlock
 		, options_outputAvroFile = outputAvroFile
+		, options_blockSize = blockSize
 		} -> do
 		httpManager <- H.newManager H.defaultManagerSettings
 		let blockChain = newEthereum httpManager apiHost apiPort
@@ -100,8 +108,14 @@ run Options
 			block <- getBlockByHeight blockChain i
 			when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
 			return block
-		BL.writeFile outputAvroFile =<< A.encodeContainer . (\a -> [a]) =<< mapM step [beginBlock..(endBlock - 1)]
+		BL.writeFile outputAvroFile =<< A.encodeContainer . blockSplit blockSize =<< mapM step [beginBlock..(endBlock - 1)]
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionPrintBigQuerySchemaCommand ->
 		putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
+
+	where
+		blockSplit :: Int -> [a] -> [[a]]
+		blockSplit blockSize = \case
+			[] -> []
+			xs -> let (a, b) = splitAt blockSize xs in a : blockSplit blockSize b
