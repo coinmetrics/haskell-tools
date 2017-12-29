@@ -29,6 +29,7 @@ bigQuerySchema (Schema fields) = A.Array $ fieldsSchema fields where
 				SchemaFieldType_string -> "STRING"
 				SchemaFieldType_integer -> "INTEGER"
 				SchemaFieldType_float -> "FLOAT"
+				SchemaFieldType_bool -> "BOOLEAN"
 				SchemaFieldType_record _ -> "RECORD"
 				)
 			] ++ (case fieldType of

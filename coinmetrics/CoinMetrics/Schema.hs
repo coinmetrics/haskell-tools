@@ -10,6 +10,7 @@ module CoinMetrics.Schema
 	) where
 
 import qualified Data.ByteString as B
+import Data.Int
 import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
@@ -37,6 +38,7 @@ data SchemaFieldType
 	| SchemaFieldType_string
 	| SchemaFieldType_integer
 	| SchemaFieldType_float
+	| SchemaFieldType_bool
 	| SchemaFieldType_record
 		{ schemaFieldType_schema :: !Schema
 		}
@@ -95,11 +97,14 @@ instance SchemableField B.ByteString where
 instance SchemableField T.Text where
 	schemaFieldTypeOf _ = SchemaFieldType_string
 
-instance SchemableField Int where
+instance SchemableField Int64 where
 	schemaFieldTypeOf _ = SchemaFieldType_integer
 
 instance SchemableField Double where
 	schemaFieldTypeOf _ = SchemaFieldType_float
+
+instance SchemableField Bool where
+	schemaFieldTypeOf _ = SchemaFieldType_bool
 
 instance SchemableField a => SchemableField (Maybe a) where
 	schemaFieldTypeOf = schemaFieldTypeOf . fmap (fromMaybe undefined)
