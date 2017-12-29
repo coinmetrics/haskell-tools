@@ -4,6 +4,7 @@ module CoinMetrics.Ethereum
 	( newEthereum
 	, EthereumBlock(..)
 	, EthereumTransaction(..)
+	, EthereumLog(..)
 	) where
 
 import qualified Data.Aeson as J
@@ -11,8 +12,10 @@ import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
 import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
+import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
+import Data.Maybe
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
@@ -21,6 +24,7 @@ import Numeric
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Schema
 import CoinMetrics.Schema.Avro
 
 newtype Ethereum = Ethereum JsonRpc
@@ -46,6 +50,8 @@ data EthereumBlock = EthereumBlock
 	, eb_transactions :: !(V.Vector (Transaction Ethereum))
 	, eb_uncles :: !(V.Vector B.ByteString)
 	} deriving Generic
+
+instance Schemable EthereumBlock
 
 instance J.FromJSON EthereumBlock where
 	parseJSON = J.withObject "block" $ \fields -> EthereumBlock
@@ -84,12 +90,20 @@ data EthereumTransaction = EthereumTransaction
 	, et_blockNumber :: {-# UNPACK #-} !Int64
 	, et_transactionIndex :: {-# UNPACK #-} !Int64
 	, et_from :: !B.ByteString
-	, et_to :: !(Maybe B.ByteString)
+	, et_to :: !B.ByteString
 	, et_value :: {-# UNPACK #-} !Int64
 	, et_gasPrice :: {-# UNPACK #-} !Int64
 	, et_gas :: {-# UNPACK #-} !Int64
 	, et_input :: !B.ByteString
+	-- from eth_getTransactionReceipt
+	, et_gasUsed :: {-# UNPACK #-} !Int64
+	, et_contractAddress :: !B.ByteString
+	, et_logs :: !(V.Vector EthereumLog)
+	, et_logsBloom :: !B.ByteString
 	} deriving Generic
+
+instance Schemable EthereumTransaction
+instance SchemableField EthereumTransaction
 
 instance J.FromJSON EthereumTransaction where
 	parseJSON = J.withObject "transaction" $ \fields -> EthereumTransaction
@@ -99,15 +113,47 @@ instance J.FromJSON EthereumTransaction where
 		<*> (decodeHexNumber =<< fields J..: "blockNumber")
 		<*> (decodeHexNumber =<< fields J..: "transactionIndex")
 		<*> (decodeHexBytes  =<< fields J..: "from")
-		<*> (decodeMaybeHexBytes =<< fields J..: "to")
+		<*> (fmap (fromMaybe B.empty) . decodeMaybeHexBytes =<< fields J..: "to")
 		<*> (decodeHexNumber =<< fields J..: "value")
 		<*> (decodeHexNumber =<< fields J..: "gasPrice")
 		<*> (decodeHexNumber =<< fields J..: "gas")
 		<*> (decodeHexBytes  =<< fields J..: "input")
+		<*> (decodeHexNumber =<< fields J..: "gasUsed")
+		<*> (fmap (fromMaybe B.empty) . decodeMaybeHexBytes =<< fields J..: "contractAddress")
+		<*> (decodeLogs      =<< fields J..: "logs")
+		<*> (decodeHexBytes  =<< fields J..: "logsBloom")
+		where
+			decodeLogs = J.withArray "logs" $ V.mapM J.parseJSON
 
 instance A.HasAvroSchema EthereumTransaction where
 	schema = genericAvroSchema
 instance A.ToAvro EthereumTransaction where
+	toAvro = genericToAvro
+
+data EthereumLog = EthereumLog
+	{ el_removed :: !Bool
+	, el_logIndex :: {-# UNPACK #-} !Int64
+	, el_address :: !B.ByteString
+	, el_data :: !B.ByteString
+	, el_topics :: !(V.Vector B.ByteString)
+	} deriving Generic
+
+instance Schemable EthereumLog
+instance SchemableField EthereumLog
+
+instance J.FromJSON EthereumLog where
+	parseJSON = J.withObject "log" $ \fields -> EthereumLog
+		<$> (J.parseJSON     =<< fields J..: "removed")
+		<*> (decodeHexNumber =<< fields J..: "logIndex")
+		<*> (decodeHexBytes  =<< fields J..: "address")
+		<*> (decodeHexBytes  =<< fields J..: "data")
+		<*> (decodeTopics    =<< fields J..: "topics")
+		where
+			decodeTopics = J.withArray "topics" $ V.mapM decodeHexBytes
+
+instance A.HasAvroSchema EthereumLog where
+	schema = genericAvroSchema
+instance A.ToAvro EthereumLog where
 	toAvro = genericToAvro
 
 newEthereum :: H.Manager -> T.Text -> Int -> Ethereum
@@ -118,8 +164,21 @@ instance BlockChain Ethereum where
 	type Transaction Ethereum = EthereumTransaction
 
 	getBlockByHeight (Ethereum jsonRpc) blockHeight = do
-		eitherBlock <- J.fromJSON <$> jsonRpcRequest jsonRpc "eth_getBlockByNumber" [J.String $ T.pack $ "0x" ++ showHex blockHeight "", J.Bool True]
-		case eitherBlock of
+		J.Object blockFields@(HML.lookup "transactions" -> Just (J.Array rawTransactions)) <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" [J.String $ T.pack $ "0x" ++ showHex blockHeight "", J.Bool True]
+		transactions <- V.forM rawTransactions $ \(J.Object fields@(HML.lookup "hash" -> Just transactionHash)) -> do
+			J.Object receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" [transactionHash]
+			Just gasUsed <- return $ HML.lookup "gasUsed" receiptFields
+			Just contractAddress <- return $ HML.lookup "contractAddress" receiptFields
+			Just logs <- return $ HML.lookup "logs" receiptFields
+			Just logsBloom <- return $ HML.lookup "logsBloom" receiptFields
+			return $ J.Object $
+				HML.insert "gasUsed" gasUsed $
+				HML.insert "contractAddress" contractAddress $
+				HML.insert "logs" logs $
+				HML.insert "logsBloom" logsBloom $
+				fields
+		let jsonBlock = J.Object $ HML.insert "transactions" (J.Array transactions) blockFields
+		case J.fromJSON jsonBlock of
 			J.Success block -> return block
 			J.Error err -> fail err
 
