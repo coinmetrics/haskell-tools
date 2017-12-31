@@ -15,6 +15,7 @@ executable coinmetrics-ethereum-export
   main-is:           ethereum-export.hs
   other-modules:
     CoinMetrics.Ethereum
+    CoinMetrics.Ethereum.Util
   build-depends:
     aeson
     , avro

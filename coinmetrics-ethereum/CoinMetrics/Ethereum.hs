@@ -8,21 +8,17 @@ module CoinMetrics.Ethereum
 	) where
 
 import qualified Data.Aeson as J
-import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
-import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
-import Data.Maybe
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
-import Numeric
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Ethereum.Util
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema
 import CoinMetrics.Schema.Avro
@@ -86,18 +82,15 @@ instance A.ToAvro EthereumBlock where
 data EthereumTransaction = EthereumTransaction
 	{ et_hash :: !B.ByteString
 	, et_nonce :: {-# UNPACK #-} !Int64
-	, et_blockHash :: !B.ByteString
-	, et_blockNumber :: {-# UNPACK #-} !Int64
-	, et_transactionIndex :: {-# UNPACK #-} !Int64
 	, et_from :: !B.ByteString
-	, et_to :: !B.ByteString
+	, et_to :: !(Maybe B.ByteString)
 	, et_value :: {-# UNPACK #-} !Int64
 	, et_gasPrice :: {-# UNPACK #-} !Int64
 	, et_gas :: {-# UNPACK #-} !Int64
 	, et_input :: !B.ByteString
 	-- from eth_getTransactionReceipt
 	, et_gasUsed :: {-# UNPACK #-} !Int64
-	, et_contractAddress :: !B.ByteString
+	, et_contractAddress :: !(Maybe B.ByteString)
 	, et_logs :: !(V.Vector EthereumLog)
 	, et_logsBloom :: !B.ByteString
 	} deriving Generic
@@ -109,17 +102,14 @@ instance J.FromJSON EthereumTransaction where
 	parseJSON = J.withObject "transaction" $ \fields -> EthereumTransaction
 		<$> (decodeHexBytes  =<< fields J..: "hash")
 		<*> (decodeHexNumber =<< fields J..: "nonce")
-		<*> (decodeHexBytes  =<< fields J..: "blockHash")
-		<*> (decodeHexNumber =<< fields J..: "blockNumber")
-		<*> (decodeHexNumber =<< fields J..: "transactionIndex")
 		<*> (decodeHexBytes  =<< fields J..: "from")
-		<*> (fmap (fromMaybe B.empty) . decodeMaybeHexBytes =<< fields J..: "to")
+		<*> (decodeMaybeHexBytes =<< fields J..: "to")
 		<*> (decodeHexNumber =<< fields J..: "value")
 		<*> (decodeHexNumber =<< fields J..: "gasPrice")
 		<*> (decodeHexNumber =<< fields J..: "gas")
 		<*> (decodeHexBytes  =<< fields J..: "input")
 		<*> (decodeHexNumber =<< fields J..: "gasUsed")
-		<*> (fmap (fromMaybe B.empty) . decodeMaybeHexBytes =<< fields J..: "contractAddress")
+		<*> (decodeMaybeHexBytes =<< fields J..: "contractAddress")
 		<*> (decodeLogs      =<< fields J..: "logs")
 		<*> (decodeHexBytes  =<< fields J..: "logsBloom")
 		where
@@ -164,7 +154,7 @@ instance BlockChain Ethereum where
 	type Transaction Ethereum = EthereumTransaction
 
 	getBlockByHeight (Ethereum jsonRpc) blockHeight = do
-		J.Object blockFields@(HML.lookup "transactions" -> Just (J.Array rawTransactions)) <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" [J.String $ T.pack $ "0x" ++ showHex blockHeight "", J.Bool True]
+		J.Object blockFields@(HML.lookup "transactions" -> Just (J.Array rawTransactions)) <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" [encodeHexNumber blockHeight, J.Bool True]
 		transactions <- V.forM rawTransactions $ \(J.Object fields@(HML.lookup "hash" -> Just transactionHash)) -> do
 			J.Object receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" [transactionHash]
 			Just gasUsed <- return $ HML.lookup "gasUsed" receiptFields
@@ -181,21 +171,3 @@ instance BlockChain Ethereum where
 		case J.fromJSON jsonBlock of
 			J.Success block -> return block
 			J.Error err -> fail err
-
-decodeHexBytes :: J.Value -> J.Parser B.ByteString
-decodeHexBytes = J.withText "hex bytes" $ \str -> do
-	(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) <- return str
-	return s
-
-decodeMaybeHexBytes :: J.Value -> J.Parser (Maybe B.ByteString)
-decodeMaybeHexBytes value = case value of
-	J.String str -> do
-		(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) <- return str
-		return $ Just s
-	J.Null -> return Nothing
-	_ -> fail "expected hex bytes or null"
-
-decodeHexNumber :: Integral a => J.Value -> J.Parser a
-decodeHexNumber = J.withText "hex number" $ \str -> do
-	(T.stripPrefix "0x" -> Just (readHex . T.unpack -> [(n, "")])) <- return str
-	return n
