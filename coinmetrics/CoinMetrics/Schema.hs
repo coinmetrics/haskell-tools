@@ -19,7 +19,10 @@ import qualified GHC.Generics as G
 
 import CoinMetrics.Schema.Util
 
-newtype Schema = Schema (V.Vector SchemaField) deriving Show
+data Schema = Schema
+	{ schema_name :: !T.Text
+	, schema_fields :: !(V.Vector SchemaField)
+	} deriving Show
 
 data SchemaField = SchemaField
 	{ schemaField_mode :: !SchemaFieldMode
@@ -36,6 +39,7 @@ data SchemaFieldMode
 data SchemaFieldType
 	= SchemaFieldType_bytes
 	| SchemaFieldType_string
+	| SchemaFieldType_int64
 	| SchemaFieldType_integer
 	| SchemaFieldType_float
 	| SchemaFieldType_bool
@@ -66,7 +70,10 @@ instance (G.Datatype c, GenericSchemableConstructor f) => GenericSchemableDataty
 	genericSchemaOfDatatype = genericSchemaOfConstructor . fmap G.unM1
 
 instance (G.Constructor c, GenericSchemableSelector f) => GenericSchemableConstructor (G.M1 G.C c f) where
-	genericSchemaOfConstructor = Schema . V.fromList . genericSchemaOfSelector . fmap G.unM1
+	genericSchemaOfConstructor c@(fmap G.unM1 -> p) = Schema
+		{ schema_name = T.pack $ G.conName $ asProxyTypeOf undefined c
+		, schema_fields = V.fromList $ genericSchemaOfSelector p
+		}
 
 instance (G.Selector c, GenericSchemableValue f) => GenericSchemableSelector (G.M1 G.S c f) where
 	genericSchemaOfSelector s@(fmap G.unM1 -> p) = [SchemaField
@@ -98,6 +105,9 @@ instance SchemableField T.Text where
 	schemaFieldTypeOf _ = SchemaFieldType_string
 
 instance SchemableField Int64 where
+	schemaFieldTypeOf _ = SchemaFieldType_int64
+
+instance SchemableField Integer where
 	schemaFieldTypeOf _ = SchemaFieldType_integer
 
 instance SchemableField Double where

@@ -22,6 +22,7 @@ import CoinMetrics.Ethereum.Util
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema
 import CoinMetrics.Schema.Avro
+import CoinMetrics.Schema.Postgres
 
 newtype Ethereum = Ethereum JsonRpc
 
@@ -36,8 +37,8 @@ data EthereumBlock = EthereumBlock
 	, eb_stateRoot :: !B.ByteString
 	, eb_receiptsRoot :: !B.ByteString
 	, eb_miner :: !B.ByteString
-	, eb_difficulty :: {-# UNPACK #-} !Int64 
-	, eb_totalDifficulty :: {-# UNPACK #-} !Int64
+	, eb_difficulty :: !Integer
+	, eb_totalDifficulty :: !Integer
 	, eb_extraData :: !B.ByteString
 	, eb_size :: {-# UNPACK #-} !Int64
 	, eb_gasLimit :: {-# UNPACK #-} !Int64
@@ -78,14 +79,15 @@ instance A.HasAvroSchema EthereumBlock where
 	schema = genericAvroSchema
 instance A.ToAvro EthereumBlock where
 	toAvro = genericToAvro
+instance ToPostgresText EthereumBlock
 
 data EthereumTransaction = EthereumTransaction
 	{ et_hash :: !B.ByteString
 	, et_nonce :: {-# UNPACK #-} !Int64
 	, et_from :: !B.ByteString
 	, et_to :: !(Maybe B.ByteString)
-	, et_value :: {-# UNPACK #-} !Int64
-	, et_gasPrice :: {-# UNPACK #-} !Int64
+	, et_value :: !Integer
+	, et_gasPrice :: !Integer
 	, et_gas :: {-# UNPACK #-} !Int64
 	, et_input :: !B.ByteString
 	-- from eth_getTransactionReceipt
@@ -119,6 +121,7 @@ instance A.HasAvroSchema EthereumTransaction where
 	schema = genericAvroSchema
 instance A.ToAvro EthereumTransaction where
 	toAvro = genericToAvro
+instance ToPostgresText EthereumTransaction
 
 data EthereumLog = EthereumLog
 	{ el_removed :: !Bool
@@ -145,6 +148,7 @@ instance A.HasAvroSchema EthereumLog where
 	schema = genericAvroSchema
 instance A.ToAvro EthereumLog where
 	toAvro = genericToAvro
+instance ToPostgresText EthereumLog
 
 newEthereum :: H.Manager -> T.Text -> Int -> Ethereum
 newEthereum httpManager host port = Ethereum $ newJsonRpc httpManager host port Nothing

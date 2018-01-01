@@ -13,6 +13,7 @@ import GHC.Generics(Generic)
 import CoinMetrics.Ethereum.Util
 import CoinMetrics.Schema
 import CoinMetrics.Schema.Avro
+import CoinMetrics.Schema.Postgres
 
 data ERC20Info = ERC20Info
 	{ ei_contractAddress :: !B.ByteString
@@ -30,3 +31,4 @@ instance A.HasAvroSchema ERC20Info where
 	schema = genericAvroSchema
 instance A.ToAvro ERC20Info where
 	toAvro = genericToAvro
+instance ToPostgresText ERC20Info

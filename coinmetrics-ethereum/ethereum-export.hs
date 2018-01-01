@@ -10,6 +10,8 @@ import Data.Monoid
 import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy.Builder as TL
+import qualified Data.Text.Lazy.Encoding as TL
 import qualified Network.HTTP.Client as H
 import qualified Options.Applicative as O
 import System.IO.Unsafe
@@ -17,8 +19,9 @@ import System.IO.Unsafe
 import CoinMetrics.BlockChain
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
-import CoinMetrics.Export.BigQuery
 import CoinMetrics.Schema
+import CoinMetrics.Schema.BigQuery
+import CoinMetrics.Schema.Postgres
 
 main :: IO ()
 main = run =<< O.execParser parser where
@@ -55,23 +58,18 @@ main = run =<< O.execParser parser where
 							<> O.metavar "END_BLOCK"
 							<> O.help "End block number"
 							)
-						<*> O.strOption
-							(  O.long "output-avro-file"
-							<> O.metavar "OUTPUT_AVRO_FILE"
-							<> O.help "Output AVRO file"
-							)
-						<*> O.option O.auto
-							(  O.long "block-size"
-							<> O.value 100 <> O.showDefault
-							<> O.metavar "BLOCK_SIZE"
-							<> O.help "Number of blockchain blocks in Avro block"
-							)
+						<*> optionOutputFile
 					) (O.fullDesc <> O.progDesc "Export blockchain into file")
 				)
 			<> O.command "print-bigquery-schema"
 				(  O.info
 					(pure OptionPrintBigQuerySchemaCommand)
 					(O.fullDesc <> O.progDesc "Prints BigQuery schema")
+				)
+			<> O.command "print-postgres-schema"
+				(  O.info
+					(pure OptionPrintPostgresSchemaCommand)
+					(O.fullDesc <> O.progDesc "Prints PostgreSQL schema")
 				)
 			<> O.command "export-erc20-info"
 				(  O.info
@@ -81,13 +79,28 @@ main = run =<< O.execParser parser where
 							<> O.metavar "INPUT_JSON_FILE"
 							<> O.help "Input JSON file"
 							)
-						<*> O.strOption
-							(  O.long "output-avro-file"
-							<> O.metavar "OUTPUT_AVRO_FILE"
-							<> O.help "Output AVRO file"
-							)
+						<*> optionOutputFile
 					) (O.fullDesc <> O.progDesc "Prints BigQuery schema")
 				)
+			)
+	optionOutputFile = OutputFile
+		<$> O.option (O.maybeReader (Just . Just))
+			(  O.long "output-avro-file"
+			<> O.value Nothing
+			<> O.metavar "OUTPUT_AVRO_FILE"
+			<> O.help "Output Avro file"
+			)
+		<*> O.option (O.maybeReader (Just . Just))
+			(  O.long "output-postgres-file"
+			<> O.value Nothing
+			<> O.metavar "OUTPUT_POSTGRES_FILE"
+			<> O.help "Output PostgreSQL file"
+			)
+		<*> O.option O.auto
+			(  O.long "block-size"
+			<> O.value 100 <> O.showDefault
+			<> O.metavar "BLOCK_SIZE"
+			<> O.help "Number of records in exported block"
 			)
 
 data Options = Options
@@ -100,14 +113,20 @@ data OptionCommand
 		, options_apiPort :: !Int
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
-		, options_outputAvroFile :: !String
-		, options_blockSize :: !Int
+		, options_outputFile :: !OutputFile
 		}
 	| OptionPrintBigQuerySchemaCommand
+	| OptionPrintPostgresSchemaCommand
 	| OptionExportERC20InfoCommand
 		{ options_inputJsonFile :: !String
-		, options_outputAvroFile :: !String
+		, options_outputFile :: !OutputFile
 		}
+
+data OutputFile = OutputFile
+	{ outputFile_avroFile :: !(Maybe String)
+	, outputFile_postgresFile :: !(Maybe String)
+	, outputFile_blockSize :: !Int
+	}
 
 run :: Options -> IO ()
 run Options
@@ -119,8 +138,7 @@ run Options
 		, options_apiPort = apiPort
 		, options_beginBlock = beginBlock
 		, options_endBlock = endBlock
-		, options_outputAvroFile = outputAvroFile
-		, options_blockSize = blockSize
+		, options_outputFile = outputFile
 		} -> do
 		httpManager <- H.newManager H.defaultManagerSettings
 		let blockChain = newEthereum httpManager apiHost apiPort
@@ -128,22 +146,43 @@ run Options
 			block <- getBlockByHeight blockChain i
 			when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
 			return block
-		BL.writeFile outputAvroFile =<< A.encodeContainer . blockSplit blockSize =<< mapM step [beginBlock..(endBlock - 1)]
+		write <- writeOutputFile outputFile "ethereum"
+		write =<< mapM step [beginBlock..(endBlock - 1)]
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionPrintBigQuerySchemaCommand ->
 		putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
 
+	OptionPrintPostgresSchemaCommand -> do
+		let concatFields = foldr1 $ \a b -> a <> ", " <> b
+		putStrLn $ T.unpack $ "CREATE TYPE EthereumLog AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumLog)) <> ");"
+		putStrLn $ T.unpack $ "CREATE TYPE EthereumTransaction AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumTransaction)) <> ");"
+		putStrLn $ T.unpack $ "CREATE TABLE ethereum (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy EthereumBlock)) <> ", PRIMARY KEY (\"number\"));"
+
 	OptionExportERC20InfoCommand
 		{ options_inputJsonFile = inputJsonFile
-		, options_outputAvroFile = outputAvroFile
+		, options_outputFile = outputFile
 		} -> do
 		putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
 		tokensInfos <- either fail return . J.eitherDecode' =<< BL.readFile inputJsonFile
-		BL.writeFile outputAvroFile =<< A.encodeContainer [tokensInfos :: [ERC20Info]]
+		write <- writeOutputFile outputFile "erc20"
+		write (tokensInfos :: [ERC20Info])
 
 	where
 		blockSplit :: Int -> [a] -> [[a]]
 		blockSplit blockSize = \case
 			[] -> []
 			xs -> let (a, b) = splitAt blockSize xs in a : blockSplit blockSize b
+
+		writeOutputFile :: (A.ToAvro a, ToPostgresText a) => OutputFile -> T.Text -> IO ([a] -> IO ())
+		writeOutputFile OutputFile
+			{ outputFile_avroFile = maybeOutputAvroFile
+			, outputFile_postgresFile = maybeOutputPostgresFile
+			, outputFile_blockSize = blockSize
+			} tableName = do
+			-- at the moment exactly one output file should be used
+			(outputFileName, encode) <- case (maybeOutputAvroFile, maybeOutputPostgresFile) of
+				(Just outputAvroFile, Nothing) -> return (outputAvroFile, A.encodeContainer)
+				(Nothing, Just outputPostgresFile) -> return (outputPostgresFile, return . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresSqlInsertGroup tableName))
+				_ -> fail "exactly one output file type should be given"
+			return $ BL.writeFile outputFileName <=< encode . blockSplit blockSize

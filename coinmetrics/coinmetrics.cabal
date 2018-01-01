@@ -14,10 +14,11 @@ cabal-version:       >=1.10
 library
   exposed-modules:
     CoinMetrics.BlockChain
-    CoinMetrics.Export.BigQuery
     CoinMetrics.JsonRpc
     CoinMetrics.Schema
     CoinMetrics.Schema.Avro
+    CoinMetrics.Schema.BigQuery
+    CoinMetrics.Schema.Postgres
     CoinMetrics.Schema.Util
   build-depends:
     aeson

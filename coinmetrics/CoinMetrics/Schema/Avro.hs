@@ -95,3 +95,10 @@ instance A.HasAvroSchema a => A.HasAvroSchema (V.Vector a) where
 
 instance A.ToAvro a => A.ToAvro (V.Vector a) where
 	toAvro = AT.Array . V.map A.toAvro
+
+-- unfortunately have to use double for Integer
+instance A.HasAvroSchema Integer where
+	schema = Tagged $ unTagged (A.schema :: Tagged Double AS.Type)
+
+instance A.ToAvro Integer where
+	toAvro = A.toAvro . (fromIntegral :: Integer -> Double)
