@@ -154,7 +154,6 @@ run Options
 		putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
 
 	OptionPrintPostgresSchemaCommand -> do
-		let concatFields = foldr1 $ \a b -> a <> ", " <> b
 		putStrLn $ T.unpack $ "CREATE TYPE EthereumLog AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumLog)) <> ");"
 		putStrLn $ T.unpack $ "CREATE TYPE EthereumTransaction AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumTransaction)) <> ");"
 		putStrLn $ T.unpack $ "CREATE TABLE ethereum (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy EthereumBlock)) <> ", PRIMARY KEY (\"number\"));"
@@ -164,8 +163,9 @@ run Options
 		, options_outputFile = outputFile
 		} -> do
 		putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
+		putStrLn $ T.unpack $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
 		tokensInfos <- either fail return . J.eitherDecode' =<< BL.readFile inputJsonFile
-		write <- writeOutputFile outputFile "erc20"
+		write <- writeOutputFile outputFile "erc20tokens"
 		write (tokensInfos :: [ERC20Info])
 
 	where
@@ -186,3 +186,5 @@ run Options
 				(Nothing, Just outputPostgresFile) -> return (outputPostgresFile, return . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresSqlInsertGroup tableName))
 				_ -> fail "exactly one output file type should be given"
 			return $ BL.writeFile outputFileName <=< encode . blockSplit blockSize
+
+		concatFields = foldr1 $ \a b -> a <> ", " <> b
