@@ -9,12 +9,10 @@ module CoinMetrics.Schema.Util
 
 import Control.Monad
 import qualified Data.Aeson as J
-import qualified Data.Avro.Schema as A
 import qualified Data.ByteArray as BA
 import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import Data.Hashable
-import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 schemaJsonOptions :: J.Options

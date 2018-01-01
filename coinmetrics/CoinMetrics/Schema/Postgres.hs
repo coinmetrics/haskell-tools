@@ -92,7 +92,7 @@ instance ToPostgresText a => GenericToPostgresTextValue (G.K1 G.R a) where
 -- some instances
 
 instance ToPostgresText T.Text where
-	toPostgresText _ = TL.fromString . show
+	toPostgresText _ s = TL.fromText $ "'" <> T.replace "'" "\\'" s <> "'"
 
 instance ToPostgresText B.ByteString where
 	toPostgresText _ bytes = "E'\\\\x" <> TL.fromText (T.decodeUtf8 $ BA.convertToBase BA.Base16 bytes) <> "'"
