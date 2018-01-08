@@ -2,6 +2,8 @@
 
 module Main(main) where
 
+import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
@@ -59,6 +61,12 @@ main = run =<< O.execParser parser where
 							<> O.help "End block number"
 							)
 						<*> optionOutputFile
+						<*> O.option O.auto
+							(  O.long "threads"
+							<> O.value 1 <> O.showDefault
+							<> O.metavar "THREADS"
+							<> O.help "Threads count"
+							)
 					) (O.fullDesc <> O.progDesc "Export blockchain into file")
 				)
 			<> O.command "print-bigquery-schema"
@@ -114,6 +122,7 @@ data OptionCommand
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
 		, options_outputFile :: !OutputFile
+		, options_threadsCount :: !Int
 		}
 	| OptionPrintBigQuerySchemaCommand
 	| OptionPrintPostgresSchemaCommand
@@ -139,15 +148,41 @@ run Options
 		, options_beginBlock = beginBlock
 		, options_endBlock = endBlock
 		, options_outputFile = outputFile
+		, options_threadsCount = threadsCount
 		} -> do
 		httpManager <- H.newManager H.defaultManagerSettings
 		let blockChain = newEthereum httpManager apiHost apiPort
+
+		-- simple multithreaded pipeline
+		let blockIndices = [beginBlock..(endBlock - 1)]
+		blockIndexQueueVar <- newTVarIO blockIndices
+		nextBlockIndexVar <- newTVarIO beginBlock
+		blockQueue <- newTBQueueIO (threadsCount * 2)
+		forM_ [1..threadsCount] $ \_ -> let
+			step = join $ atomically $ do
+				blockIndexQueue <- readTVar blockIndexQueueVar
+				case blockIndexQueue of
+					(blockIndex : rest) -> do
+						writeTVar blockIndexQueueVar rest
+						return $ do
+							block <- getBlockByHeight blockChain blockIndex
+							atomically $ do
+								-- ensure order
+								nextBlockIndex <- readTVar nextBlockIndexVar
+								if blockIndex == nextBlockIndex then do
+									writeTBQueue blockQueue block
+									writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+								else retry
+							step
+					[] -> return $ return ()
+			in forkIO step
+
 		let step i = unsafeInterleaveIO $ do
-			block <- getBlockByHeight blockChain i
+			block <- atomically $ readTBQueue blockQueue
 			when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
 			return block
 		write <- writeOutputFile outputFile "ethereum"
-		write =<< mapM step [beginBlock..(endBlock - 1)]
+		write =<< mapM step blockIndices
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionPrintBigQuerySchemaCommand ->

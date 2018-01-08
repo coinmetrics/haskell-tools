@@ -26,6 +26,7 @@ executable coinmetrics-ethereum-export
     , http-client
     , memory
     , optparse-applicative
+    , stm
     , text
     , unordered-containers
     , vector
