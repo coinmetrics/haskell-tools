@@ -11,6 +11,7 @@ import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import qualified Data.HashMap.Lazy as HML
+import Data.Maybe
 import GHC.Generics(Generic)
 import Data.Int
 import qualified Data.Text as T
@@ -136,7 +137,7 @@ instance SchemableField EthereumLog
 
 instance J.FromJSON EthereumLog where
 	parseJSON = J.withObject "log" $ \fields -> EthereumLog
-		<$> (J.parseJSON     =<< fields J..: "removed")
+		<$> (fromMaybe False <$> fields J..:? "removed") -- removed is missing in Parity
 		<*> (decodeHexNumber =<< fields J..: "logIndex")
 		<*> (decodeHexBytes  =<< fields J..: "address")
 		<*> (decodeHexBytes  =<< fields J..: "data")
