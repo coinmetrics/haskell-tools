@@ -19,6 +19,7 @@ import CoinMetrics.Schema.Postgres
 data ERC20Info = ERC20Info
 	{ ei_contractAddress :: !B.ByteString
 	, ei_name :: !T.Text
+	, ei_symbol :: !T.Text
 	, ei_decimals :: !Int64
 	} deriving Generic
 
@@ -28,6 +29,7 @@ instance J.FromJSON ERC20Info where
 	parseJSON = J.withObject "ERC20Info" $ \fields -> ERC20Info
 		<$> (decodeHexBytes  =<< fields J..: "contractAddress")
 		<*> (J.parseJSON     =<< fields J..: "name")
+		<*> (J.parseJSON     =<< fields J..: "symbol")
 		<*> (J.parseJSON     =<< fields J..: "decimals")
 
 instance A.HasAvroSchema ERC20Info where
