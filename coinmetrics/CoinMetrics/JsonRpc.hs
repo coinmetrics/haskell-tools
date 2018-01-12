@@ -37,7 +37,8 @@ jsonRpcRequest JsonRpc
 	} method params = do
 	body <- H.responseBody <$> H.httpLbs httpRequest
 		{ H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object $ HM.fromList
-			[ ("method", J.String method)
+			[ ("jsonrpc", "2.0")
+			, ("method", J.String method)
 			, ("params", J.Array params)
 			, ("id", J.String "1")
 			]
