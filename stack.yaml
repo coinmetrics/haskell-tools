@@ -3,6 +3,7 @@ resolver: lts-10.0
 packages:
 - coinmetrics
 - coinmetrics-ethereum
+- coinmetrics-export
 
 extra-deps:
 #- avro-0.2.0.0

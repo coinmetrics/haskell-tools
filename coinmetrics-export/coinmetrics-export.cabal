@@ -1,4 +1,4 @@
-name:                coinmetrics-ethereum
+name:                coinmetrics-export
 version:             0.1.0.0
 -- synopsis:            
 -- description:         
@@ -11,20 +11,19 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
-library
-  exposed-modules:
-    CoinMetrics.Ethereum
-    CoinMetrics.Ethereum.ERC20
-    CoinMetrics.Ethereum.Util
+executable coinmetrics-export
+  main-is:           coinmetrics-export.hs
+  other-modules:
   build-depends:
     aeson
     , avro
     , base
     , bytestring
     , coinmetrics
+    , coinmetrics-ethereum
     , http-client
     , memory
+    , optparse-applicative
+    , stm
     , text
-    , unordered-containers
-    , vector
   default-language:    Haskell2010

@@ -29,8 +29,8 @@ main :: IO ()
 main = run =<< O.execParser parser where
 	parser = O.info (O.helper <*> opts)
 		(  O.fullDesc
-		<> O.progDesc "Exports blocks from ethereum blockchain into files"
-		<> O.header "coinmetrics-ethereum-export"
+		<> O.progDesc "Exports blocks from blockchains into files"
+		<> O.header "coinmetrics-export"
 		)
 	opts = Options
 		<$> O.subparser
