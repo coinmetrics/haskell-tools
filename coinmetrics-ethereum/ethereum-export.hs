@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings, ViewPatterns #-}
 
 module Main(main) where
 
@@ -188,8 +188,7 @@ run Options
 			block <- atomically $ readTBQueue blockQueue
 			when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
 			return block
-		write <- writeOutputFile outputFile "ethereum"
-		write =<< mapM step blockIndices
+		writeOutputFile outputFile "ethereum" =<< mapM step blockIndices
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionPrintSchemaCommand
@@ -213,8 +212,7 @@ run Options
 		, options_outputFile = outputFile
 		} -> do
 		tokensInfos <- either fail return . J.eitherDecode' =<< BL.readFile inputJsonFile
-		write <- writeOutputFile outputFile "erc20tokens"
-		write (tokensInfos :: [ERC20Info])
+		writeOutputFile outputFile "erc20tokens" (tokensInfos :: [ERC20Info])
 
 	where
 		blockSplit :: Int -> [a] -> [[a]]
@@ -222,17 +220,28 @@ run Options
 			[] -> []
 			xs -> let (a, b) = splitAt blockSize xs in a : blockSplit blockSize b
 
-		writeOutputFile :: (A.ToAvro a, ToPostgresText a) => OutputFile -> T.Text -> IO ([a] -> IO ())
+		writeOutputFile :: (A.ToAvro a, ToPostgresText a) => OutputFile -> T.Text -> [a] -> IO ()
 		writeOutputFile OutputFile
 			{ outputFile_avroFile = maybeOutputAvroFile
 			, outputFile_postgresFile = maybeOutputPostgresFile
 			, outputFile_blockSize = blockSize
-			} tableName = do
-			-- at the moment exactly one output file should be used
-			(outputFileName, encode) <- case (maybeOutputAvroFile, maybeOutputPostgresFile) of
-				(Just outputAvroFile, Nothing) -> return (outputAvroFile, A.encodeContainer)
-				(Nothing, Just outputPostgresFile) -> return (outputPostgresFile, return . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresSqlInsertGroup tableName))
-				_ -> fail "exactly one output file type should be given"
-			return $ BL.writeFile outputFileName <=< encode . blockSplit blockSize
+			} tableName (blockSplit blockSize -> blocks) = do
+			vars <- forM outputs $ \output -> do
+				var <- newTVarIO False
+				void $ forkIO $ do
+					output blocks
+					atomically $ writeTVar var True
+				return var
+			atomically $ do
+				finished <- and <$> mapM readTVar vars
+				unless finished retry
+			where outputs = concat
+				[ case maybeOutputAvroFile of
+					Just outputAvroFile -> [BL.writeFile outputAvroFile <=< A.encodeContainer]
+					Nothing -> []
+				, case maybeOutputPostgresFile of
+					Just outputPostgresFile -> [BL.writeFile outputPostgresFile . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresSqlInsertGroup tableName)]
+					Nothing -> []
+				]
 
 		concatFields = foldr1 $ \a b -> a <> ", " <> b
