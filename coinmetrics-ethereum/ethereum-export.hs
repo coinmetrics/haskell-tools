@@ -69,15 +69,20 @@ main = run =<< O.execParser parser where
 							)
 					) (O.fullDesc <> O.progDesc "Export blockchain into file")
 				)
-			<> O.command "print-bigquery-schema"
+			<> O.command "print-schema"
 				(  O.info
-					(pure OptionPrintBigQuerySchemaCommand)
-					(O.fullDesc <> O.progDesc "Prints BigQuery schema")
-				)
-			<> O.command "print-postgres-schema"
-				(  O.info
-					(pure OptionPrintPostgresSchemaCommand)
-					(O.fullDesc <> O.progDesc "Prints PostgreSQL schema")
+					(OptionPrintSchemaCommand
+						<$> O.strOption
+							(  O.long "schema"
+							<> O.metavar "SCHEMA"
+							<> O.help "Type of schema: ethereum, erc20tokens"
+							)
+						<*> O.strOption
+							(  O.long "storage"
+							<> O.metavar "STORAGE"
+							<> O.help "Storage type: postgres, bigquery"
+							)
+					) (O.fullDesc <> O.progDesc "Prints schema")
 				)
 			<> O.command "export-erc20-info"
 				(  O.info
@@ -88,7 +93,7 @@ main = run =<< O.execParser parser where
 							<> O.help "Input JSON file"
 							)
 						<*> optionOutputFile
-					) (O.fullDesc <> O.progDesc "Prints BigQuery schema")
+					) (O.fullDesc <> O.progDesc "Exports ERC20 info")
 				)
 			)
 	optionOutputFile = OutputFile
@@ -124,8 +129,10 @@ data OptionCommand
 		, options_outputFile :: !OutputFile
 		, options_threadsCount :: !Int
 		}
-	| OptionPrintBigQuerySchemaCommand
-	| OptionPrintPostgresSchemaCommand
+	| OptionPrintSchemaCommand
+		{ options_schema :: !T.Text
+		, options_storage :: !T.Text
+		}
 	| OptionExportERC20InfoCommand
 		{ options_inputJsonFile :: !String
 		, options_outputFile :: !OutputFile
@@ -185,20 +192,26 @@ run Options
 		write =<< mapM step blockIndices
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
-	OptionPrintBigQuerySchemaCommand ->
-		putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
-
-	OptionPrintPostgresSchemaCommand -> do
-		putStrLn $ T.unpack $ "CREATE TYPE EthereumLog AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumLog)) <> ");"
-		putStrLn $ T.unpack $ "CREATE TYPE EthereumTransaction AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumTransaction)) <> ");"
-		putStrLn $ T.unpack $ "CREATE TABLE ethereum (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy EthereumBlock)) <> ", PRIMARY KEY (\"number\"));"
+	OptionPrintSchemaCommand
+		{ options_schema = schemaTypeStr
+		, options_storage = storageTypeStr
+		} -> case (schemaTypeStr, storageTypeStr) of
+		("ethereum", "postgres") -> do
+			putStrLn $ T.unpack $ "CREATE TYPE EthereumLog AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumLog)) <> ");"
+			putStrLn $ T.unpack $ "CREATE TYPE EthereumTransaction AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumTransaction)) <> ");"
+			putStrLn $ T.unpack $ "CREATE TABLE ethereum (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy EthereumBlock)) <> ", PRIMARY KEY (\"number\"));"
+		("ethereum", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
+		("erc20tokens", "postgres") ->
+			putStrLn $ T.unpack $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
+		("erc20tokens", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
+		_ -> fail "wrong pair schema+storage"
 
 	OptionExportERC20InfoCommand
 		{ options_inputJsonFile = inputJsonFile
 		, options_outputFile = outputFile
 		} -> do
-		putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
-		putStrLn $ T.unpack $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
 		tokensInfos <- either fail return . J.eitherDecode' =<< BL.readFile inputJsonFile
 		write <- writeOutputFile outputFile "erc20tokens"
 		write (tokensInfos :: [ERC20Info])
