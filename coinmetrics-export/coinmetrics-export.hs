@@ -8,12 +8,16 @@ import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.ByteString.Lazy as BL
+import Data.Either
+import Data.Maybe
 import Data.Monoid
 import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TL
 import qualified Data.Text.Lazy.Encoding as TL
+import qualified Database.PostgreSQL.LibPQ as PQ
 import qualified Network.HTTP.Client as H
 import qualified Options.Applicative as O
 import System.IO.Unsafe
@@ -60,7 +64,7 @@ main = run =<< O.execParser parser where
 							<> O.metavar "END_BLOCK"
 							<> O.help "End block number"
 							)
-						<*> optionOutputFile
+						<*> optionOutput
 						<*> O.option O.auto
 							(  O.long "threads"
 							<> O.value 1 <> O.showDefault
@@ -92,11 +96,11 @@ main = run =<< O.execParser parser where
 							<> O.metavar "INPUT_JSON_FILE"
 							<> O.help "Input JSON file"
 							)
-						<*> optionOutputFile
+						<*> optionOutput
 					) (O.fullDesc <> O.progDesc "Exports ERC20 info")
 				)
 			)
-	optionOutputFile = OutputFile
+	optionOutput = Output
 		<$> O.option (O.maybeReader (Just . Just))
 			(  O.long "output-avro-file"
 			<> O.value Nothing
@@ -108,6 +112,12 @@ main = run =<< O.execParser parser where
 			<> O.value Nothing
 			<> O.metavar "OUTPUT_POSTGRES_FILE"
 			<> O.help "Output PostgreSQL file"
+			)
+		<*> O.option (O.maybeReader (Just . Just))
+			(  O.long "output-postgres"
+			<> O.value Nothing
+			<> O.metavar "OUTPUT_POSTGRES"
+			<> O.help "Output directly to Postgres DB"
 			)
 		<*> O.option O.auto
 			(  O.long "block-size"
@@ -126,7 +136,7 @@ data OptionCommand
 		, options_apiPort :: !Int
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
-		, options_outputFile :: !OutputFile
+		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
 		}
 	| OptionPrintSchemaCommand
@@ -135,13 +145,14 @@ data OptionCommand
 		}
 	| OptionExportERC20InfoCommand
 		{ options_inputJsonFile :: !String
-		, options_outputFile :: !OutputFile
+		, options_outputFile :: !Output
 		}
 
-data OutputFile = OutputFile
-	{ outputFile_avroFile :: !(Maybe String)
-	, outputFile_postgresFile :: !(Maybe String)
-	, outputFile_blockSize :: !Int
+data Output = Output
+	{ output_avroFile :: !(Maybe String)
+	, output_postgresFile :: !(Maybe String)
+	, output_postgres :: !(Maybe String)
+	, output_blockSize :: !Int
 	}
 
 run :: Options -> IO ()
@@ -188,7 +199,7 @@ run Options
 			block <- atomically $ readTBQueue blockQueue
 			when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
 			return block
-		writeOutputFile outputFile "ethereum" =<< mapM step blockIndices
+		writeOutput outputFile "ethereum" =<< mapM step blockIndices
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionPrintSchemaCommand
@@ -212,7 +223,7 @@ run Options
 		, options_outputFile = outputFile
 		} -> do
 		tokensInfos <- either fail return . J.eitherDecode' =<< BL.readFile inputJsonFile
-		writeOutputFile outputFile "erc20tokens" (tokensInfos :: [ERC20Info])
+		writeOutput outputFile "erc20tokens" (tokensInfos :: [ERC20Info])
 
 	where
 		blockSplit :: Int -> [a] -> [[a]]
@@ -220,27 +231,44 @@ run Options
 			[] -> []
 			xs -> let (a, b) = splitAt blockSize xs in a : blockSplit blockSize b
 
-		writeOutputFile :: (A.ToAvro a, ToPostgresText a) => OutputFile -> T.Text -> [a] -> IO ()
-		writeOutputFile OutputFile
-			{ outputFile_avroFile = maybeOutputAvroFile
-			, outputFile_postgresFile = maybeOutputPostgresFile
-			, outputFile_blockSize = blockSize
+		writeOutput :: (A.ToAvro a, ToPostgresText a) => Output -> T.Text -> [a] -> IO ()
+		writeOutput Output
+			{ output_avroFile = maybeOutputAvroFile
+			, output_postgresFile = maybeOutputPostgresFile
+			, output_postgres = maybeOutputPostgres
+			, output_blockSize = blockSize
 			} tableName (blockSplit blockSize -> blocks) = do
 			vars <- forM outputs $ \output -> do
-				var <- newTVarIO False
-				void $ forkIO $ do
-					output blocks
-					atomically $ writeTVar var True
+				var <- newTVarIO Nothing
+				void $ forkFinally output $ atomically . writeTVar var . Just
 				return var
-			atomically $ do
-				finished <- and <$> mapM readTVar vars
-				unless finished retry
+			results <- atomically $ do
+				results <- mapM readTVar vars
+				unless (all isJust results || any (maybe False isLeft) results) retry
+				return results
+			let erroredResults = concat $ map (maybe [] (either pure (const []))) results
+			unless (null erroredResults) $ do
+				print erroredResults
+				fail "output failed"
+
 			where outputs = concat
 				[ case maybeOutputAvroFile of
-					Just outputAvroFile -> [BL.writeFile outputAvroFile <=< A.encodeContainer]
+					Just outputAvroFile -> [BL.writeFile outputAvroFile =<< A.encodeContainer blocks]
 					Nothing -> []
 				, case maybeOutputPostgresFile of
-					Just outputPostgresFile -> [BL.writeFile outputPostgresFile . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresSqlInsertGroup tableName)]
+					Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map (postgresSqlInsertGroup tableName) blocks]
+					Nothing -> []
+				, case maybeOutputPostgres of
+					Just outputPostgres ->
+						[ do
+							connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
+							connectionStatus <- PQ.status connection
+							unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
+							forM_ blocks $ \block -> do
+								resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSqlInsertGroup tableName block
+								unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus
+							PQ.finish connection
+							]
 					Nothing -> []
 				]
 

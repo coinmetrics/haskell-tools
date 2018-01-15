@@ -24,6 +24,7 @@ executable coinmetrics-export
     , http-client
     , memory
     , optparse-applicative
+    , postgresql-libpq
     , stm
     , text
   default-language:    Haskell2010
