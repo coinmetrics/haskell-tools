@@ -61,6 +61,7 @@ main = run =<< O.execParser parser where
 							)
 						<*> O.option O.auto
 							(  O.long "end-block"
+							<> O.value (-1000) <> O.showDefault
 							<> O.metavar "END_BLOCK"
 							<> O.help "End block number"
 							)
@@ -172,34 +173,63 @@ run Options
 		let blockChain = newEthereum httpManager apiHost apiPort
 
 		-- simple multithreaded pipeline
-		let blockIndices = [beginBlock..(endBlock - 1)]
-		blockIndexQueueVar <- newTVarIO blockIndices
+		blockIndexQueue <- newTBQueueIO (threadsCount * 2)
+		blockIndexQueueEndedVar <- newTVarIO False
 		nextBlockIndexVar <- newTVarIO beginBlock
 		blockQueue <- newTBQueueIO (threadsCount * 2)
+
+		-- thread adding indices to index queue
+		void $ forkIO $
+			if endBlock >= 0 then do
+				mapM_ (atomically . writeTBQueue blockIndexQueue) [beginBlock..(endBlock - 1)]
+				atomically $ writeTVar blockIndexQueueEndedVar True
+			-- else do infinite stream of indices
+			else let
+				step i = do
+					-- determine current (known) block index
+					currentBlockIndex <- getCurrentBlockHeight blockChain
+					-- insert indices up to this index minus offset
+					let endIndex = currentBlockIndex + endBlock
+					putStrLn $ "continuously syncing blocks... currently from " <> show i <> " to " <> show (endIndex - 1)
+					mapM_ (atomically . writeTBQueue blockIndexQueue) [i..(endIndex - 1)]
+					-- pause
+					threadDelay 10000000
+					-- repeat
+					step endIndex
+				in step beginBlock
+
+		-- work threads getting blocks from blockchain
 		forM_ [1..threadsCount] $ \_ -> let
-			step = join $ atomically $ do
-				blockIndexQueue <- readTVar blockIndexQueueVar
-				case blockIndexQueue of
-					(blockIndex : rest) -> do
-						writeTVar blockIndexQueueVar rest
-						return $ do
-							block <- getBlockByHeight blockChain blockIndex
-							atomically $ do
-								-- ensure order
-								nextBlockIndex <- readTVar nextBlockIndexVar
-								if blockIndex == nextBlockIndex then do
-									writeTBQueue blockQueue block
-									writeTVar nextBlockIndexVar (nextBlockIndex + 1)
-								else retry
-							step
-					[] -> return $ return ()
+			step = do
+				maybeBlockIndex <- atomically $ do
+					blockIndexQueueEnded <- readTVar blockIndexQueueEndedVar
+					if blockIndexQueueEnded
+						then return Nothing
+						else Just <$> readTBQueue blockIndexQueue
+				case maybeBlockIndex of
+					Just blockIndex -> do
+						-- get block from blockchain
+						block <- getBlockByHeight blockChain blockIndex
+						-- insert block into block queue ensuring order
+						atomically $ do
+							nextBlockIndex <- readTVar nextBlockIndexVar
+							if blockIndex == nextBlockIndex then do
+								writeTBQueue blockQueue block
+								writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+							else retry
+						-- repeat
+						step
+					Nothing -> return ()
 			in forkIO step
 
-		let step i = unsafeInterleaveIO $ do
-			block <- atomically $ readTBQueue blockQueue
-			when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
-			return block
-		writeOutput outputFile "ethereum" =<< mapM step blockIndices
+		-- write blocks into outputs, using lazy IO
+		let step i = if endBlock < 0 || i < endBlock
+			then unsafeInterleaveIO $ do
+				block <- atomically $ readTBQueue blockQueue
+				when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
+				(block :) <$> step (i + 1)
+			else return []
+		writeOutput outputFile "ethereum" =<< step beginBlock
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionPrintSchemaCommand

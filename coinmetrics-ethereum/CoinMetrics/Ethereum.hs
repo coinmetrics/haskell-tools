@@ -158,6 +158,10 @@ instance BlockChain Ethereum where
 	type Block Ethereum = EthereumBlock
 	type Transaction Ethereum = EthereumTransaction
 
+	getCurrentBlockHeight (Ethereum jsonRpc) = do
+		J.Success height <- J.parse decodeHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" []
+		return height
+
 	getBlockByHeight (Ethereum jsonRpc) blockHeight = do
 		J.Object blockFields@(HML.lookup "transactions" -> Just (J.Array rawTransactions)) <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" [encodeHexNumber blockHeight, J.Bool True]
 		transactions <- V.forM rawTransactions $ \(J.Object fields@(HML.lookup "hash" -> Just transactionHash)) -> do
