@@ -6,6 +6,8 @@ module CoinMetrics.JsonRpc
 	, jsonRpcRequest
 	) where
 
+import Control.Concurrent
+import Control.Exception
 import qualified Data.Aeson as J
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
@@ -35,15 +37,27 @@ jsonRpcRequest JsonRpc
 	{ jsonRpc_httpManager = httpManager
 	, jsonRpc_httpRequest = httpRequest
 	} method params = do
-	body <- H.responseBody <$> H.httpLbs httpRequest
+	body <- H.responseBody <$> tryWithRepeat (H.httpLbs httpRequest
 		{ H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object $ HM.fromList
 			[ ("jsonrpc", "2.0")
 			, ("method", J.String method)
 			, ("params", J.Array params)
 			, ("id", J.String "1")
 			]
-		} httpManager
+		} httpManager)
 	case J.eitherDecode' body of
 		Right (J.Object (HM.lookup "result" -> Just resultValue)) -> return resultValue
 		Left err -> fail err
 		_ -> fail "bad json rpc response"
+
+tryWithRepeat :: IO a -> IO a
+tryWithRepeat io = let
+	step = do
+		eitherResult <- try io
+		case eitherResult of
+			Right result -> return result
+			Left (SomeException err) -> do
+				putStrLn $ "error: " ++ show err ++ ", retrying again in 10 seconds"
+				threadDelay 10000000
+				step
+	in step
