@@ -125,8 +125,7 @@ instance A.ToAvro EthereumTransaction where
 instance ToPostgresText EthereumTransaction
 
 data EthereumLog = EthereumLog
-	{ el_removed :: !Bool
-	, el_logIndex :: {-# UNPACK #-} !Int64
+	{ el_logIndex :: {-# UNPACK #-} !Int64
 	, el_address :: !B.ByteString
 	, el_data :: !B.ByteString
 	, el_topics :: !(V.Vector B.ByteString)
@@ -137,8 +136,7 @@ instance SchemableField EthereumLog
 
 instance J.FromJSON EthereumLog where
 	parseJSON = J.withObject "log" $ \fields -> EthereumLog
-		<$> (fromMaybe False <$> fields J..:? "removed") -- removed is missing in Parity
-		<*> (decodeHexNumber =<< fields J..: "logIndex")
+		<$> (decodeHexNumber =<< fields J..: "logIndex")
 		<*> (decodeHexBytes  =<< fields J..: "address")
 		<*> (decodeHexBytes  =<< fields J..: "data")
 		<*> (decodeTopics    =<< fields J..: "topics")
