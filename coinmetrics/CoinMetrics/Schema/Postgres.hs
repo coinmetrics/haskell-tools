@@ -2,6 +2,7 @@
 
 module CoinMetrics.Schema.Postgres
 	( postgresSchemaFields
+	, postgresSqlCreateType
 	, postgresSqlInsertGroup
 	, ToPostgresText(..)
 	) where
@@ -21,12 +22,12 @@ import qualified GHC.Generics as G
 import CoinMetrics.Schema
 
 -- | Gets a list of record specifications.
-postgresSchemaFields :: Bool -> Schema -> V.Vector T.Text
+postgresSchemaFields :: Bool -> Schema -> V.Vector TL.Builder
 postgresSchemaFields constraintsAllowed Schema
 	{ schema_fields = fields
 	} = V.map (postgresSchemaField constraintsAllowed) fields
 
-postgresSchemaField :: Bool -> SchemaField -> T.Text
+postgresSchemaField :: Bool -> SchemaField -> TL.Builder
 postgresSchemaField constraintsAllowed SchemaField
 	{ schemaField_mode = fieldMode
 	, schemaField_name = fieldName
@@ -36,9 +37,9 @@ postgresSchemaField constraintsAllowed SchemaField
 		SchemaFieldMode_required -> if constraintsAllowed then " NOT NULL" else ""
 		SchemaFieldMode_optional -> ""
 		SchemaFieldMode_repeated -> " ARRAY" <> (if constraintsAllowed then " NOT NULL" else "")
-	in "\"" <> fieldName <> "\" " <> postgresSchemaFieldTypeName fieldType <> fieldTypeConstraints
+	in "\"" <> TL.fromText fieldName <> "\" " <> postgresSchemaFieldTypeName fieldType <> fieldTypeConstraints
 
-postgresSchemaFieldTypeName :: SchemaFieldType -> T.Text
+postgresSchemaFieldTypeName :: SchemaFieldType -> TL.Builder
 postgresSchemaFieldTypeName = \case
 	SchemaFieldType_bytes -> "BYTEA"
 	SchemaFieldType_string -> "TEXT"
@@ -50,7 +51,13 @@ postgresSchemaFieldTypeName = \case
 		{ schemaFieldType_schema = Schema
 			{ schema_name = n
 			}
-		} -> n
+		} -> TL.fromText $ "\"" <> n <> "\""
+
+-- | Generate SQL CREATE TYPE command.
+postgresSqlCreateType :: Schema -> TL.Builder
+postgresSqlCreateType schema@Schema
+	{ schema_name = name
+	} = "CREATE TYPE \"" <> TL.fromText name <> "\" AS (" <> foldr1 (\a b -> a <> ", " <> b) (postgresSchemaFields False schema) <> ");\n"
 
 -- | Generate SQL INSERT command for a bunch of records.
 postgresSqlInsertGroup :: ToPostgresText a => T.Text -> [a] -> TL.Builder
@@ -112,4 +119,4 @@ instance ToPostgresText a => ToPostgresText (Maybe a) where
 instance (ToPostgresText a, SchemableField a) => ToPostgresText (V.Vector a) where
 	toPostgresText _ v@(V.map (toPostgresText False) -> vt) = "ARRAY[" <> (if V.null v then mempty else V.foldr1 (\a b -> a <> ", " <> b) vt) <> "]::" <> elementTypeStr v Proxy <> "[]" where
 		elementTypeStr :: SchemableField a => V.Vector a -> Proxy (V.Vector a) -> TL.Builder
-		elementTypeStr _ = TL.fromText . postgresSchemaFieldTypeName . schemaFieldTypeOf
+		elementTypeStr _ = postgresSchemaFieldTypeName . schemaFieldTypeOf

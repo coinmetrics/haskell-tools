@@ -237,13 +237,16 @@ run Options
 		, options_storage = storageTypeStr
 		} -> case (schemaTypeStr, storageTypeStr) of
 		("ethereum", "postgres") -> do
-			putStrLn $ T.unpack $ "CREATE TYPE EthereumLog AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumLog)) <> ");"
-			putStrLn $ T.unpack $ "CREATE TYPE EthereumTransaction AS (" <> concatFields (postgresSchemaFields False $ schemaOf (Proxy :: Proxy EthereumTransaction)) <> ");"
-			putStrLn $ T.unpack $ "CREATE TABLE ethereum (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy EthereumBlock)) <> ", PRIMARY KEY (\"number\"));"
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy EthereumLog)
+				, schemaOf (Proxy :: Proxy EthereumTransaction)
+				, schemaOf (Proxy :: Proxy EthereumBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE ethereum OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
 		("ethereum", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
 		("erc20tokens", "postgres") ->
-			putStrLn $ T.unpack $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
+			putStrLn $ T.unpack $ TL.toStrict $ TL.toLazyText $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
 		("erc20tokens", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
 		_ -> fail "wrong pair schema+storage"
