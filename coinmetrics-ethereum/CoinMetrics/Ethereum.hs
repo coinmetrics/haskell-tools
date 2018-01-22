@@ -70,11 +70,8 @@ instance J.FromJSON EthereumBlock where
 		<*> (decodeHexNumber    =<< fields J..: "gasLimit")
 		<*> (decodeHexNumber    =<< fields J..: "gasUsed")
 		<*> (decodeHexNumber    =<< fields J..: "timestamp")
-		<*> (decodeTransactions =<< fields J..: "transactions")
-		<*> (decodeUncles       =<< fields J..: "uncles")
-		where
-			decodeTransactions = J.withArray "transactions" $ V.mapM J.parseJSON
-			decodeUncles = J.withArray "uncles" $ V.mapM decodeHexBytes
+		<*> (                       fields J..: "transactions")
+		<*> (V.mapM decodeHexBytes =<< fields J..: "uncles")
 
 instance A.HasAvroSchema EthereumBlock where
 	schema = genericAvroSchema
@@ -106,17 +103,15 @@ instance J.FromJSON EthereumTransaction where
 		<$> (decodeHexBytes  =<< fields J..: "hash")
 		<*> (decodeHexNumber =<< fields J..: "nonce")
 		<*> (decodeHexBytes  =<< fields J..: "from")
-		<*> (decodeMaybeHexBytes =<< fields J..: "to")
+		<*> (traverse decodeHexBytes =<< fields J..: "to")
 		<*> (decodeHexNumber =<< fields J..: "value")
 		<*> (decodeHexNumber =<< fields J..: "gasPrice")
 		<*> (decodeHexNumber =<< fields J..: "gas")
 		<*> (decodeHexBytes  =<< fields J..: "input")
 		<*> (decodeHexNumber =<< fields J..: "gasUsed")
-		<*> (decodeMaybeHexBytes =<< fields J..: "contractAddress")
-		<*> (decodeLogs      =<< fields J..: "logs")
+		<*> (traverse decodeHexBytes =<< fields J..: "contractAddress")
+		<*> (                    fields J..: "logs")
 		<*> (decodeHexBytes  =<< fields J..: "logsBloom")
-		where
-			decodeLogs = J.withArray "logs" $ V.mapM J.parseJSON
 
 instance A.HasAvroSchema EthereumTransaction where
 	schema = genericAvroSchema
@@ -139,9 +134,7 @@ instance J.FromJSON EthereumLog where
 		<$> (decodeHexNumber =<< fields J..: "logIndex")
 		<*> (decodeHexBytes  =<< fields J..: "address")
 		<*> (decodeHexBytes  =<< fields J..: "data")
-		<*> (decodeTopics    =<< fields J..: "topics")
-		where
-			decodeTopics = J.withArray "topics" $ V.mapM decodeHexBytes
+		<*> (V.mapM decodeHexBytes =<< fields J..: "topics")
 
 instance A.HasAvroSchema EthereumLog where
 	schema = genericAvroSchema
