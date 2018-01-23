@@ -61,7 +61,7 @@ postgresSqlCreateType schema@Schema
 
 -- | Generate SQL INSERT command for a bunch of records.
 postgresSqlInsertGroup :: ToPostgresText a => T.Text -> [a] -> TL.Builder
-postgresSqlInsertGroup tableName records = "INSERT INTO " <> TL.fromText tableName <> " VALUES " <> recordsText <> ";\n" where
+postgresSqlInsertGroup tableName records = "INSERT INTO \"" <> TL.fromText tableName <> "\" VALUES " <> recordsText <> ";\n" where
 	recordsText = foldr1 (\a b -> a <> ", " <> b) $ map (\a -> "(" <> toPostgresText True a <> ")") records
 
 -- | Class for exporting values into postgres text import format.

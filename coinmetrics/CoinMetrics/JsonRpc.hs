@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ViewPatterns #-}
+{-# LANGUAGE OverloadedLists, OverloadedStrings, ViewPatterns #-}
 
 module CoinMetrics.JsonRpc
 	( JsonRpc()
@@ -9,7 +9,7 @@ module CoinMetrics.JsonRpc
 import Control.Concurrent
 import Control.Exception
 import qualified Data.Aeson as J
-import qualified Data.HashMap.Strict as HM
+import qualified Data.Aeson.Types as J
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
@@ -32,13 +32,13 @@ newJsonRpc httpManager host port maybeCredentials = JsonRpc
 		}
 	}
 
-jsonRpcRequest :: JsonRpc -> T.Text -> V.Vector J.Value -> IO J.Value
+jsonRpcRequest :: J.FromJSON r => JsonRpc -> T.Text -> V.Vector J.Value -> IO r
 jsonRpcRequest JsonRpc
 	{ jsonRpc_httpManager = httpManager
 	, jsonRpc_httpRequest = httpRequest
 	} method params = do
 	body <- H.responseBody <$> tryWithRepeat (H.httpLbs httpRequest
-		{ H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object $ HM.fromList
+		{ H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object
 			[ ("jsonrpc", "2.0")
 			, ("method", J.String method)
 			, ("params", J.Array params)
@@ -46,9 +46,10 @@ jsonRpcRequest JsonRpc
 			]
 		} httpManager)
 	case J.eitherDecode' body of
-		Right (J.Object (HM.lookup "result" -> Just resultValue)) -> return resultValue
+		Right obj -> case J.parse (J..: "result") obj of
+			J.Success result -> return result
+			J.Error err -> fail err
 		Left err -> fail err
-		_ -> fail "bad json rpc response"
 
 tryWithRepeat :: IO a -> IO a
 tryWithRepeat io = let

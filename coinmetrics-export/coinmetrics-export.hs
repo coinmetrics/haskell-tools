@@ -118,7 +118,13 @@ main = run =<< O.execParser parser where
 			(  O.long "output-postgres"
 			<> O.value Nothing
 			<> O.metavar "OUTPUT_POSTGRES"
-			<> O.help "Output directly to Postgres DB"
+			<> O.help "Output directly to PostgreSQL DB"
+			)
+		<*> O.option (O.maybeReader (Just . Just))
+			(  O.long "output-postgres-table"
+			<> O.value Nothing
+			<> O.metavar "OUTPUT_POSTGRES_TABLE"
+			<> O.help "Table name for PostgreSQL output"
 			)
 		<*> O.option O.auto
 			(  O.long "block-size"
@@ -153,6 +159,7 @@ data Output = Output
 	{ output_avroFile :: !(Maybe String)
 	, output_postgresFile :: !(Maybe String)
 	, output_postgres :: !(Maybe String)
+	, output_postgresTable :: !(Maybe String)
 	, output_blockSize :: !Int
 	}
 
@@ -202,10 +209,14 @@ run Options
 		forM_ [1..threadsCount] $ \_ -> let
 			step = do
 				maybeBlockIndex <- atomically $ do
-					blockIndexQueueEnded <- readTVar blockIndexQueueEndedVar
-					if blockIndexQueueEnded
-						then return Nothing
-						else Just <$> readTBQueue blockIndexQueue
+					maybeBlockIndex <- tryReadTBQueue blockIndexQueue
+					case maybeBlockIndex of
+						Just _ -> return maybeBlockIndex
+						Nothing -> do
+							blockIndexQueueEnded <- readTVar blockIndexQueueEndedVar
+							if blockIndexQueueEnded
+								then return Nothing
+								else retry
 				case maybeBlockIndex of
 					Just blockIndex -> do
 						-- get block from blockchain
@@ -240,9 +251,10 @@ run Options
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy EthereumLog)
 				, schemaOf (Proxy :: Proxy EthereumTransaction)
+				, schemaOf (Proxy :: Proxy EthereumUncleBlock)
 				, schemaOf (Proxy :: Proxy EthereumBlock)
 				]
-			putStrLn $ T.unpack $ "CREATE TABLE ethereum OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
+			putStrLn $ T.unpack $ "CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
 		("ethereum", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
 		("erc20tokens", "postgres") ->
@@ -269,8 +281,9 @@ run Options
 			{ output_avroFile = maybeOutputAvroFile
 			, output_postgresFile = maybeOutputPostgresFile
 			, output_postgres = maybeOutputPostgres
+			, output_postgresTable = maybePostgresTable
 			, output_blockSize = blockSize
-			} tableName (blockSplit blockSize -> blocks) = do
+			} defaultTableName (blockSplit blockSize -> blocks) = do
 			vars <- forM outputs $ \output -> do
 				var <- newTVarIO Nothing
 				void $ forkFinally output $ atomically . writeTVar var . Just
@@ -284,7 +297,7 @@ run Options
 				print erroredResults
 				fail "output failed"
 
-			where outputs = concat
+			where outputs = let tableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable in concat
 				[ case maybeOutputAvroFile of
 					Just outputAvroFile -> [BL.writeFile outputAvroFile =<< A.encodeContainer blocks]
 					Nothing -> []
