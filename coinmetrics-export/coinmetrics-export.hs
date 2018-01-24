@@ -40,7 +40,7 @@ main = run =<< O.execParser parser where
 		<$> O.subparser
 			(  O.command "export"
 				(  O.info
-					(OptionExportCommand
+					(O.helper <*> (OptionExportCommand
 						<$> O.strOption
 							(  O.long "api-host"
 							<> O.metavar "API_HOST"
@@ -57,13 +57,13 @@ main = run =<< O.execParser parser where
 							(  O.long "begin-block"
 							<> O.value 0 <> O.showDefault
 							<> O.metavar "BEGIN_BLOCK"
-							<> O.help "Begin block number"
+							<> O.help "Begin block number (inclusive)"
 							)
 						<*> O.option O.auto
 							(  O.long "end-block"
 							<> O.value (-1000) <> O.showDefault
 							<> O.metavar "END_BLOCK"
-							<> O.help "End block number"
+							<> O.help "End block number if positive (exclusive), offset to top block if negative"
 							)
 						<*> optionOutput
 						<*> O.option O.auto
@@ -72,11 +72,11 @@ main = run =<< O.execParser parser where
 							<> O.metavar "THREADS"
 							<> O.help "Threads count"
 							)
-					) (O.fullDesc <> O.progDesc "Export blockchain into file")
+					)) (O.fullDesc <> O.progDesc "Export blockchain into file")
 				)
 			<> O.command "print-schema"
 				(  O.info
-					(OptionPrintSchemaCommand
+					(O.helper <*> (OptionPrintSchemaCommand
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
@@ -87,18 +87,18 @@ main = run =<< O.execParser parser where
 							<> O.metavar "STORAGE"
 							<> O.help "Storage type: postgres, bigquery"
 							)
-					) (O.fullDesc <> O.progDesc "Prints schema")
+					)) (O.fullDesc <> O.progDesc "Prints schema")
 				)
 			<> O.command "export-erc20-info"
 				(  O.info
-					(OptionExportERC20InfoCommand
+					(O.helper <*> (OptionExportERC20InfoCommand
 						<$> O.strOption
 							(  O.long "input-json-file"
 							<> O.metavar "INPUT_JSON_FILE"
 							<> O.help "Input JSON file"
 							)
 						<*> optionOutput
-					) (O.fullDesc <> O.progDesc "Exports ERC20 info")
+					)) (O.fullDesc <> O.progDesc "Exports ERC20 info")
 				)
 			)
 	optionOutput = Output
@@ -127,10 +127,10 @@ main = run =<< O.execParser parser where
 			<> O.help "Table name for PostgreSQL output"
 			)
 		<*> O.option O.auto
-			(  O.long "block-size"
+			(  O.long "pack-size"
 			<> O.value 100 <> O.showDefault
-			<> O.metavar "BLOCK_SIZE"
-			<> O.help "Number of records in exported block"
+			<> O.metavar "PACK_SIZE"
+			<> O.help "Number of records in pack (SQL INSERT command, or Avro block)"
 			)
 
 data Options = Options
@@ -160,7 +160,7 @@ data Output = Output
 	, output_postgresFile :: !(Maybe String)
 	, output_postgres :: !(Maybe String)
 	, output_postgresTable :: !(Maybe String)
-	, output_blockSize :: !Int
+	, output_packSize :: !Int
 	}
 
 run :: Options -> IO ()
@@ -272,9 +272,9 @@ run Options
 
 	where
 		blockSplit :: Int -> [a] -> [[a]]
-		blockSplit blockSize = \case
+		blockSplit packSize = \case
 			[] -> []
-			xs -> let (a, b) = splitAt blockSize xs in a : blockSplit blockSize b
+			xs -> let (a, b) = splitAt packSize xs in a : blockSplit packSize b
 
 		writeOutput :: (A.ToAvro a, ToPostgresText a) => Output -> T.Text -> [a] -> IO ()
 		writeOutput Output
@@ -282,8 +282,8 @@ run Options
 			, output_postgresFile = maybeOutputPostgresFile
 			, output_postgres = maybeOutputPostgres
 			, output_postgresTable = maybePostgresTable
-			, output_blockSize = blockSize
-			} defaultTableName (blockSplit blockSize -> blocks) = do
+			, output_packSize = packSize
+			} defaultTableName (blockSplit packSize -> blocks) = do
 			vars <- forM outputs $ \output -> do
 				var <- newTVarIO Nothing
 				void $ forkFinally output $ atomically . writeTVar var . Just
