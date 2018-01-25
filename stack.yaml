@@ -4,6 +4,7 @@ packages:
 - coinmetrics
 - coinmetrics-ethereum
 - coinmetrics-export
+- coinmetrics-iota
 
 extra-deps:
 #- avro-0.2.0.0

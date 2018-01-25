@@ -10,6 +10,7 @@ import qualified Data.Avro as A
 import qualified Data.ByteString.Lazy as BL
 import Data.Either
 import Data.Maybe
+import qualified Data.HashSet as HS
 import Data.Monoid
 import Data.Proxy
 import qualified Data.Text as T
@@ -17,6 +18,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TL
 import qualified Data.Text.Lazy.Encoding as TL
+import qualified Data.Vector as V
 import qualified Database.PostgreSQL.LibPQ as PQ
 import qualified Network.HTTP.Client as H
 import qualified Options.Applicative as O
@@ -25,6 +27,7 @@ import System.IO.Unsafe
 import CoinMetrics.BlockChain
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
+import CoinMetrics.Iota
 import CoinMetrics.Schema
 import CoinMetrics.Schema.BigQuery
 import CoinMetrics.Schema.Postgres
@@ -72,7 +75,31 @@ main = run =<< O.execParser parser where
 							<> O.metavar "THREADS"
 							<> O.help "Threads count"
 							)
-					)) (O.fullDesc <> O.progDesc "Export blockchain into file")
+					)) (O.fullDesc <> O.progDesc "Export blockchain")
+				)
+			<> O.command "export-iota"
+				(  O.info
+					(O.helper <*> (OptionExportIotaCommand
+						<$> O.strOption
+							(  O.long "api-host"
+							<> O.metavar "API_HOST"
+							<> O.value "127.0.0.1" <> O.showDefault
+							<> O.help "IOTA API host"
+							)
+						<*> O.option O.auto
+							(  O.long "api-port"
+							<> O.metavar "API_PORT"
+							<> O.value 14265 <> O.showDefault
+							<> O.help "IOTA API port"
+							)
+						<*> optionOutput
+						<*> O.option O.auto
+							(  O.long "threads"
+							<> O.value 1 <> O.showDefault
+							<> O.metavar "THREADS"
+							<> O.help "Threads count"
+							)
+					)) (O.fullDesc <> O.progDesc "Export IOTA data")
 				)
 			<> O.command "print-schema"
 				(  O.info
@@ -143,6 +170,12 @@ data OptionCommand
 		, options_apiPort :: !Int
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
+		, options_outputFile :: !Output
+		, options_threadsCount :: !Int
+		}
+	| OptionExportIotaCommand
+		{ options_apiHost :: !T.Text
+		, options_apiPort :: !Int
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
 		}
@@ -243,6 +276,50 @@ run Options
 		writeOutput outputFile "ethereum" =<< step beginBlock
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
+	OptionExportIotaCommand
+		{ options_apiHost = apiHost
+		, options_apiPort = apiPort
+		, options_outputFile = outputFile
+		, options_threadsCount = threadsCount
+		} -> do
+		httpManager <- H.newManager H.defaultManagerSettings
+		let iota = newIota httpManager apiHost apiPort
+
+		-- simple multithreaded pipeline
+		hashQueue <- newTQueueIO
+		transactionQueue <- newTBQueueIO (threadsCount * 2)
+		processedHashesVar <- newTVarIO HS.empty
+
+		let addHash hash = atomically $ do
+			processedHashes <- readTVar processedHashesVar
+			unless (HS.member hash processedHashes) $ do
+				writeTQueue hashQueue hash
+				writeTVar processedHashesVar $ HS.insert hash processedHashes
+
+		-- thread adding hashes to hash queue
+		void $ forkIO $ forever $ do
+			-- get tips
+			hashes <- iotaGetTips iota
+			-- put tips into queue
+			mapM_ addHash hashes
+			-- pause
+			threadDelay 10000000
+
+		-- work threads getting transactions from blockchain
+		forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
+			hash <- atomically $ readTQueue hashQueue
+			[transaction] <- V.toList <$> iotaGetTransactions iota (V.singleton hash)
+			atomically $ writeTBQueue transactionQueue transaction
+			addHash $ it_trunkTransaction transaction
+			addHash $ it_branchTransaction transaction
+
+		-- write blocks into outputs, using lazy IO
+		let step i = unsafeInterleaveIO $ do
+			transaction <- atomically $ readTBQueue transactionQueue
+			when (i `rem` 100 == 0) $ putStrLn $ "synced transactions: " ++ show i
+			(transaction :) <$> step (i + 1)
+		writeOutput outputFile "iota" =<< step (0 :: Int)
+
 	OptionPrintSchemaCommand
 		{ options_schema = schemaTypeStr
 		, options_storage = storageTypeStr
@@ -257,6 +334,11 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
 		("ethereum", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
+		("iota", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy IotaTransaction)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
 		("erc20tokens", "postgres") ->
 			putStrLn $ T.unpack $ TL.toStrict $ TL.toLazyText $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
 		("erc20tokens", "bigquery") ->
