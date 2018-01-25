@@ -1,3 +1,5 @@
+![Travis CI Build Status](https://travis-ci.org/coinmetrics-io/haskell-tools.svg?branch=master)
+
 # Haskell-based CoinMetrics.io tools
 
 These tools are used by CoinMetrics.io team for exporting data from blockchains (currently, Ethereum only) into analytical databases,
