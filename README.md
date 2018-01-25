@@ -1,6 +1,6 @@
 # Haskell-based CoinMetrics.io tools
 
-These tools are used by CoinMetrics.io team for exporting data from blockchains into analytical databases,
+These tools are used by CoinMetrics.io team for exporting data from blockchains (currently, Ethereum only) into analytical databases,
 allowing to perform SQL queries, for instance, generating aggregated information on Ethereum tokens.
 
 ## Packages
