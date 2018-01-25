@@ -27,7 +27,8 @@ Proper documentation is yet to be written. Please run `coinmetrics-export [<comm
 
 ### Usage examples
 
-Export desired range of blocks (from 1000000 to 1999999, as end block is exclusive), using 16 threads, and output data simultaneously to SQL file and Avro file:
+* Export desired range of blocks (from 1000000 to 1999999, as end block is exclusive), using 16 threads, and output data simultaneously to SQL file and Avro file:
+
 ```bash
 coinmetrics-export export \
   --begin-block 1000000 --end-block 2000000 \
@@ -35,9 +36,10 @@ coinmetrics-export export \
   --output-postgres-file data.sql \
   --output-avro-file data.avro
 ```
-Fetching data with multiple threads (`--threads` parameter) allows to compensate for latency, especially if talking to blockchain daemon via network.
+Fetching data with multiple threads (`--threads` parameter) allows to compensate for latency, especially if talking to blockchain daemon over network.
 
-Continuously export blocks, starting from the beginning and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block), and output straight into PostgreSQL database specified by connection string:
+* Continuously export blocks, starting from the beginning and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block), and output straight into PostgreSQL database specified by connection string:
+
 ```bash
 coinmetrics-export export \
   --begin-block 0 --end-block -1000 \
@@ -45,7 +47,8 @@ coinmetrics-export export \
   --output-postgres "host=127.0.0.1 user=postgres"
 ```
 
-Get SQL commands for initializing PostgreSQL database:
+* Get SQL commands for initializing PostgreSQL database:
+
 ```bash
 coinmetrics-export print-schema --schema ethereum --storage postgres
 ```
