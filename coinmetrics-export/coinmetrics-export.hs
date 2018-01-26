@@ -8,9 +8,9 @@ import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.DiskHash as DH
 import Data.Either
 import Data.Maybe
-import qualified Data.HashSet as HS
 import Data.Monoid
 import Data.Proxy
 import qualified Data.Text as T
@@ -91,6 +91,11 @@ main = run =<< O.execParser parser where
 							<> O.metavar "API_PORT"
 							<> O.value 14265 <> O.showDefault
 							<> O.help "IOTA API port"
+							)
+						<*> O.strOption
+							(  O.long "sync-db"
+							<> O.metavar "SYNC_DB"
+							<> O.help "Sync DB file"
 							)
 						<*> optionOutput
 						<*> O.option O.auto
@@ -176,6 +181,7 @@ data OptionCommand
 	| OptionExportIotaCommand
 		{ options_apiHost :: !T.Text
 		, options_apiPort :: !Int
+		, options_syncDbFile :: !String
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
 		}
@@ -279,6 +285,7 @@ run Options
 	OptionExportIotaCommand
 		{ options_apiHost = apiHost
 		, options_apiPort = apiPort
+		, options_syncDbFile = syncDbFile
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
 		} -> do
@@ -288,30 +295,58 @@ run Options
 		-- simple multithreaded pipeline
 		hashQueue <- newTQueueIO
 		transactionQueue <- newTBQueueIO (threadsCount * 2)
-		processedHashesVar <- newTVarIO HS.empty
 
-		let addHash hash = atomically $ do
-			processedHashes <- readTVar processedHashesVar
-			unless (HS.member hash processedHashes) $ do
-				writeTQueue hashQueue hash
-				writeTVar processedHashesVar $ HS.insert hash processedHashes
+		queueSizeVar <- newTVarIO 0 :: IO (TVar Int)
 
-		-- thread adding hashes to hash queue
+		-- thread working with sync db
+		syncDbActionsQueue <- newTQueueIO
+		void $ forkIO $ DH.withDiskHashRW syncDbFile 82 $ \syncDb -> forever $ do
+			action <- atomically $ readTQueue syncDbActionsQueue
+			action syncDb
+
+		let addHash hash@(T.encodeUtf8 -> hashBytes) = atomically $ writeTQueue syncDbActionsQueue $ \syncDb -> do
+			hashProcessed <- isJust <$> DH.htLookupRW hashBytes syncDb
+			unless (hashProcessed) $ do
+				ok <- DH.htInsert hashBytes () syncDb
+				unless ok $ fail "can't write into sync db"
+				atomically $ do
+					writeTQueue hashQueue hash
+					modifyTVar' queueSizeVar (+ 1)
+
+		let takeHashes limit = let
+			step n hashes = if n <= (0 :: Int) then return hashes else do
+				maybeHash <- tryReadTQueue hashQueue
+				case maybeHash of
+					Just hash -> do
+						modifyTVar' queueSizeVar (subtract 1)
+						step (n - 1) (hash : hashes)
+					Nothing -> return hashes
+			in step limit []
+
+		-- thread adding milestones to hash queue
 		void $ forkIO $ forever $ do
-			-- get tips
-			hashes <- iotaGetTips iota
-			-- put tips into queue
-			mapM_ addHash hashes
+			-- get milestone
+			latestMilestoneHash <- iotaGetLatestMilestone iota
+			putStrLn $ "latest milestone: " <> T.unpack latestMilestoneHash
+			-- put milestone into queue
+			addHash latestMilestoneHash
+			-- output queue size
+			queueSize <- readTVarIO queueSizeVar
+			putStrLn $ "queue size: " <> show queueSize
 			-- pause
 			threadDelay 10000000
 
 		-- work threads getting transactions from blockchain
 		forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
-			hash <- atomically $ readTQueue hashQueue
-			[transaction] <- V.toList <$> iotaGetTransactions iota (V.singleton hash)
-			atomically $ writeTBQueue transactionQueue transaction
-			addHash $ it_trunkTransaction transaction
-			addHash $ it_branchTransaction transaction
+			hashes <- V.fromList <$> atomically (takeHashes 1000)
+			transactions <- iotaGetTransactions iota hashes
+			forM_ transactions $ \transaction@IotaTransaction
+				{ it_trunkTransaction = trunkTransaction
+				, it_branchTransaction = branchTransaction
+				} -> do
+				atomically $ writeTBQueue transactionQueue transaction
+				addHash trunkTransaction
+				addHash branchTransaction
 
 		-- write blocks into outputs, using lazy IO
 		let step i = unsafeInterleaveIO $ do
