@@ -28,9 +28,9 @@ import CoinMetrics.BlockChain
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
-import CoinMetrics.Schema
-import CoinMetrics.Schema.BigQuery
-import CoinMetrics.Schema.Postgres
+import Hanalytics.Schema
+import Hanalytics.Schema.BigQuery
+import Hanalytics.Schema.Postgres
 
 main :: IO ()
 main = run =<< O.execParser parser where

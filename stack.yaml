@@ -12,6 +12,13 @@ extra-deps:
   commit: bf1dcd3d663022afa4aa6bcecd2752cb807cb06e
 - pure-zlib-0.6
 - diskhash-0.0.4.0
+- git: https://github.com/quyse/hanalytics.git
+  commit: 5c4d540ea614445febe9142c18d1d965699157dc
+  subdirs:
+  - hanalytics-avro
+  - hanalytics-base
+  - hanalytics-bigquery
+  - hanalytics-postgres
 
 ghc-options:
   "$locals": -threaded -Wall -Wno-tabs

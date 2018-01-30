@@ -22,6 +22,9 @@ library
     , base
     , bytestring
     , coinmetrics
+    , hanalytics-avro
+    , hanalytics-base
+    , hanalytics-postgres
     , http-client
     , memory
     , text

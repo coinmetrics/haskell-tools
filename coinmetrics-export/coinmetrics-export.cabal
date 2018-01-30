@@ -22,6 +22,9 @@ executable coinmetrics-export
     , coinmetrics
     , coinmetrics-ethereum
     , coinmetrics-iota
+    , hanalytics-base
+    , hanalytics-bigquery
+    , hanalytics-postgres
     , diskhash
     , http-client
     , memory

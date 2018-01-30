@@ -24,9 +24,9 @@ import qualified Data.Vector as V
 import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
-import CoinMetrics.Schema
-import CoinMetrics.Schema.Avro
-import CoinMetrics.Schema.Postgres
+import Hanalytics.Schema
+import Hanalytics.Schema.Avro
+import Hanalytics.Schema.Postgres
 
 data IotaTransaction = IotaTransaction
 	{ it_hash :: !T.Text

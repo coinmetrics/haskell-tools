@@ -23,9 +23,9 @@ import qualified Network.HTTP.Client as H
 import CoinMetrics.BlockChain
 import CoinMetrics.Ethereum.Util
 import CoinMetrics.JsonRpc
-import CoinMetrics.Schema
-import CoinMetrics.Schema.Avro
-import CoinMetrics.Schema.Postgres
+import Hanalytics.Schema
+import Hanalytics.Schema.Avro
+import Hanalytics.Schema.Postgres
 
 newtype Ethereum = Ethereum JsonRpc
 
