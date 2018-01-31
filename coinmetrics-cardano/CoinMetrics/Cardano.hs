@@ -77,7 +77,7 @@ instance BlockChain Cardano where
 			\((V.! 1) -> blocksObjectsObject) ->
 			J.withArray "blocks" (J.parseJSON . (V.! fromIntegral blockIndexOnPage)) blocksObjectsObject
 		blockHashText <- either fail return $ J.parseEither (J..: "cbeBlkHash") blockObject
-		blockTxsBriefObjects <- either fail return =<< cardanoRequest cardano ("/api/blocks/txs/" <> blockHashText) []
+		blockTxsBriefObjects <- either fail return =<< cardanoRequest cardano ("/api/blocks/txs/" <> blockHashText) [("limit", Just "1000000000000000000")]
 		blockTxs <- forM blockTxsBriefObjects $ \txBriefObject -> do
 			txIdText <- either fail return $ J.parseEither (J..: "ctbId") txBriefObject
 			either fail return =<< cardanoRequest cardano ("/api/txs/summary/" <> txIdText) []
