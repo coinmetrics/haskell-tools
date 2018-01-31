@@ -2,14 +2,22 @@
 
 # Haskell-based CoinMetrics.io tools
 
-These tools are used by CoinMetrics.io team for exporting data from blockchains (currently, Ethereum only) into analytical databases,
+These tools are used by CoinMetrics.io team for exporting data from blockchains into analytical databases,
 allowing to perform SQL queries, for instance, generating aggregated information on Ethereum tokens.
+
+Supported cryptocurrencies:
+
+* Ethereum
+* Cardano (WIP)
+* IOTA (WIP)
 
 ## Packages
 
 * `coinmetrics` - library with some base primitives for exporting blockchain data into different formats.
+* `coinmetrics-cardano` - library specific to Cardano.
 * `coinmetrics-ethereum` - library specific to Ethereum.
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
+* `coinmetrics-iota` - library specific to IOTA.
 
 ## Building
 
@@ -22,17 +30,18 @@ The code is only tested on Linux (but probably work on other OSes too).
 ## Using coinmetrics-export
 
 `coinmetrics-export` exports blockchain data into formats suitable for analysis by other tools (such as PostgreSQL and Google BigQuery).
-So far it supports Ethereum only, but the intention is to support multitude of blockchains.
+The intention is to support multitude of blockchains with a single command-line tool.
 Output formats include SQL (PostgreSQL-compatible) and Avro (used successfully for uploading data to Google BigQuery).
 
-Proper documentation is yet to be written. Please run `coinmetrics-export [<command>] --help` for actual and more detailed info.
+Proper documentation is yet to be written. Please run `coinmetrics-export --help` for list of commands, and `coinmetrics-export <command> --help` for info on specific command.
 
 ### Usage examples
 
-* Export desired range of blocks (from 1000000 to 1999999, as end block is exclusive), using 16 threads, and output data simultaneously to SQL file and Avro file:
+* Export desired range of Ethereum blocks (from 1000000 to 1999999, as end block is exclusive), using 16 threads, and output data simultaneously to SQL file and Avro file:
 
 ```bash
 coinmetrics-export export \
+  --blockchain ethereum \
   --begin-block 1000000 --end-block 2000000 \
   --threads 16 \
   --output-postgres-file data.sql \
@@ -40,10 +49,11 @@ coinmetrics-export export \
 ```
 Fetching data with multiple threads (`--threads` parameter) allows to compensate for latency, especially if talking to blockchain daemon over network.
 
-* Continuously export blocks, starting from the beginning and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block), and output straight into PostgreSQL database specified by connection string:
+* Continuously export Ethereum blocks, starting from the beginning and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block), and output straight into PostgreSQL database specified by connection string:
 
 ```bash
 coinmetrics-export export \
+  --blockchain ethereum \
   --begin-block 0 --end-block -1000 \
   --threads 16 \
   --output-postgres "host=127.0.0.1 user=postgres"
@@ -53,4 +63,10 @@ coinmetrics-export export \
 
 ```bash
 coinmetrics-export print-schema --schema ethereum --storage postgres
+```
+
+* Get JSON schema for Google BigQuery:
+
+```bash
+coinmetrics-export print-schema --schema ethereum --storage bigquery
 ```
