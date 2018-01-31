@@ -21,8 +21,8 @@ import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
-import CoinMetrics.Ethereum.Util
 import CoinMetrics.JsonRpc
+import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
 import Hanalytics.Schema.Postgres

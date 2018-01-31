@@ -15,7 +15,6 @@ library
   exposed-modules:
     CoinMetrics.Ethereum
     CoinMetrics.Ethereum.ERC20
-    CoinMetrics.Ethereum.Util
   build-depends:
     aeson
     , avro

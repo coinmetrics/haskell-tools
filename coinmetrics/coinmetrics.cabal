@@ -16,6 +16,7 @@ library
     CoinMetrics.BlockChain
     CoinMetrics.JsonRpc
     CoinMetrics.Schema.Util
+    CoinMetrics.Util
   build-depends:
     aeson
     , base

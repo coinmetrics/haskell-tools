@@ -11,7 +11,7 @@ import Data.Int
 import qualified Data.Text as T
 import GHC.Generics(Generic)
 
-import CoinMetrics.Ethereum.Util
+import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
 import Hanalytics.Schema.Postgres

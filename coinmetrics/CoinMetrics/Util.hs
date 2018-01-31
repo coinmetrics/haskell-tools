@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase, OverloadedStrings, ViewPatterns #-}
 
-module CoinMetrics.Ethereum.Util
+module CoinMetrics.Util
 	( encodeHexBytes
 	, decodeHexBytes
 	, encodeHexNumber
