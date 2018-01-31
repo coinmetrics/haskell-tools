@@ -25,6 +25,7 @@ import qualified Options.Applicative as O
 import System.IO.Unsafe
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Cardano
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
@@ -53,8 +54,13 @@ main = run =<< O.execParser parser where
 						<*> O.option O.auto
 							(  O.long "api-port"
 							<> O.metavar "API_PORT"
-							<> O.value 8545 <> O.showDefault
+							<> O.value Nothing
 							<> O.help "Ethereum API port"
+							)
+						<*> O.strOption
+							(  O.long "blockchain"
+							<> O.metavar "BLOCKCHAIN"
+							<> O.help "Type of blockchain: ethereum | cardano"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -89,7 +95,7 @@ main = run =<< O.execParser parser where
 						<*> O.option O.auto
 							(  O.long "api-port"
 							<> O.metavar "API_PORT"
-							<> O.value 14265 <> O.showDefault
+							<> O.value Nothing
 							<> O.help "IOTA API port"
 							)
 						<*> O.strOption
@@ -112,12 +118,12 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: ethereum, erc20tokens"
+							<> O.help "Type of schema: ethereum | erc20tokens | iota | cardano"
 							)
 						<*> O.strOption
 							(  O.long "storage"
 							<> O.metavar "STORAGE"
-							<> O.help "Storage type: postgres, bigquery"
+							<> O.help "Storage type: postgres | bigquery"
 							)
 					)) (O.fullDesc <> O.progDesc "Prints schema")
 				)
@@ -172,7 +178,8 @@ data Options = Options
 data OptionCommand
 	= OptionExportCommand
 		{ options_apiHost :: !T.Text
-		, options_apiPort :: !Int
+		, options_apiPort :: !(Maybe Int)
+		, options_blockchain :: !T.Text
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
 		, options_outputFile :: !Output
@@ -180,7 +187,7 @@ data OptionCommand
 		}
 	| OptionExportIotaCommand
 		{ options_apiHost :: !T.Text
-		, options_apiPort :: !Int
+		, options_apiPort :: !(Maybe Int)
 		, options_syncDbFile :: !String
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
@@ -209,14 +216,18 @@ run Options
 
 	OptionExportCommand
 		{ options_apiHost = apiHost
-		, options_apiPort = apiPort
+		, options_apiPort = maybeApiPort
+		, options_blockchain = blockchainType
 		, options_beginBlock = beginBlock
 		, options_endBlock = endBlock
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
 		} -> do
 		httpManager <- H.newManager H.defaultManagerSettings
-		let blockChain = newEthereum httpManager apiHost apiPort
+		SomeBlockChain blockChain <- case blockchainType of
+			"ethereum" -> return $ SomeBlockChain $ newEthereum httpManager apiHost (fromMaybe 8545 maybeApiPort)
+			"cardano" -> return $ SomeBlockChain $ newCardano httpManager apiHost (fromMaybe 8100 maybeApiPort)
+			_ -> fail "wrong blockchain specified"
 
 		-- simple multithreaded pipeline
 		blockIndexQueue <- newTBQueueIO (threadsCount * 2)
@@ -284,13 +295,13 @@ run Options
 
 	OptionExportIotaCommand
 		{ options_apiHost = apiHost
-		, options_apiPort = apiPort
+		, options_apiPort = maybeApiPort
 		, options_syncDbFile = syncDbFile
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
 		} -> do
 		httpManager <- H.newManager H.defaultManagerSettings
-		let iota = newIota httpManager apiHost apiPort
+		let iota = newIota httpManager apiHost (fromMaybe 14265 maybeApiPort)
 
 		-- simple multithreaded pipeline
 		hashQueue <- newTQueueIO
@@ -369,15 +380,27 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
 		("ethereum", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
+		("erc20tokens", "postgres") ->
+			putStrLn $ T.unpack $ TL.toStrict $ TL.toLazyText $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
+		("erc20tokens", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
 		("iota", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy IotaTransaction)
 				]
 			putStrLn $ T.unpack $ "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
-		("erc20tokens", "postgres") ->
-			putStrLn $ T.unpack $ TL.toStrict $ TL.toLazyText $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
-		("erc20tokens", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
+		("iota", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
+		("cardano", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy CardanoInput)
+				, schemaOf (Proxy :: Proxy CardanoOutput)
+				, schemaOf (Proxy :: Proxy CardanoTransaction)
+				, schemaOf (Proxy :: Proxy CardanoBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"cardano\" OF \"CardanoBlock\" (PRIMARY KEY (\"height\"));"
+		("cardano", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy CardanoBlock)
 		_ -> fail "wrong pair schema+storage"
 
 	OptionExportERC20InfoCommand

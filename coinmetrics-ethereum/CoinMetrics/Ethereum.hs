@@ -55,23 +55,23 @@ instance Schemable EthereumBlock
 
 instance J.FromJSON EthereumBlock where
 	parseJSON = J.withObject "ethereum block" $ \fields -> EthereumBlock
-		<$> (decodeHexNumber    =<< fields J..: "number")
-		<*> (decodeHexBytes     =<< fields J..: "hash")
-		<*> (decodeHexBytes     =<< fields J..: "parentHash")
-		<*> (decodeHexBytes     =<< fields J..: "nonce")
-		<*> (decodeHexBytes     =<< fields J..: "sha3Uncles")
-		<*> (decodeHexBytes     =<< fields J..: "logsBloom")
-		<*> (decodeHexBytes     =<< fields J..: "transactionsRoot")
-		<*> (decodeHexBytes     =<< fields J..: "stateRoot")
-		<*> (decodeHexBytes     =<< fields J..: "receiptsRoot")
-		<*> (decodeHexBytes     =<< fields J..: "miner")
-		<*> (decodeHexNumber    =<< fields J..: "difficulty")
-		<*> (decodeHexNumber    =<< fields J..: "totalDifficulty")
-		<*> (decodeHexBytes     =<< fields J..: "extraData")
-		<*> (decodeHexNumber    =<< fields J..: "size")
-		<*> (decodeHexNumber    =<< fields J..: "gasLimit")
-		<*> (decodeHexNumber    =<< fields J..: "gasUsed")
-		<*> (decodeHexNumber    =<< fields J..: "timestamp")
+		<$> (decode0xHexNumber    =<< fields J..: "number")
+		<*> (decode0xHexBytes     =<< fields J..: "hash")
+		<*> (decode0xHexBytes     =<< fields J..: "parentHash")
+		<*> (decode0xHexBytes     =<< fields J..: "nonce")
+		<*> (decode0xHexBytes     =<< fields J..: "sha3Uncles")
+		<*> (decode0xHexBytes     =<< fields J..: "logsBloom")
+		<*> (decode0xHexBytes     =<< fields J..: "transactionsRoot")
+		<*> (decode0xHexBytes     =<< fields J..: "stateRoot")
+		<*> (decode0xHexBytes     =<< fields J..: "receiptsRoot")
+		<*> (decode0xHexBytes     =<< fields J..: "miner")
+		<*> (decode0xHexNumber    =<< fields J..: "difficulty")
+		<*> (decode0xHexNumber    =<< fields J..: "totalDifficulty")
+		<*> (decode0xHexBytes     =<< fields J..: "extraData")
+		<*> (decode0xHexNumber    =<< fields J..: "size")
+		<*> (decode0xHexNumber    =<< fields J..: "gasLimit")
+		<*> (decode0xHexNumber    =<< fields J..: "gasUsed")
+		<*> (decode0xHexNumber    =<< fields J..: "timestamp")
 		<*> (                       fields J..: "transactions")
 		<*> (                       fields J..: "uncles")
 
@@ -105,22 +105,22 @@ instance SchemableField EthereumUncleBlock
 
 instance J.FromJSON EthereumUncleBlock where
 	parseJSON = J.withObject "ethereum uncle block" $ \fields -> EthereumUncleBlock
-		<$> (decodeHexNumber    =<< fields J..: "number")
-		<*> (decodeHexBytes     =<< fields J..: "hash")
-		<*> (decodeHexBytes     =<< fields J..: "parentHash")
-		<*> (decodeHexBytes     =<< fields J..: "nonce")
-		<*> (decodeHexBytes     =<< fields J..: "sha3Uncles")
-		<*> (decodeHexBytes     =<< fields J..: "logsBloom")
-		<*> (decodeHexBytes     =<< fields J..: "transactionsRoot")
-		<*> (decodeHexBytes     =<< fields J..: "stateRoot")
-		<*> (decodeHexBytes     =<< fields J..: "receiptsRoot")
-		<*> (decodeHexBytes     =<< fields J..: "miner")
-		<*> (decodeHexNumber    =<< fields J..: "difficulty")
-		<*> (decodeHexNumber    =<< fields J..: "totalDifficulty")
-		<*> (decodeHexBytes     =<< fields J..: "extraData")
-		<*> (decodeHexNumber    =<< fields J..: "gasLimit")
-		<*> (decodeHexNumber    =<< fields J..: "gasUsed")
-		<*> (decodeHexNumber    =<< fields J..: "timestamp")
+		<$> (decode0xHexNumber    =<< fields J..: "number")
+		<*> (decode0xHexBytes     =<< fields J..: "hash")
+		<*> (decode0xHexBytes     =<< fields J..: "parentHash")
+		<*> (decode0xHexBytes     =<< fields J..: "nonce")
+		<*> (decode0xHexBytes     =<< fields J..: "sha3Uncles")
+		<*> (decode0xHexBytes     =<< fields J..: "logsBloom")
+		<*> (decode0xHexBytes     =<< fields J..: "transactionsRoot")
+		<*> (decode0xHexBytes     =<< fields J..: "stateRoot")
+		<*> (decode0xHexBytes     =<< fields J..: "receiptsRoot")
+		<*> (decode0xHexBytes     =<< fields J..: "miner")
+		<*> (decode0xHexNumber    =<< fields J..: "difficulty")
+		<*> (decode0xHexNumber    =<< fields J..: "totalDifficulty")
+		<*> (decode0xHexBytes     =<< fields J..: "extraData")
+		<*> (decode0xHexNumber    =<< fields J..: "gasLimit")
+		<*> (decode0xHexNumber    =<< fields J..: "gasUsed")
+		<*> (decode0xHexNumber    =<< fields J..: "timestamp")
 
 instance A.HasAvroSchema EthereumUncleBlock where
 	schema = genericAvroSchema
@@ -149,18 +149,18 @@ instance SchemableField EthereumTransaction
 
 instance J.FromJSON EthereumTransaction where
 	parseJSON = J.withObject "ethereum transaction" $ \fields -> EthereumTransaction
-		<$> (decodeHexBytes  =<< fields J..: "hash")
-		<*> (decodeHexNumber =<< fields J..: "nonce")
-		<*> (decodeHexBytes  =<< fields J..: "from")
-		<*> (traverse decodeHexBytes =<< fields J..: "to")
-		<*> (decodeHexNumber =<< fields J..: "value")
-		<*> (decodeHexNumber =<< fields J..: "gasPrice")
-		<*> (decodeHexNumber =<< fields J..: "gas")
-		<*> (decodeHexBytes  =<< fields J..: "input")
-		<*> (decodeHexNumber =<< fields J..: "gasUsed")
-		<*> (traverse decodeHexBytes =<< fields J..: "contractAddress")
-		<*> (                    fields J..: "logs")
-		<*> (decodeHexBytes  =<< fields J..: "logsBloom")
+		<$> (decode0xHexBytes  =<< fields J..: "hash")
+		<*> (decode0xHexNumber =<< fields J..: "nonce")
+		<*> (decode0xHexBytes  =<< fields J..: "from")
+		<*> (traverse decode0xHexBytes =<< fields J..: "to")
+		<*> (decode0xHexNumber =<< fields J..: "value")
+		<*> (decode0xHexNumber =<< fields J..: "gasPrice")
+		<*> (decode0xHexNumber =<< fields J..: "gas")
+		<*> (decode0xHexBytes  =<< fields J..: "input")
+		<*> (decode0xHexNumber =<< fields J..: "gasUsed")
+		<*> (traverse decode0xHexBytes =<< fields J..: "contractAddress")
+		<*> (                      fields J..: "logs")
+		<*> (decode0xHexBytes  =<< fields J..: "logsBloom")
 
 instance A.HasAvroSchema EthereumTransaction where
 	schema = genericAvroSchema
@@ -180,10 +180,10 @@ instance SchemableField EthereumLog
 
 instance J.FromJSON EthereumLog where
 	parseJSON = J.withObject "ethereum log" $ \fields -> EthereumLog
-		<$> (decodeHexNumber =<< fields J..: "logIndex")
-		<*> (decodeHexBytes  =<< fields J..: "address")
-		<*> (decodeHexBytes  =<< fields J..: "data")
-		<*> (V.mapM decodeHexBytes =<< fields J..: "topics")
+		<$> (decode0xHexNumber =<< fields J..: "logIndex")
+		<*> (decode0xHexBytes  =<< fields J..: "address")
+		<*> (decode0xHexBytes  =<< fields J..: "data")
+		<*> (V.mapM decode0xHexBytes =<< fields J..: "topics")
 
 instance A.HasAvroSchema EthereumLog where
 	schema = genericAvroSchema
@@ -199,13 +199,13 @@ instance BlockChain Ethereum where
 	type Transaction Ethereum = EthereumTransaction
 
 	getCurrentBlockHeight (Ethereum jsonRpc) = do
-		J.Success height <- J.parse decodeHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" []
+		J.Success height <- J.parse decode0xHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" []
 		return height
 
 	getBlockByHeight (Ethereum jsonRpc) blockHeight = do
-		blockFields <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" [encodeHexNumber blockHeight, J.Bool True]
+		blockFields <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" [encode0xHexNumber blockHeight, J.Bool True]
 		J.Success rawTransactions <- return $ J.parse (J..: "transactions") blockFields
-		J.Success unclesHashes <- return $ J.parse (mapM decodeHexBytes <=< (J..: "uncles")) blockFields
+		J.Success unclesHashes <- return $ J.parse (mapM decode0xHexBytes <=< (J..: "uncles")) blockFields
 		transactions <- V.forM rawTransactions $ \rawTransaction -> do
 			J.Success transactionHash <- return $ J.parse (J..: "hash") rawTransaction
 			J.Object receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" [transactionHash]
@@ -220,7 +220,7 @@ instance BlockChain Ethereum where
 				$ HML.insert "logsBloom" logsBloom
 				rawTransaction
 		uncles <- flip V.imapM unclesHashes $ \i _uncleHash -> do
-			J.Success uncle <- J.fromJSON <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" [encodeHexNumber blockHeight, encodeHexNumber i]
+			J.Success uncle <- J.fromJSON <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" [encode0xHexNumber blockHeight, encode0xHexNumber i]
 			return uncle
 		let jsonBlock = J.Object
 			$ HML.insert "transactions" (J.Array transactions)

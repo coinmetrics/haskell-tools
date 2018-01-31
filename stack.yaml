@@ -2,6 +2,7 @@ resolver: lts-10.0
 
 packages:
 - coinmetrics
+- coinmetrics-cardano
 - coinmetrics-ethereum
 - coinmetrics-export
 - coinmetrics-iota

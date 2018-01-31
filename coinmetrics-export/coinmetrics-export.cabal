@@ -20,6 +20,7 @@ executable coinmetrics-export
     , base
     , bytestring
     , coinmetrics
+    , coinmetrics-cardano
     , coinmetrics-ethereum
     , coinmetrics-iota
     , hanalytics-base

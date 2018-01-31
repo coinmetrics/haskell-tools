@@ -3,8 +3,10 @@
 module CoinMetrics.Util
 	( encodeHexBytes
 	, decodeHexBytes
-	, encodeHexNumber
-	, decodeHexNumber
+	, encode0xHexBytes
+	, decode0xHexBytes
+	, encode0xHexNumber
+	, decode0xHexNumber
 	, tryWithRepeat
 	) where
 
@@ -20,20 +22,28 @@ import qualified Data.Text.Encoding as T
 import Numeric
 
 encodeHexBytes :: B.ByteString -> J.Value
-encodeHexBytes = J.String . T.decodeUtf8 . ("0x" <>) . BA.convertToBase BA.Base16
+encodeHexBytes = J.String . T.decodeUtf8 . BA.convertToBase BA.Base16
 
 decodeHexBytes :: T.Text -> J.Parser B.ByteString
 decodeHexBytes = \case
-	(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) -> return s
+	(BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s) -> return s
 	_ -> fail "decodeHexBytes error"
 
-encodeHexNumber :: (Integral a, Show a) => a -> J.Value
-encodeHexNumber = J.String . T.pack . ("0x" <>) . flip showHex ""
+encode0xHexBytes :: B.ByteString -> J.Value
+encode0xHexBytes = J.String . T.decodeUtf8 . ("0x" <>) . BA.convertToBase BA.Base16
 
-decodeHexNumber :: Integral a => T.Text -> J.Parser a
-decodeHexNumber = \case
+decode0xHexBytes :: T.Text -> J.Parser B.ByteString
+decode0xHexBytes = \case
+	(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) -> return s
+	_ -> fail "decode0xHexBytes error"
+
+encode0xHexNumber :: (Integral a, Show a) => a -> J.Value
+encode0xHexNumber = J.String . T.pack . ("0x" <>) . flip showHex ""
+
+decode0xHexNumber :: Integral a => T.Text -> J.Parser a
+decode0xHexNumber = \case
 	(T.stripPrefix "0x" -> Just (readHex . T.unpack -> [(n, "")])) -> return n
-	_ -> fail "decodeHexNumber error"
+	_ -> fail "decode0xHexNumber error"
 
 tryWithRepeat :: IO a -> IO a
 tryWithRepeat io = let

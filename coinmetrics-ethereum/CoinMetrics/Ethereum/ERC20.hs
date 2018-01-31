@@ -27,10 +27,10 @@ instance Schemable ERC20Info
 
 instance J.FromJSON ERC20Info where
 	parseJSON = J.withObject "ERC20Info" $ \fields -> ERC20Info
-		<$> (decodeHexBytes  =<< fields J..: "contractAddress")
-		<*> (J.parseJSON     =<< fields J..: "name")
-		<*> (J.parseJSON     =<< fields J..: "symbol")
-		<*> (J.parseJSON     =<< fields J..: "decimals")
+		<$> (decode0xHexBytes =<< fields J..: "contractAddress")
+		<*> (J.parseJSON      =<< fields J..: "name")
+		<*> (J.parseJSON      =<< fields J..: "symbol")
+		<*> (J.parseJSON      =<< fields J..: "decimals")
 
 instance A.HasAvroSchema ERC20Info where
 	schema = genericAvroSchema
