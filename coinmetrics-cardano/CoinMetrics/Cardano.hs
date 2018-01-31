@@ -136,8 +136,8 @@ instance SchemableField CardanoTransaction
 instance J.FromJSON CardanoTransaction where
 	parseJSON = J.withObject "cardano transaction" $ \fields -> CardanoTransaction
 		<$> (decodeHexBytes =<< fields J..: "ctsId")
-		<*> (fields J..: "ctsTimeIssued")
-		<*> (decodeValue =<< fields J..: "fees")
+		<*> (fields J..: "ctsTxTimeIssued")
+		<*> (decodeValue =<< fields J..: "ctsFees")
 		<*> (fields J..: "ctsInputs")
 		<*> (fields J..: "ctsOutputs")
 

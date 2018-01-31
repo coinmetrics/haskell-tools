@@ -290,7 +290,7 @@ run Options
 				when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
 				(block :) <$> step (i + 1)
 			else return []
-		writeOutput outputFile "ethereum" =<< step beginBlock
+		writeOutput outputFile blockchainType =<< step beginBlock
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
