@@ -5,8 +5,11 @@ module CoinMetrics.Util
 	, decodeHexBytes
 	, encodeHexNumber
 	, decodeHexNumber
+	, tryWithRepeat
 	) where
 
+import Control.Concurrent
+import Control.Exception
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.ByteArray.Encoding as BA
@@ -31,3 +34,15 @@ decodeHexNumber :: Integral a => T.Text -> J.Parser a
 decodeHexNumber = \case
 	(T.stripPrefix "0x" -> Just (readHex . T.unpack -> [(n, "")])) -> return n
 	_ -> fail "decodeHexNumber error"
+
+tryWithRepeat :: IO a -> IO a
+tryWithRepeat io = let
+	step = do
+		eitherResult <- try io
+		case eitherResult of
+			Right result -> return result
+			Left (SomeException err) -> do
+				putStrLn $ "error: " ++ show err ++ ", retrying again in 10 seconds"
+				threadDelay 10000000
+				step
+	in step

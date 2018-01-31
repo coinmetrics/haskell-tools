@@ -9,8 +9,6 @@ module CoinMetrics.Iota
 	, iotaGetTransactions
 	) where
 
-import Control.Concurrent
-import Control.Exception
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
@@ -24,6 +22,7 @@ import qualified Data.Vector as V
 import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
+import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
 import Hanalytics.Schema.Postgres
@@ -167,15 +166,3 @@ iotaGetTransactions iota hashes = f <$> iotaRequest iota (J..: "trytes") (J.Obje
 	, ("hashes", J.toJSON hashes)
 	])
 	where f = V.zipWith (\hash trytes -> fromRight (error "wrong transaction") $ S.runGet (deserIotaTransaction hash) $ T.encodeUtf8 trytes) hashes
-
-tryWithRepeat :: IO a -> IO a
-tryWithRepeat io = let
-	step = do
-		eitherResult <- try io
-		case eitherResult of
-			Right result -> return result
-			Left (SomeException err) -> do
-				putStrLn $ "error: " ++ show err ++ ", retrying again in 10 seconds"
-				threadDelay 10000000
-				step
-	in step

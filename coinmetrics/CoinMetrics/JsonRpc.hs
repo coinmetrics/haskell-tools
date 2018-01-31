@@ -6,14 +6,14 @@ module CoinMetrics.JsonRpc
 	, jsonRpcRequest
 	) where
 
-import Control.Concurrent
-import Control.Exception
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
+
+import CoinMetrics.Util
 
 data JsonRpc = JsonRpc
 	{ jsonRpc_httpManager :: !H.Manager
@@ -50,15 +50,3 @@ jsonRpcRequest JsonRpc
 			J.Success result -> return result
 			J.Error err -> fail err
 		Left err -> fail err
-
-tryWithRepeat :: IO a -> IO a
-tryWithRepeat io = let
-	step = do
-		eitherResult <- try io
-		case eitherResult of
-			Right result -> return result
-			Left (SomeException err) -> do
-				putStrLn $ "error: " ++ show err ++ ", retrying again in 10 seconds"
-				threadDelay 10000000
-				step
-	in step
