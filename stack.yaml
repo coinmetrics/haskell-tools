@@ -6,6 +6,7 @@ packages:
 - coinmetrics-ethereum
 - coinmetrics-export
 - coinmetrics-iota
+- coinmetrics-ripple
 
 extra-deps:
 #- avro-0.2.0.0
@@ -14,7 +15,7 @@ extra-deps:
 - pure-zlib-0.6
 - diskhash-0.0.4.0
 - git: https://github.com/quyse/hanalytics.git
-  commit: 5c4d540ea614445febe9142c18d1d965699157dc
+  commit: cbefafd1ceb7abe9d29525b5285fc45e66baa97a
   subdirs:
   - hanalytics-avro
   - hanalytics-base

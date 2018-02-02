@@ -19,7 +19,6 @@ library
     , avro
     , base
     , bytestring
-    , cereal
     , coinmetrics
     , hanalytics-avro
     , hanalytics-base

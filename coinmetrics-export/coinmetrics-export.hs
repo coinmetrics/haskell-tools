@@ -21,6 +21,7 @@ import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.Vector as V
 import qualified Database.PostgreSQL.LibPQ as PQ
 import qualified Network.HTTP.Client as H
+import qualified Network.HTTP.Client.TLS as H
 import qualified Options.Applicative as O
 import System.IO.Unsafe
 
@@ -29,6 +30,7 @@ import CoinMetrics.Cardano
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
+import CoinMetrics.Ripple
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
@@ -54,18 +56,18 @@ main = run =<< O.execParser parser where
 						<*> O.option O.auto
 							(  O.long "api-port"
 							<> O.metavar "API_PORT"
-							<> O.value Nothing
+							<> O.value (-1)
 							<> O.help "Ethereum API port"
 							)
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: ethereum | cardano"
+							<> O.help "Type of blockchain: ethereum | cardano | ripple"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
-							<> O.value 0 <> O.showDefault
 							<> O.metavar "BEGIN_BLOCK"
+							<> O.value (-1)
 							<> O.help "Begin block number (inclusive)"
 							)
 						<*> O.option O.auto
@@ -95,7 +97,7 @@ main = run =<< O.execParser parser where
 						<*> O.option O.auto
 							(  O.long "api-port"
 							<> O.metavar "API_PORT"
-							<> O.value Nothing
+							<> O.value (-1)
 							<> O.help "IOTA API port"
 							)
 						<*> O.strOption
@@ -118,7 +120,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: ethereum | erc20tokens | iota | cardano"
+							<> O.help "Type of schema: ethereum | erc20tokens | iota | cardano | ripple"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -178,7 +180,7 @@ data Options = Options
 data OptionCommand
 	= OptionExportCommand
 		{ options_apiHost :: !T.Text
-		, options_apiPort :: !(Maybe Int)
+		, options_apiPort :: !Int
 		, options_blockchain :: !T.Text
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
@@ -187,7 +189,7 @@ data OptionCommand
 		}
 	| OptionExportIotaCommand
 		{ options_apiHost :: !T.Text
-		, options_apiPort :: !(Maybe Int)
+		, options_apiPort :: !Int
 		, options_syncDbFile :: !String
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
@@ -218,15 +220,18 @@ run Options
 		{ options_apiHost = apiHost
 		, options_apiPort = maybeApiPort
 		, options_blockchain = blockchainType
-		, options_beginBlock = beginBlock
+		, options_beginBlock = maybeBeginBlock
 		, options_endBlock = endBlock
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
 		} -> do
-		httpManager <- H.newManager H.defaultManagerSettings
-		SomeBlockChain blockChain <- case blockchainType of
-			"ethereum" -> return $ SomeBlockChain $ newEthereum httpManager apiHost (fromMaybe 8545 maybeApiPort)
-			"cardano" -> return $ SomeBlockChain $ newCardano httpManager apiHost (fromMaybe 8100 maybeApiPort)
+		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
+			{ H.managerConnCount = threadsCount * 2
+			}
+		(SomeBlockChain blockChain, beginBlock) <- case blockchainType of
+			"ethereum" -> return (SomeBlockChain $ newEthereum httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 8545), if maybeBeginBlock >= 0 then maybeBeginBlock else 0)
+			"cardano" -> return (SomeBlockChain $ newCardano httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 8100), if maybeBeginBlock >= 0 then maybeBeginBlock else 2)
+			"ripple" -> return (SomeBlockChain $ newRipple httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 443), if maybeBeginBlock >= 0 then maybeBeginBlock else 32570)
 			_ -> fail "wrong blockchain specified"
 
 		-- simple multithreaded pipeline
@@ -300,8 +305,10 @@ run Options
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
 		} -> do
-		httpManager <- H.newManager H.defaultManagerSettings
-		let iota = newIota httpManager apiHost (fromMaybe 14265 maybeApiPort)
+		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
+			{ H.managerConnCount = threadsCount * 2
+			}
+		let iota = newIota httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 14265)
 
 		-- simple multithreaded pipeline
 		hashQueue <- newTQueueIO
@@ -401,6 +408,14 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"cardano\" OF \"CardanoBlock\" (PRIMARY KEY (\"height\"));"
 		("cardano", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy CardanoBlock)
+		("ripple", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy RippleTransaction)
+				, schemaOf (Proxy :: Proxy RippleLedger)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
+		("ripple", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy RippleLedger)
 		_ -> fail "wrong pair schema+storage"
 
 	OptionExportERC20InfoCommand

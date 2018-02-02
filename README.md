@@ -10,6 +10,7 @@ Supported cryptocurrencies:
 * Ethereum
 * Cardano (WIP)
 * IOTA (WIP)
+* Ripple (WIP)
 
 ## Packages
 
@@ -18,6 +19,7 @@ Supported cryptocurrencies:
 * `coinmetrics-ethereum` - library specific to Ethereum.
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
 * `coinmetrics-iota` - library specific to IOTA.
+* `coinmetrics-ripple` - library specific to Ripple.
 
 ## Building
 
