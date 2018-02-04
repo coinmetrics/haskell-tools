@@ -12,6 +12,7 @@ import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import Data.Int
 import Data.Monoid
 import Data.Scientific
@@ -51,11 +52,15 @@ rippleRequest :: J.FromJSON r => Ripple -> T.Text -> [(B.ByteString, Maybe B.Byt
 rippleRequest Ripple
 	{ ripple_httpManager = httpManager
 	, ripple_httpRequest = httpRequest
-	} path params = do
-	body <- H.responseBody <$> tryWithRepeat (H.httpLbs (H.setQueryString params httpRequest
+	} path params = tryWithRepeat $ do
+	body <- H.responseBody <$> H.httpLbs (H.setQueryString params httpRequest
 		{ H.path = T.encodeUtf8 path
-		}) httpManager)
-	either fail return $ J.eitherDecode body
+		}) httpManager
+	case J.eitherDecode body of
+		Right decodedBody -> return decodedBody
+		Left err -> do
+			putStrLn $ "wrong ripple response: " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
+			fail err
 
 instance BlockChain Ripple where
 	type Block Ripple = RippleLedger
