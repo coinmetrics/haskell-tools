@@ -4,6 +4,7 @@ module Main(main) where
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
@@ -82,6 +83,10 @@ main = run =<< O.execParser parser where
 							<> O.value 1 <> O.showDefault
 							<> O.metavar "THREADS"
 							<> O.help "Threads count"
+							)
+						<*> O.switch
+							(  O.long "ignore-missing-blocks"
+							<> O.help "Ignore errors when getting blocks from daemon"
 							)
 					)) (O.fullDesc <> O.progDesc "Export blockchain")
 				)
@@ -186,6 +191,7 @@ data OptionCommand
 		, options_endBlock :: !BlockHeight
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
+		, options_ignoreMissingBlocks :: !Bool
 		}
 	| OptionExportIotaCommand
 		{ options_apiHost :: !T.Text
@@ -224,6 +230,7 @@ run Options
 		, options_endBlock = endBlock
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
+		, options_ignoreMissingBlocks = ignoreMissingBlocks
 		} -> do
 		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
 			{ H.managerConnCount = threadsCount * 2
@@ -275,14 +282,27 @@ run Options
 				case maybeBlockIndex of
 					Just blockIndex -> do
 						-- get block from blockchain
-						block <- getBlockByHeight blockChain blockIndex
-						-- insert block into block queue ensuring order
-						atomically $ do
-							nextBlockIndex <- readTVar nextBlockIndexVar
-							if blockIndex == nextBlockIndex then do
-								writeTBQueue blockQueue block
-								writeTVar nextBlockIndexVar (nextBlockIndex + 1)
-							else retry
+						eitherBlock <- try $ getBlockByHeight blockChain blockIndex
+						case eitherBlock of
+							Right block ->
+								-- insert block into block queue ensuring order
+								atomically $ do
+									nextBlockIndex <- readTVar nextBlockIndexVar
+									if blockIndex == nextBlockIndex then do
+										writeTBQueue blockQueue (blockIndex, block)
+										writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+									else retry
+							Left (SomeException err) -> do
+								print err
+								-- if it's allowed to ignore errors, do that
+								if ignoreMissingBlocks
+									then atomically $ do
+										nextBlockIndex <- readTVar nextBlockIndexVar
+										if blockIndex == nextBlockIndex
+											then writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+											else retry
+									-- otherwise rethrow error
+									else throwIO err
 						-- repeat
 						step
 					Nothing -> return ()
@@ -291,9 +311,9 @@ run Options
 		-- write blocks into outputs, using lazy IO
 		let step i = if endBlock < 0 || i < endBlock
 			then unsafeInterleaveIO $ do
-				block <- atomically $ readTBQueue blockQueue
-				when (i `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show i
-				(block :) <$> step (i + 1)
+				(blockIndex, block) <- atomically $ readTBQueue blockQueue
+				when (blockIndex `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show blockIndex
+				(block :) <$> step (blockIndex + 1)
 			else return []
 		writeOutput outputFile blockchainType =<< step beginBlock
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
