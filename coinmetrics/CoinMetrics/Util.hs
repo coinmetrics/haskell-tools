@@ -47,12 +47,14 @@ decode0xHexNumber = \case
 
 tryWithRepeat :: IO a -> IO a
 tryWithRepeat io = let
-	step = do
-		eitherResult <- try io
-		case eitherResult of
-			Right result -> return result
-			Left (SomeException err) -> do
-				putStrLn $ "error: " ++ show err ++ ", retrying again in 10 seconds"
-				threadDelay 10000000
-				step
-	in step
+	step i = if i < 5
+		then do
+			eitherResult <- try io
+			case eitherResult of
+				Right result -> return result
+				Left (SomeException err) -> do
+					putStrLn $ "error: " ++ show err ++ ", retrying again in 10 seconds"
+					threadDelay 10000000
+					step (i + 1)
+		else fail "repeating failed"
+	in step (0 :: Int)

@@ -59,7 +59,7 @@ rippleRequest Ripple
 	case J.eitherDecode body of
 		Right decodedBody -> return decodedBody
 		Left err -> do
-			putStrLn $ "wrong ripple response: " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
+			putStrLn $ "wrong ripple response for " <> T.unpack path <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
 			fail err
 
 instance BlockChain Ripple where
