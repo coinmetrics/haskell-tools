@@ -11,6 +11,7 @@ Supported cryptocurrencies:
 * Cardano (WIP)
 * IOTA (WIP)
 * Ripple (WIP)
+* Stellar (WIP)
 
 ## Packages
 
@@ -20,6 +21,7 @@ Supported cryptocurrencies:
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
 * `coinmetrics-iota` - library specific to IOTA.
 * `coinmetrics-ripple` - library specific to Ripple.
+* `coinmetrics-stellar` - library specific to Stellar.
 
 ## Building
 

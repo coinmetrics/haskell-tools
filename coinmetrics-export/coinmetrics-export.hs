@@ -32,6 +32,7 @@ import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
 import CoinMetrics.Ripple
+import CoinMetrics.Stellar
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
@@ -63,7 +64,7 @@ main = run =<< O.execParser parser where
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: ethereum | cardano | ripple"
+							<> O.help "Type of blockchain: ethereum | cardano | ripple | stellar"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -125,7 +126,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: ethereum | erc20tokens | iota | cardano | ripple"
+							<> O.help "Type of schema: ethereum | erc20tokens | iota | cardano | ripple | stellar"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -239,6 +240,9 @@ run Options
 			"ethereum" -> return (SomeBlockChain $ newEthereum httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 8545), if maybeBeginBlock >= 0 then maybeBeginBlock else 0)
 			"cardano" -> return (SomeBlockChain $ newCardano httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 8100), if maybeBeginBlock >= 0 then maybeBeginBlock else 2)
 			"ripple" -> return (SomeBlockChain $ newRipple httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 443), if maybeBeginBlock >= 0 then maybeBeginBlock else 32570)
+			"stellar" -> do
+				stellar <- newStellar httpManager apiHost (2 + threadsCount `quot` 64)
+				return (SomeBlockChain stellar, if maybeBeginBlock >= 0 then maybeBeginBlock else 1)
 			_ -> fail "wrong blockchain specified"
 
 		-- simple multithreaded pipeline
@@ -436,6 +440,16 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
 		("ripple", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy RippleLedger)
+		("stellar", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy StellarAsset)
+				, schemaOf (Proxy :: Proxy StellarOperation)
+				, schemaOf (Proxy :: Proxy StellarTransaction)
+				, schemaOf (Proxy :: Proxy StellarLedger)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"stellar\" OF \"StellarLedger\" (PRIMARY KEY (\"sequence\"));"
+		("stellar", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy StellarLedger)
 		_ -> fail "wrong pair schema+storage"
 
 	OptionExportERC20InfoCommand

@@ -7,6 +7,7 @@ packages:
 - coinmetrics-export
 - coinmetrics-iota
 - coinmetrics-ripple
+- coinmetrics-stellar
 
 extra-deps:
 #- avro-0.2.0.0
