@@ -7,11 +7,11 @@ allowing to perform SQL queries, for instance, generating aggregated information
 
 Supported cryptocurrencies:
 
-* Ethereum
-* Cardano (WIP)
-* IOTA (WIP)
-* Ripple (WIP)
-* Stellar (WIP)
+* [Ethereum](https://www.ethereum.org/)
+* [Cardano](https://www.cardanohub.org/) (WIP)
+* [IOTA](https://iota.org/) (WIP)
+* [Ripple](https://ripple.com/) (WIP)
+* [Stellar](https://www.stellar.org/) (WIP)
 
 ## Packages
 
