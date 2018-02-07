@@ -2,8 +2,6 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-missing-pattern-synonym-signatures #-}
 
-{-# LANGUAGE StandaloneDeriving #-}
-
 module CoinMetrics.Stellar
 	( Stellar(..)
 	, newStellar
@@ -205,6 +203,10 @@ pattern SOT_ALLOW_TRUST = 7
 pattern SOT_ACCOUNT_MERGE = 8
 pattern SOT_INFLATION = 9
 pattern SOT_MANAGE_DATA = 10
+
+pattern ASSET_TYPE_NATIVE = 0
+pattern ASSET_TYPE_CREDIT_ALPHANUM4 = 1
+pattern ASSET_TYPE_CREDIT_ALPHANUM12 = 2
 
 data StellarAsset = StellarAsset
 	{ sa_assetCode :: !(Maybe T.Text)
@@ -438,8 +440,8 @@ parseLedgers ledgersBytes transactionsBytes = do
 			trustor <- getAccountID
 			assetType <- S.getWord32be
 			assetCode <- case assetType of
-				0 -> T.decodeUtf8 . trimZeros <$> S.getBytes 4
-				1 -> T.decodeUtf8 . trimZeros <$> S.getBytes 12
+				ASSET_TYPE_CREDIT_ALPHANUM4 -> T.decodeUtf8 . trimZeros <$> S.getBytes 4
+				ASSET_TYPE_CREDIT_ALPHANUM12 -> T.decodeUtf8 . trimZeros <$> S.getBytes 12
 				_ -> fail "wrong asset type"
 			authorize <- getBool
 			return def
@@ -491,18 +493,18 @@ parseLedgers ledgersBytes transactionsBytes = do
 		getAsset = do
 			assetType <- S.getWord32be
 			case assetType of
-				0 -> return StellarAsset
+				ASSET_TYPE_NATIVE -> return StellarAsset
 					{ sa_assetCode = Nothing
 					, sa_issuer = Nothing
 					}
-				1 -> do
+				ASSET_TYPE_CREDIT_ALPHANUM4 -> do
 					assetCode <- T.decodeUtf8 . trimZeros <$> S.getBytes 4
 					issuer <- getAccountID
 					return StellarAsset
 						{ sa_assetCode = Just assetCode
 						, sa_issuer = Just issuer
 						}
-				2 -> do
+				ASSET_TYPE_CREDIT_ALPHANUM12 -> do
 					assetCode <- T.decodeUtf8 . trimZeros <$> S.getBytes 12
 					issuer <- getAccountID
 					return StellarAsset
