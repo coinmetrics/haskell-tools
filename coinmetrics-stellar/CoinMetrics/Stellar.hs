@@ -23,7 +23,6 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Int
 import Data.Monoid
-import Data.Scientific
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -172,7 +171,7 @@ data StellarOperation = StellarOperation
 	, so_medThreshold :: !(Maybe Int64)
 	, so_offerID :: !(Maybe Int64)
 	, so_path :: !(V.Vector StellarAsset)
-	, so_price :: !(Maybe Scientific)
+	, so_price :: !(Maybe Double)
 	, so_selling :: !(Maybe StellarAsset)
 	, so_sendAsset :: !(Maybe StellarAsset)
 	, so_sendMax :: !(Maybe Int64)
@@ -520,7 +519,7 @@ parseLedgers ledgersBytes transactionsBytes = do
 			S.skip $ (4 - size `rem` 4) .&. 3
 			return bytes
 
-		getPrice :: S.Get Scientific
+		getPrice :: S.Get Double
 		getPrice = do
 			n <- S.getInt32be
 			d <- S.getInt32be

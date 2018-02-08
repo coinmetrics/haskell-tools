@@ -16,7 +16,7 @@ extra-deps:
 - pure-zlib-0.6
 - diskhash-0.0.4.0
 - git: https://github.com/quyse/hanalytics.git
-  commit: cbefafd1ceb7abe9d29525b5285fc45e66baa97a
+  commit: d5d912cddf9d78abc73b0649681409d987a7b83b
   subdirs:
   - hanalytics-avro
   - hanalytics-base

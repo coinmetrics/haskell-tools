@@ -26,7 +26,6 @@ library
     , hanalytics-base
     , hanalytics-postgres
     , http-client
-    , scientific
     , stm
     , text
     , vector
