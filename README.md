@@ -8,11 +8,11 @@ allowing to perform SQL queries, for instance, generating aggregated information
 Supported cryptocurrencies:
 
 * [Ethereum](https://www.ethereum.org/)
-* [Cardano](https://www.cardanohub.org/) (WIP)
+* [Cardano](https://www.cardanohub.org/)
 * [IOTA](https://iota.org/) (WIP)
 * [NEM](https://nem.io/) (WIP)
-* [Ripple](https://ripple.com/) (WIP)
-* [Stellar](https://www.stellar.org/) (WIP)
+* [Ripple](https://ripple.com/)
+* [Stellar](https://www.stellar.org/)
 
 ## Packages
 
@@ -76,3 +76,13 @@ coinmetrics-export print-schema --schema ethereum --storage postgres
 ```bash
 coinmetrics-export print-schema --schema ethereum --storage bigquery
 ```
+
+### Blockchain export defaults
+
+| `--blockchain` | `--url-api` | `--begin-block` |
+|---|---|---|
+| `cardano` | `http://127.0.0.1:8100/` | 2 |
+| `ethereum` | `http://127.0.0.1:8545/` | 0 |
+| `nem` | `http://127.0.0.1:7890/` | 1 |
+| `ripple` | `https://data.ripple.com/` | 32570 |
+| `stellar` | `http://history.stellar.org/prd/core-live/core_live_001` | 1 |
