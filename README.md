@@ -55,7 +55,7 @@ coinmetrics-export export \
 ```
 Fetching data with multiple threads (`--threads` parameter) allows to compensate for latency, especially if talking to blockchain daemon over network.
 
-* Continuously export Ethereum blocks, starting from the beginning and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block), and output straight into PostgreSQL database specified by connection string:
+* Continuously export Ethereum blocks, starting from the beginning and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block, to be not affected by possible chain rewrites), and output straight into PostgreSQL database specified by connection string:
 
 ```bash
 coinmetrics-export export \
@@ -79,10 +79,10 @@ coinmetrics-export print-schema --schema ethereum --storage bigquery
 
 ### Blockchain export defaults
 
-| `--blockchain` | `--url-api` | `--begin-block` |
-|---|---|---|
-| `cardano` | `http://127.0.0.1:8100/` | 2 |
-| `ethereum` | `http://127.0.0.1:8545/` | 0 |
-| `nem` | `http://127.0.0.1:7890/` | 1 |
-| `ripple` | `https://data.ripple.com/` | 32570 |
-| `stellar` | `http://history.stellar.org/prd/core-live/core_live_001` | 1 |
+| `--blockchain` | `--url-api` | `--begin-block` | `--end-block` |
+|---|---|---|---|
+| `cardano` | `http://127.0.0.1:8100/` | `2` | `-1000` |
+| `ethereum` | `http://127.0.0.1:8545/` | `0` | `-1000` |
+| `nem` | `http://127.0.0.1:7890/` | `1` | `-360` ([rewrite limit](https://nemproject.github.io/#initiating-transactions)) |
+| `ripple` | `https://data.ripple.com/` | `32570` ([genesis ledger](https://ripple.com/build/data-api-v2/#genesis-ledger)) | `0` (history data, no rewrites) |
+| `stellar` | `http://history.stellar.org/prd/core-live/core_live_001` | `1` | `0` (history data, no rewrites) |
