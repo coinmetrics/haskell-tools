@@ -31,6 +31,7 @@ import CoinMetrics.Cardano
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
+import CoinMetrics.Nem
 import CoinMetrics.Ripple
 import CoinMetrics.Stellar
 import Hanalytics.Schema
@@ -58,7 +59,7 @@ main = run =<< O.execParser parser where
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: ethereum | cardano | ripple | stellar"
+							<> O.help "Type of blockchain: ethereum | cardano | nem | ripple | stellar"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -114,7 +115,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: ethereum | erc20tokens | iota | cardano | ripple | stellar"
+							<> O.help "Type of schema: ethereum | erc20tokens | cardano | iota | nem | ripple | stellar"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -229,6 +230,9 @@ run Options
 			"cardano" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8100/"
 				return (SomeBlockChain $ newCardano httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 2)
+			"nem" -> do
+				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:7890/"
+				return (SomeBlockChain $ newNem httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 1)
 			"ripple" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "https://data.ripple.com/"
 				return (SomeBlockChain $ newRipple httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 32570)
@@ -408,13 +412,6 @@ run Options
 			putStrLn $ T.unpack $ TL.toStrict $ TL.toLazyText $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
 		("erc20tokens", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
-		("iota", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy IotaTransaction)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
-		("iota", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
 		("cardano", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy CardanoInput)
@@ -425,6 +422,21 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"cardano\" OF \"CardanoBlock\" (PRIMARY KEY (\"height\"));"
 		("cardano", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy CardanoBlock)
+		("iota", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy IotaTransaction)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
+		("iota", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
+		("nem", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy NemTransaction)
+				, schemaOf (Proxy :: Proxy NemBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"nem\" OF \"NemBlock\" (PRIMARY KEY (\"height\"));"
+		("nem", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy NemBlock)
 		("ripple", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy RippleTransaction)

@@ -10,6 +10,7 @@ Supported cryptocurrencies:
 * [Ethereum](https://www.ethereum.org/)
 * [Cardano](https://www.cardanohub.org/) (WIP)
 * [IOTA](https://iota.org/) (WIP)
+* [NEM](https://nem.io/) (WIP)
 * [Ripple](https://ripple.com/) (WIP)
 * [Stellar](https://www.stellar.org/) (WIP)
 
@@ -20,6 +21,7 @@ Supported cryptocurrencies:
 * `coinmetrics-ethereum` - library specific to Ethereum.
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
 * `coinmetrics-iota` - library specific to IOTA.
+* `coinmetrics-nem` - library specific to NEM.
 * `coinmetrics-ripple` - library specific to Ripple.
 * `coinmetrics-stellar` - library specific to Stellar.
 
