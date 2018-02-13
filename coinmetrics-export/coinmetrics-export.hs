@@ -69,9 +69,9 @@ main = run =<< O.execParser parser where
 							)
 						<*> O.option O.auto
 							(  O.long "end-block"
-							<> O.value (-1000) <> O.showDefault
+							<> O.value 0
 							<> O.metavar "END_BLOCK"
-							<> O.help "End block number if positive (exclusive), offset to top block if negative"
+							<> O.help "End block number if positive (exclusive), offset to top block if negative, default offset to top block if zero"
 							)
 						<*> optionOutput
 						<*> O.option O.auto
@@ -214,7 +214,7 @@ run Options
 		{ options_apiUrl = apiUrl
 		, options_blockchain = blockchainType
 		, options_beginBlock = maybeBeginBlock
-		, options_endBlock = endBlock
+		, options_endBlock = maybeEndBlock
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
 		, options_ignoreMissingBlocks = ignoreMissingBlocks
@@ -223,24 +223,27 @@ run Options
 			{ H.managerConnCount = threadsCount * 2
 			}
 		let withDefaultApiUrl defaultApiUrl = if null apiUrl then defaultApiUrl else apiUrl
-		(SomeBlockChain blockChain, beginBlock) <- case blockchainType of
+		(SomeBlockChain blockChain, defaultBeginBlock, defaultEndBlock) <- case blockchainType of
 			"ethereum" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8545/"
-				return (SomeBlockChain $ newEthereum httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 0)
+				return (SomeBlockChain $ newEthereum httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
 			"cardano" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8100/"
-				return (SomeBlockChain $ newCardano httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 2)
+				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
 			"nem" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:7890/"
-				return (SomeBlockChain $ newNem httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 1)
+				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- on rewrite limit: https://nemlibrary.com/documentation/transaction/
 			"ripple" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "https://data.ripple.com/"
-				return (SomeBlockChain $ newRipple httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 32570)
+				return (SomeBlockChain $ newRipple httpManager httpRequest, 32570, 0) -- history data, no rewrites
 			"stellar" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://history.stellar.org/prd/core-live/core_live_001"
 				stellar <- newStellar httpManager httpRequest (2 + threadsCount `quot` 64)
-				return (SomeBlockChain stellar, if maybeBeginBlock >= 0 then maybeBeginBlock else 1)
+				return (SomeBlockChain stellar, 1, 0) -- history data, no rewrites
 			_ -> fail "wrong blockchain specified"
+		let
+			beginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
+			endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
 		-- simple multithreaded pipeline
 		blockIndexQueue <- newTBQueueIO (threadsCount * 2)
@@ -250,7 +253,7 @@ run Options
 
 		-- thread adding indices to index queue
 		void $ forkIO $
-			if endBlock >= 0 then do
+			if endBlock > 0 then do
 				mapM_ (atomically . writeTBQueue blockIndexQueue) [beginBlock..(endBlock - 1)]
 				atomically $ writeTVar blockIndexQueueEndedVar True
 			-- else do infinite stream of indices
