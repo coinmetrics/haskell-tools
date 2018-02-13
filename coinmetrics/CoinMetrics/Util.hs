@@ -27,7 +27,7 @@ encodeHexBytes = J.String . T.decodeUtf8 . BA.convertToBase BA.Base16
 decodeHexBytes :: T.Text -> J.Parser B.ByteString
 decodeHexBytes = \case
 	(BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s) -> return s
-	_ -> fail "decodeHexBytes error"
+	s -> fail $ "decodeHexBytes error for: " ++ show s
 
 encode0xHexBytes :: B.ByteString -> J.Value
 encode0xHexBytes = J.String . T.decodeUtf8 . ("0x" <>) . BA.convertToBase BA.Base16
@@ -35,7 +35,7 @@ encode0xHexBytes = J.String . T.decodeUtf8 . ("0x" <>) . BA.convertToBase BA.Bas
 decode0xHexBytes :: T.Text -> J.Parser B.ByteString
 decode0xHexBytes = \case
 	(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) -> return s
-	_ -> fail "decode0xHexBytes error"
+	s -> fail $ "decode0xHexBytes error for: " ++ show s
 
 encode0xHexNumber :: (Integral a, Show a) => a -> J.Value
 encode0xHexNumber = J.String . T.pack . ("0x" <>) . flip showHex ""
@@ -43,7 +43,7 @@ encode0xHexNumber = J.String . T.pack . ("0x" <>) . flip showHex ""
 decode0xHexNumber :: Integral a => T.Text -> J.Parser a
 decode0xHexNumber = \case
 	(T.stripPrefix "0x" -> Just (readHex . T.unpack -> [(n, "")])) -> return n
-	_ -> fail "decode0xHexNumber error"
+	s -> fail $ "decode0xHexNumber error for: " ++ show s
 
 tryWithRepeat :: IO a -> IO a
 tryWithRepeat io = let
