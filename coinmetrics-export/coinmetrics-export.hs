@@ -50,16 +50,10 @@ main = run =<< O.execParser parser where
 				(  O.info
 					(O.helper <*> (OptionExportCommand
 						<$> O.strOption
-							(  O.long "api-host"
-							<> O.metavar "API_HOST"
-							<> O.value "127.0.0.1" <> O.showDefault
-							<> O.help "Ethereum API host"
-							)
-						<*> O.option O.auto
-							(  O.long "api-port"
-							<> O.metavar "API_PORT"
-							<> O.value (-1)
-							<> O.help "Ethereum API port"
+							(  O.long "api-url"
+							<> O.metavar "API_URL"
+							<> O.value ""
+							<> O.help "Blockchain API url, like \"http://<host>:<port>/\""
 							)
 						<*> O.strOption
 							(  O.long "blockchain"
@@ -95,16 +89,10 @@ main = run =<< O.execParser parser where
 				(  O.info
 					(O.helper <*> (OptionExportIotaCommand
 						<$> O.strOption
-							(  O.long "api-host"
-							<> O.metavar "API_HOST"
-							<> O.value "127.0.0.1" <> O.showDefault
-							<> O.help "IOTA API host"
-							)
-						<*> O.option O.auto
-							(  O.long "api-port"
-							<> O.metavar "API_PORT"
-							<> O.value (-1)
-							<> O.help "IOTA API port"
+							(  O.long "api-url"
+							<> O.metavar "API_URL"
+							<> O.value "http://127.0.0.1:14265/" <> O.showDefault
+							<> O.help "IOTA API url, like \"http://<host>:<port>/\""
 							)
 						<*> O.strOption
 							(  O.long "sync-db"
@@ -185,8 +173,7 @@ data Options = Options
 
 data OptionCommand
 	= OptionExportCommand
-		{ options_apiHost :: !T.Text
-		, options_apiPort :: !Int
+		{ options_apiUrl :: !String
 		, options_blockchain :: !T.Text
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
@@ -195,8 +182,7 @@ data OptionCommand
 		, options_ignoreMissingBlocks :: !Bool
 		}
 	| OptionExportIotaCommand
-		{ options_apiHost :: !T.Text
-		, options_apiPort :: !Int
+		{ options_apiUrl :: !String
 		, options_syncDbFile :: !String
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
@@ -224,8 +210,7 @@ run Options
 	} = case command of
 
 	OptionExportCommand
-		{ options_apiHost = apiHost
-		, options_apiPort = maybeApiPort
+		{ options_apiUrl = apiUrl
 		, options_blockchain = blockchainType
 		, options_beginBlock = maybeBeginBlock
 		, options_endBlock = endBlock
@@ -236,12 +221,20 @@ run Options
 		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
 			{ H.managerConnCount = threadsCount * 2
 			}
+		let withDefaultApiUrl defaultApiUrl = if null apiUrl then defaultApiUrl else apiUrl
 		(SomeBlockChain blockChain, beginBlock) <- case blockchainType of
-			"ethereum" -> return (SomeBlockChain $ newEthereum httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 8545), if maybeBeginBlock >= 0 then maybeBeginBlock else 0)
-			"cardano" -> return (SomeBlockChain $ newCardano httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 8100), if maybeBeginBlock >= 0 then maybeBeginBlock else 2)
-			"ripple" -> return (SomeBlockChain $ newRipple httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 443), if maybeBeginBlock >= 0 then maybeBeginBlock else 32570)
+			"ethereum" -> do
+				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8545/"
+				return (SomeBlockChain $ newEthereum httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 0)
+			"cardano" -> do
+				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8100/"
+				return (SomeBlockChain $ newCardano httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 2)
+			"ripple" -> do
+				httpRequest <- H.parseRequest $ withDefaultApiUrl "https://data.ripple.com/"
+				return (SomeBlockChain $ newRipple httpManager httpRequest, if maybeBeginBlock >= 0 then maybeBeginBlock else 32570)
 			"stellar" -> do
-				stellar <- newStellar httpManager apiHost (2 + threadsCount `quot` 64)
+				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://history.stellar.org/prd/core-live/core_live_001"
+				stellar <- newStellar httpManager httpRequest (2 + threadsCount `quot` 64)
 				return (SomeBlockChain stellar, if maybeBeginBlock >= 0 then maybeBeginBlock else 1)
 			_ -> fail "wrong blockchain specified"
 
@@ -323,8 +316,7 @@ run Options
 		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
-		{ options_apiHost = apiHost
-		, options_apiPort = maybeApiPort
+		{ options_apiUrl = apiUrl
 		, options_syncDbFile = syncDbFile
 		, options_outputFile = outputFile
 		, options_threadsCount = threadsCount
@@ -332,7 +324,8 @@ run Options
 		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
 			{ H.managerConnCount = threadsCount * 2
 			}
-		let iota = newIota httpManager apiHost (if maybeApiPort >= 0 then maybeApiPort else 14265)
+		httpRequest <- H.parseRequest apiUrl
+		let iota = newIota httpManager httpRequest
 
 		-- simple multithreaded pipeline
 		hashQueue <- newTQueueIO

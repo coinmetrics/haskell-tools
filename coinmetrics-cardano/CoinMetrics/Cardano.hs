@@ -36,15 +36,10 @@ data Cardano = Cardano
 	, cardano_httpRequest :: !H.Request
 	}
 
-newCardano :: H.Manager -> T.Text -> Int -> Cardano
-newCardano httpManager host port = Cardano
+newCardano :: H.Manager -> H.Request -> Cardano
+newCardano httpManager httpRequest = Cardano
 	{ cardano_httpManager = httpManager
-	, cardano_httpRequest = H.defaultRequest
-		{ H.method = "GET"
-		, H.secure = False
-		, H.host = T.encodeUtf8 host
-		, H.port = port
-		}
+	, cardano_httpRequest = httpRequest
 	}
 
 cardanoRequest :: J.FromJSON r => Cardano -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> IO r

@@ -124,14 +124,11 @@ data Iota = Iota
 	, iota_httpRequest :: !H.Request
 	}
 
-newIota :: H.Manager -> T.Text -> Int -> Iota
-newIota httpManager host port = Iota
+newIota :: H.Manager -> H.Request -> Iota
+newIota httpManager httpRequest = Iota
 	{ iota_httpManager = httpManager
-	, iota_httpRequest = H.defaultRequest
+	, iota_httpRequest = httpRequest
 		{ H.method = "POST"
-		, H.secure = False
-		, H.host = T.encodeUtf8 host
-		, H.port = port
 		, H.requestHeaders =
 			[ ("Content-Type", "application/json")
 			, ("X-IOTA-API-Version", "1")

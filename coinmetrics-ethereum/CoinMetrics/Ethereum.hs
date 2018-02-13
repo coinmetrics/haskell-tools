@@ -16,7 +16,6 @@ import qualified Data.ByteString as B
 import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
-import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
@@ -191,8 +190,8 @@ instance A.ToAvro EthereumLog where
 	toAvro = genericToAvro
 instance ToPostgresText EthereumLog
 
-newEthereum :: H.Manager -> T.Text -> Int -> Ethereum
-newEthereum httpManager host port = Ethereum $ newJsonRpc httpManager host port Nothing
+newEthereum :: H.Manager -> H.Request -> Ethereum
+newEthereum httpManager httpRequest = Ethereum $ newJsonRpc httpManager httpRequest Nothing
 
 instance BlockChain Ethereum where
 	type Block Ethereum = EthereumBlock

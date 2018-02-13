@@ -37,15 +37,10 @@ data Ripple = Ripple
 	, ripple_httpRequest :: !H.Request
 	}
 
-newRipple :: H.Manager -> T.Text -> Int -> Ripple
-newRipple httpManager host port = Ripple
+newRipple :: H.Manager -> H.Request -> Ripple
+newRipple httpManager httpRequest = Ripple
 	{ ripple_httpManager = httpManager
-	, ripple_httpRequest = H.defaultRequest
-		{ H.method = "GET"
-		, H.secure = True
-		, H.host = T.encodeUtf8 host
-		, H.port = port
-		}
+	, ripple_httpRequest = httpRequest
 	}
 
 rippleRequest :: J.FromJSON r => Ripple -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> IO r

@@ -47,10 +47,9 @@ data Stellar = Stellar
 	, stellar_checkpointCacheSize :: {-# UNPACK #-} !Int
 	}
 
-newStellar :: H.Manager -> T.Text -> Int -> IO Stellar
-newStellar httpManager host checkpointCacheSize = do
+newStellar :: H.Manager -> H.Request -> Int -> IO Stellar
+newStellar httpManager httpRequest checkpointCacheSize = do
 	checkpointCacheVar <- newTVarIO []
-	httpRequest <- H.parseRequest $ T.unpack host
 	return Stellar
 		{ stellar_httpManager = httpManager
 		, stellar_httpRequest = httpRequest

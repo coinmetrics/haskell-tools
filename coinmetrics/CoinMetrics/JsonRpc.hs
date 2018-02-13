@@ -20,14 +20,11 @@ data JsonRpc = JsonRpc
 	, jsonRpc_httpRequest :: !H.Request
 	}
 
-newJsonRpc :: H.Manager -> T.Text -> Int -> Maybe (T.Text, T.Text) -> JsonRpc
-newJsonRpc httpManager host port maybeCredentials = JsonRpc
+newJsonRpc :: H.Manager -> H.Request -> Maybe (T.Text, T.Text) -> JsonRpc
+newJsonRpc httpManager httpRequest maybeCredentials = JsonRpc
 	{ jsonRpc_httpManager = httpManager
-	, jsonRpc_httpRequest = (maybe id (\(authName, authPass) -> H.applyBasicAuth (T.encodeUtf8 authName) (T.encodeUtf8 authPass)) maybeCredentials) H.defaultRequest
+	, jsonRpc_httpRequest = (maybe id (\(authName, authPass) -> H.applyBasicAuth (T.encodeUtf8 authName) (T.encodeUtf8 authPass)) maybeCredentials) httpRequest
 		{ H.method = "POST"
-		, H.secure = False
-		, H.host = T.encodeUtf8 host
-		, H.port = port
 		, H.requestHeaders = [("Content-Type", "application/json")]
 		}
 	}
