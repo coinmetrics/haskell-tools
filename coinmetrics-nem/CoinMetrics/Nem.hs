@@ -5,6 +5,7 @@ module CoinMetrics.Nem
 	, newNem
 	, NemBlock(..)
 	, NemTransaction(..)
+	, NemNestedTransaction(..)
 	) where
 
 import qualified Data.Aeson as J
@@ -100,6 +101,8 @@ data NemTransaction = NemTransaction
 	, nt_newPart :: !(Maybe T.Text)
 	, nt_parent :: !(Maybe T.Text)
 	, nt_amount :: !(Maybe Int64)
+	, nt_otherTrans :: !(Maybe NemNestedTransaction)
+	, nt_signatures :: !(V.Vector NemNestedTransaction)
 	} deriving Generic
 
 instance Schemable NemTransaction
@@ -123,9 +126,58 @@ instance J.FromJSON NemTransaction where
 		<*> (fields J..:? "newPart")
 		<*> (fields J..:? "parent")
 		<*> (fields J..:? "amount")
+		<*> (fields J..:? "otherTrans")
+		<*> (fromMaybe V.empty <$> fields J..:? "signatures")
 
 instance A.HasAvroSchema NemTransaction where
 	schema = genericAvroSchema
 instance A.ToAvro NemTransaction where
 	toAvro = genericToAvro
 instance ToPostgresText NemTransaction
+
+data NemNestedTransaction = NemNestedTransaction
+	{ nnt_timeStamp :: {-# UNPACK #-} !Int64
+	, nnt_fee :: {-# UNPACK #-} !Int64
+	, nnt_type :: {-# UNPACK #-} !Int64
+	, nnt_deadline :: {-# UNPACK #-} !Int64
+	, nnt_signer :: !B.ByteString
+	, nnt_mode :: !(Maybe Int64)
+	, nnt_remoteAccount :: !(Maybe B.ByteString)
+	, nnt_creationFee :: !(Maybe Int64)
+	, nnt_creationFeeSink :: !(Maybe T.Text)
+	, nnt_delta :: !(Maybe Int64)
+	, nnt_otherAccount :: !(Maybe T.Text)
+	, nnt_rentalFee :: !(Maybe Int64)
+	, nnt_rentalFeeSink :: !(Maybe T.Text)
+	, nnt_newPart :: !(Maybe T.Text)
+	, nnt_parent :: !(Maybe T.Text)
+	, nnt_amount :: !(Maybe Int64)
+	} deriving Generic
+
+instance Schemable NemNestedTransaction
+instance SchemableField NemNestedTransaction
+
+instance J.FromJSON NemNestedTransaction where
+	parseJSON = J.withObject "nem transaction" $ \fields -> NemNestedTransaction
+		<$> (fields J..: "timeStamp")
+		<*> (fields J..: "fee")
+		<*> (fields J..: "type")
+		<*> (fields J..: "deadline")
+		<*> (decodeHexBytes =<< fields J..: "signer")
+		<*> (fields J..:? "mode")
+		<*> (traverse decodeHexBytes =<< fields J..:? "remoteAccount")
+		<*> (fields J..:? "creationFee")
+		<*> (fields J..:? "creationFeeSink")
+		<*> (fields J..:? "delta")
+		<*> (fields J..:? "otherAccount")
+		<*> (fields J..:? "rentalFee")
+		<*> (fields J..:? "rentalFeeSink")
+		<*> (fields J..:? "newPart")
+		<*> (fields J..:? "parent")
+		<*> (fields J..:? "amount")
+
+instance A.HasAvroSchema NemNestedTransaction where
+	schema = genericAvroSchema
+instance A.ToAvro NemNestedTransaction where
+	toAvro = genericToAvro
+instance ToPostgresText NemNestedTransaction

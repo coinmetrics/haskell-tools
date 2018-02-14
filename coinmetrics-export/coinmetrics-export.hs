@@ -434,7 +434,8 @@ run Options
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
 		("nem", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy NemTransaction)
+				[ schemaOf (Proxy :: Proxy NemNestedTransaction)
+				, schemaOf (Proxy :: Proxy NemTransaction)
 				, schemaOf (Proxy :: Proxy NemBlock)
 				]
 			putStrLn $ T.unpack $ "CREATE TABLE \"nem\" OF \"NemBlock\" (PRIMARY KEY (\"height\"));"
