@@ -232,7 +232,7 @@ run Options
 				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
 			"nem" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:7890/"
-				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- on rewrite limit: https://nemlibrary.com/documentation/transaction/
+				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- actual rewrite limit
 			"ripple" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "https://data.ripple.com/"
 				return (SomeBlockChain $ newRipple httpManager httpRequest, 32570, 0) -- history data, no rewrites
@@ -313,7 +313,7 @@ run Options
 			in forkIO step
 
 		-- write blocks into outputs, using lazy IO
-		let step i = if endBlock < 0 || i < endBlock
+		let step i = if endBlock <= 0 || i < endBlock
 			then unsafeInterleaveIO $ do
 				(blockIndex, block) <- atomically $ readTBQueue blockQueue
 				when (blockIndex `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show blockIndex
