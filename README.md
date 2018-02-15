@@ -41,48 +41,44 @@ Output formats include SQL (PostgreSQL-compatible) and Avro (used successfully f
 
 Proper documentation is yet to be written. Please run `coinmetrics-export --help` for list of commands, and `coinmetrics-export <command> --help` for info on specific command.
 
-### Usage examples
+## Tutorial
 
-* Export desired range of Ethereum blocks (from 1000000 to 1999999, as end block is exclusive), using 16 threads, and output data simultaneously to SQL file and Avro file:
+Let's say we have full Ethereum node (we tested Geth and Parity) and we want to export Ethereum data continuously into PostgreSQL database for further analysis.
 
-```bash
-coinmetrics-export export \
-  --blockchain ethereum \
-  --begin-block 1000000 --end-block 2000000 \
-  --threads 16 \
-  --output-postgres-file data.sql \
-  --output-avro-file data.avro
-```
-Fetching data with multiple threads (`--threads` parameter) allows to compensate for latency, especially if talking to blockchain daemon over network.
-
-* Continuously export Ethereum blocks, starting whence we stopped last time (the `--continue` option queries latest written block from output database; requires `--output-postgres`) and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block, to be not affected by possible chain rewrites), and output straight into PostgreSQL database specified by connection string:
-
-```bash
-coinmetrics-export export \
-  --blockchain ethereum \
-  --continue --end-block -1000 \
-  --threads 16 \
-  --output-postgres "host=127.0.0.1 user=postgres"
-```
-
-* Get SQL commands for initializing PostgreSQL database:
+First of all, we need to create necessary tables in PostgreSQL (`coinmetrics-export` doesn't do that automatically). Run the following command:
 
 ```bash
 coinmetrics-export print-schema --schema ethereum --storage postgres
 ```
 
-* Get JSON schema for Google BigQuery:
+It outputs necessary SQL statements you need to execute manually on your database.
+
+Then you can start synchronization right away:
 
 ```bash
-coinmetrics-export print-schema --schema ethereum --storage bigquery
+coinmetrics-export export --blockchain ethereum \
+  --continue --threads 16 \
+  --output-postgres "host=127.0.0.1 user=postgres"
 ```
 
-### Blockchain export defaults
+This command will not stop unless something happens (like Ethereum daemon or PostgreSQL server goes down), and will continue synchronizing newly arriving blocks indefinitely. It can be safely interrupted, and on subsequent restart it will query the last synchronized block in database and continue sync from there (the `--continue` option).
 
-| `--blockchain` | `--url-api` | `--begin-block` | `--end-block` |
+In case you need to export a manually selected range of blocks you can use `--begin-block` (inclusive) and `--end-block` (exclusive) parameters.
+
+Higher number of threads talking to blockchain daemon (`--threads` parameter) usually increases speed of synchronization, but only up until some limit: test what number on your machine works better. It usually makes sense to make it even higher when connecting to blockchain daemon via network (daemon URL is set with `--api-url` parameter).
+
+## Blockchain export defaults
+
+The utility tries to have sane defaults for most parameters. Note that rewriting history is not supported, and utility is supposed to export main chain only, therefore on most blockchains we have to keep distance from top block (usually called "rewrite limit"), in case the daemon got wrong chain; this distance is specified as negative value of `--end-block` parameter. The exception is Ripple and Stellar, because for them we use history data instead of live node data, and it's never rewritten.
+
+| `--blockchain` | `--api-url` | `--begin-block` | `--end-block` |
 |---|---|---|---|
 | `cardano` | `http://127.0.0.1:8100/` | `2` | `-1000` |
 | `ethereum` | `http://127.0.0.1:8545/` | `0` | `-1000` |
 | `nem` | `http://127.0.0.1:7890/` | `1` | `-360` ([rewrite limit](https://nemproject.github.io/#initiating-transactions)) |
 | `ripple` | `https://data.ripple.com/` | `32570` ([genesis ledger](https://ripple.com/build/data-api-v2/#genesis-ledger)) | `0` (history data, no rewrites) |
 | `stellar` | `http://history.stellar.org/prd/core-live/core_live_001` | `1` | `0` (history data, no rewrites) |
+
+## Note on IOTA
+
+IOTA is harder to synchronize than other blockchains because of its non-linear nature. There's separate command in the works (`export-iota`), but it is not really supported at the moment.
