@@ -73,6 +73,10 @@ main = run =<< O.execParser parser where
 							<> O.metavar "END_BLOCK"
 							<> O.help "End block number if positive (exclusive), offset to top block if negative, default offset to top block if zero"
 							)
+						<*> O.switch
+							(  O.long "continue"
+							<> O.help "Get BEGIN_BLOCK from output, to continue after latest written block. Works with --output-postgres only"
+							)
 						<*> optionOutput
 						<*> O.option O.auto
 							(  O.long "threads"
@@ -178,6 +182,7 @@ data OptionCommand
 		, options_blockchain :: !T.Text
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
+		, options_continue :: !Bool
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
 		, options_ignoreMissingBlocks :: !Bool
@@ -215,7 +220,11 @@ run Options
 		, options_blockchain = blockchainType
 		, options_beginBlock = maybeBeginBlock
 		, options_endBlock = maybeEndBlock
-		, options_outputFile = outputFile
+		, options_continue = continue
+		, options_outputFile = outputFile@Output
+			{ output_postgres = maybeOutputPostgres
+			, output_postgresTable = maybePostgresTable
+			}
 		, options_threadsCount = threadsCount
 		, options_ignoreMissingBlocks = ignoreMissingBlocks
 		} -> do
@@ -241,9 +250,34 @@ run Options
 				stellar <- newStellar httpManager httpRequest (2 + threadsCount `quot` 64)
 				return (SomeBlockChain stellar, 1, 0) -- history data, no rewrites
 			_ -> fail "wrong blockchain specified"
-		let
-			beginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
-			endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
+
+		-- get begin block, from output postgres if needed
+		beginBlock <- if maybeBeginBlock >= 0 then return maybeBeginBlock else
+			if continue
+				then case maybeOutputPostgres of
+					Just outputPostgres -> do
+						connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
+						connectionStatus <- PQ.status connection
+						unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
+						let query = "SELECT MAX(\"" <> blockHeightFieldName blockChain <> "\") FROM \"" <> maybe blockchainType T.pack maybePostgresTable <> "\""
+						result <- maybe (fail "cannot get latest block from postgres") return =<< PQ.execParams connection (T.encodeUtf8 $ query) [] PQ.Text
+						resultStatus <- PQ.resultStatus result
+						unless (resultStatus == PQ.TuplesOk) $ fail $ "cannot get latest block from postgres: " <> show resultStatus
+						tuplesCount <- PQ.ntuples result
+						unless (tuplesCount == 1) $ fail "cannot decode tuples from postgres"
+						maybeValue <- PQ.getvalue result 0 0
+						beginBlock <- case maybeValue of
+							Just beginBlockStr -> do
+								let maxBlock = read (T.unpack $ T.decodeUtf8 beginBlockStr)
+								putStrLn $ "got latest block synchronized to postgres: " <> show maxBlock
+								return $ maxBlock + 1
+							Nothing -> return defaultBeginBlock
+						PQ.finish connection
+						return beginBlock
+					Nothing -> fail "--continue requires --output-postgres"
+				else return defaultBeginBlock
+
+		let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
 		-- simple multithreaded pipeline
 		blockIndexQueue <- newTBQueueIO (threadsCount * 2)

@@ -81,6 +81,8 @@ instance BlockChain Cardano where
 			$ HM.insert "transactions" (J.Array blockTxs)
 			blockObject
 
+	blockHeightFieldName _ = "height"
+
 -- API: https://cardanodocs.com/technical/explorer/api
 
 data CardanoBlock = CardanoBlock

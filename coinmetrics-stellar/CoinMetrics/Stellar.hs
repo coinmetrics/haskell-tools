@@ -106,6 +106,8 @@ instance BlockChain Stellar where
 			[ledger] -> return ledger
 			_ -> fail "ledger cache error"
 
+	blockHeightFieldName _ = "sequence"
+
 data StellarLedger = StellarLedger
 	{ sl_sequence :: {-# UNPACK #-} !Int64
 	, sl_hash :: !B.ByteString

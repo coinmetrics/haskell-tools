@@ -72,6 +72,8 @@ instance BlockChain Ripple where
 			, ("expand", Just "true")
 			]
 
+	blockHeightFieldName _ = "index"
+
 -- https://ripple.com/build/data-api-v2/#ledger-objects
 
 data RippleLedger = RippleLedger

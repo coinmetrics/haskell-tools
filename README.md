@@ -55,12 +55,12 @@ coinmetrics-export export \
 ```
 Fetching data with multiple threads (`--threads` parameter) allows to compensate for latency, especially if talking to blockchain daemon over network.
 
-* Continuously export Ethereum blocks, starting from the beginning and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block, to be not affected by possible chain rewrites), and output straight into PostgreSQL database specified by connection string:
+* Continuously export Ethereum blocks, starting whence we stopped last time (the `--continue` option queries latest written block from output database; requires `--output-postgres`) and never stopping (negative value for `--end-block` means sync continuously as new blocks arrive; the value means how much distance we want to keep from top block, to be not affected by possible chain rewrites), and output straight into PostgreSQL database specified by connection string:
 
 ```bash
 coinmetrics-export export \
   --blockchain ethereum \
-  --begin-block 0 --end-block -1000 \
+  --continue --end-block -1000 \
   --threads 16 \
   --output-postgres "host=127.0.0.1 user=postgres"
 ```

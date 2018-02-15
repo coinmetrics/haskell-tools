@@ -62,6 +62,8 @@ instance BlockChain Nem where
 	getBlockByHeight nem blockHeight = either fail return . J.parseEither J.parseJSON
 		=<< nemRequest nem "/block/at/public" (Just $ J.Object [("height", J.Number $ fromIntegral blockHeight)])
 
+	blockHeightFieldName _ = "height"
+
 data NemBlock = NemBlock
 	{ nb_timeStamp :: {-# UNPACK #-} !Int64
 	, nb_height :: {-# UNPACK #-} !Int64

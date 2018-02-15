@@ -228,3 +228,5 @@ instance BlockChain Ethereum where
 		case J.fromJSON jsonBlock of
 			J.Success block -> return block
 			J.Error err -> fail err
+
+	blockHeightFieldName _ = "number"
