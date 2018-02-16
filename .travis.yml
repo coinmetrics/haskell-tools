@@ -20,4 +20,14 @@ install:
 - stack --no-terminal --install-ghc test --only-dependencies
 
 script:
-- stack --no-terminal test --haddock --no-haddock-deps
+- mkdir bin
+- stack --no-terminal test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
+
+deploy:
+- provider: bintray
+  user: $BINTRAY_USER
+  key: $BINTRAY_KEY
+  file: coinmetrics-export/bintray.json
+  on:
+    branch: deploy # temporary
+  skip_cleanup: true

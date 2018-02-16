@@ -1,0 +1,28 @@
+{ "package":
+	{ "name": "coinmetrics-export"
+	, "repo": "haskell-tools"
+	, "subject": "coinmetrics"
+	, "desc": "Utility exporting blockchain data into formats suitable for analysis by other tools"
+	, "website_url": "https://coinmetrics.io/"
+	, "issue_tracker_url": "https://github.com/coinmetrics-io/haskell-tools/issues"
+	, "vcs_url": "https://github.com/coinmetrics-io/haskell-tools.git"
+	, "licenses": ["MIT"]
+	, "public_download_numbers": true
+	, "public_stats": true
+	, "attributes": []
+	}
+, "version":
+	{ "name": "edge"
+	, "desc": "Bleeding edge version built master branch"
+	, "gpgSign": false
+	}
+, "files":
+	[ { "includePattern": "bin/coinmetrics-export"
+		, "uploadPattern": "$0"
+		, "matrixParams":
+			{ "override": true
+			}
+		}
+	]
+, "publish": true
+}
