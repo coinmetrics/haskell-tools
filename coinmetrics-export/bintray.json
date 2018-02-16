@@ -17,8 +17,8 @@
 	, "gpgSign": false
 	}
 , "files":
-	[ { "includePattern": "bin/coinmetrics-export"
-		, "uploadPattern": "$0"
+	[ { "includePattern": "bin/(coinmetrics-export)"
+		, "uploadPattern": "$1"
 		, "matrixParams":
 			{ "override": true
 			}
