@@ -1,0 +1,29 @@
+{ "package":
+	{ "name": "coinmetrics-export"
+	, "repo": "haskell-tools-rpm"
+	, "subject": "coinmetrics"
+	, "desc": "Utility exporting blockchain data into formats suitable for analysis by other tools"
+	, "website_url": "https://coinmetrics.io/"
+	, "issue_tracker_url": "https://github.com/coinmetrics-io/haskell-tools/issues"
+	, "vcs_url": "https://github.com/coinmetrics-io/haskell-tools.git"
+	, "licenses": ["MIT"]
+	, "public_download_numbers": true
+	, "public_stats": true
+	, "attributes": []
+	}
+, "version":
+	{ "name": "0.0.0.${TRAVIS_BUILD_NUMBER}"
+	, "desc": "Bleeding edge version built from master branch"
+	, "vcs_tag": "${TRAVIS_TAG}"
+	, "gpgSign": false
+	}
+, "files":
+	[ { "includePattern": "(.*\\.rpm)"
+		, "uploadPattern": "$1"
+		, "matrixParams":
+			{ "override": true
+			}
+		}
+	]
+, "publish": true
+}
