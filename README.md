@@ -1,4 +1,4 @@
-[![Travis CI Build Status](https://travis-ci.org/coinmetrics-io/haskell-tools.svg?branch=master)](https://travis-ci.org/coinmetrics-io/haskell-tools)
+[![Travis CI Build Status](https://travis-ci.org/coinmetrics-io/haskell-tools.svg?branch=master)](https://travis-ci.org/coinmetrics-io/haskell-tools) [![Docker Repository on Quay](https://quay.io/repository/quyse/coinmetrics-haskell-tools/status "Docker Repository on Quay")](https://quay.io/repository/quyse/coinmetrics-haskell-tools)
 
 # Haskell-based CoinMetrics.io tools
 
