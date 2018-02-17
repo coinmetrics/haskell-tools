@@ -29,6 +29,9 @@ script:
 - envsubst < coinmetrics-export/bintray.json.in > coinmetrics-export/bintray.json
 - envsubst < coinmetrics-export/bintray-deb.json.in > coinmetrics-export/bintray-deb.json
 - envsubst < coinmetrics-export/bintray-rpm.json.in > coinmetrics-export/bintray-rpm.json
+- cp Dockerfile bin/ && docker build -t ${DOCKER_REPO}:latest bin
+- docker login -u="${DOCKER_USER}" -p="${DOCKER_PASSWORD}" ${DOCKER_HOST}
+- docker push ${DOCKER_REPO}:latest
 
 deploy:
 - provider: bintray
