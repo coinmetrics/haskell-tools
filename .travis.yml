@@ -10,6 +10,7 @@ addons:
   apt:
     packages:
     - libgmp-dev
+    - rpm
 
 before_install:
 - mkdir -p ~/.local/bin
