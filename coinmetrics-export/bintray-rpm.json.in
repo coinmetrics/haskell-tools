@@ -18,11 +18,8 @@
 	, "gpgSign": false
 	}
 , "files":
-	[ { "includePattern": "\\./(.*\\.rpm)"
+	[ { "includePattern": "pkg/(.*\\.rpm)"
 		, "uploadPattern": "$1"
-		, "matrixParams":
-			{ "override": true
-			}
 		}
 	]
 , "publish": true

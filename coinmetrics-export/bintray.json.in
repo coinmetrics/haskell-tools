@@ -20,9 +20,6 @@
 , "files":
 	[ { "includePattern": "bin/(coinmetrics-export)"
 		, "uploadPattern": "$1"
-		, "matrixParams":
-			{ "override": true
-			}
 		}
 	]
 , "publish": true
