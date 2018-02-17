@@ -4,6 +4,7 @@ RUN set -ex; \
 	if ! command -v gpg > /dev/null; then \
 		apt-get update; \
 		apt-get install -y --no-install-recommends \
+			ca-certificates \
 			libpq5 \
 		; \
 		rm -rf /var/lib/apt/lists/*; \
