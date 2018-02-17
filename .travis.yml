@@ -42,19 +42,19 @@ deploy:
   key: $BINTRAY_KEY
   file: coinmetrics-export/bintray.json
   on:
-    branch: deploy # temporary
+    branch: master
   skip_cleanup: true
 - provider: bintray
   user: $BINTRAY_USER
   key: $BINTRAY_KEY
   file: coinmetrics-export/bintray-deb.json
   on:
-    branch: deploy # temporary
+    branch: master
   skip_cleanup: true
 - provider: bintray
   user: $BINTRAY_USER
   key: $BINTRAY_KEY
   file: coinmetrics-export/bintray-rpm.json
   on:
-    branch: deploy # temporary
+    branch: master
   skip_cleanup: true

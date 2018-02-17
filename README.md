@@ -5,6 +5,10 @@
 These tools are used by CoinMetrics.io team for exporting data from blockchains into analytical databases,
 allowing to perform SQL queries, for instance, generating aggregated information on Ethereum tokens.
 
+## Status
+
+The project is in very early stage.
+
 Supported cryptocurrencies:
 
 * [Ethereum](https://www.ethereum.org/)
@@ -13,6 +17,28 @@ Supported cryptocurrencies:
 * [NEM](https://nem.io/) (WIP)
 * [Ripple](https://ripple.com/)
 * [Stellar](https://www.stellar.org/)
+
+## Prebuilt Binaries (experimental)
+
+There's no stable releases yet. All binaries are built on Travis CI.
+
+The easiest way to run the tools is to use docker.
+
+Update to the latest version:
+```bash
+sudo docker pull quay.io/quyse/coinmetrics-haskell-tools
+```
+
+Run `coinmetrics-export` tool:
+```bash
+sudo docker run -it --rm --net host quay.io/quyse/coinmetrics-haskell-tools coinmetrics-export <arguments>
+```
+
+Alternatively you can download binaries from Bintray:
+
+* [generic Linux](https://bintray.com/coinmetrics/haskell-tools)
+* [.deb packages](https://bintray.com/coinmetrics/haskell-tools-deb)
+* [.rpm packages](https://bintray.com/coinmetrics/haskell-tools-rpm)
 
 ## Packages
 
