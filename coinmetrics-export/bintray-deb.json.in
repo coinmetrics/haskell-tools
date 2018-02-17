@@ -18,7 +18,7 @@
 	, "gpgSign": false
 	}
 , "files":
-	[ { "includePattern": "(.*\\.deb)"
+	[ { "includePattern": "\\./(.*\\.deb)"
 		, "uploadPattern": "$1"
 		, "matrixParams":
 			{ "override": true
