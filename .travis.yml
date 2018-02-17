@@ -26,8 +26,6 @@ script:
 - stack --no-terminal test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
 - fpm -s dir -t deb -n coinmetrics-export -v 0.0.0.${TRAVIS_BUILD_NUMBER} bin/coinmetrics-export=/usr/bin/
 - fpm -s dir -t rpm -n coinmetrics-export -v 0.0.0.${TRAVIS_BUILD_NUMBER} bin/coinmetrics-export=/usr/bin/
-
-before_deploy:
 - envsubst < coinmetrics-export/bintray.json.in > coinmetrics-export/bintray.json
 - envsubst < coinmetrics-export/bintray-deb.json.in > coinmetrics-export/bintray-deb.json
 - envsubst < coinmetrics-export/bintray-rpm.json.in > coinmetrics-export/bintray-rpm.json
