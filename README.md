@@ -24,14 +24,14 @@ There's no stable releases yet. All binaries are built on Travis CI.
 
 The easiest way to run the tools is to use docker.
 
-Update to the latest version:
+Pull the latest version:
 ```bash
-sudo docker pull quay.io/quyse/coinmetrics-haskell-tools
+docker pull quay.io/quyse/coinmetrics-haskell-tools
 ```
 
 Run `coinmetrics-export` tool:
 ```bash
-sudo docker run -it --rm --net host quay.io/quyse/coinmetrics-haskell-tools coinmetrics-export <arguments>
+docker run -it --rm --net host quay.io/quyse/coinmetrics-haskell-tools coinmetrics-export <arguments>
 ```
 
 Alternatively you can download binaries from Bintray:
