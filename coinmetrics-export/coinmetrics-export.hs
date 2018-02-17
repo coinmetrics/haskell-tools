@@ -24,6 +24,7 @@ import qualified Database.PostgreSQL.LibPQ as PQ
 import qualified Network.HTTP.Client as H
 import qualified Network.HTTP.Client.TLS as H
 import qualified Options.Applicative as O
+import System.IO
 import System.IO.Unsafe
 
 import CoinMetrics.BlockChain
@@ -269,7 +270,7 @@ run Options
 						beginBlock <- case maybeValue of
 							Just beginBlockStr -> do
 								let maxBlock = read (T.unpack $ T.decodeUtf8 beginBlockStr)
-								putStrLn $ "got latest block synchronized to postgres: " <> show maxBlock
+								hPutStrLn stderr $ "got latest block synchronized to postgres: " <> show maxBlock
 								return $ maxBlock + 1
 							Nothing -> return defaultBeginBlock
 						PQ.finish connection
@@ -297,7 +298,7 @@ run Options
 					currentBlockIndex <- getCurrentBlockHeight blockChain
 					-- insert indices up to this index minus offset
 					let endIndex = currentBlockIndex + endBlock
-					putStrLn $ "continuously syncing blocks... currently from " <> show i <> " to " <> show (endIndex - 1)
+					hPutStrLn stderr $ "continuously syncing blocks... currently from " <> show i <> " to " <> show (endIndex - 1)
 					mapM_ (atomically . writeTBQueue blockIndexQueue) [i..(endIndex - 1)]
 					-- pause
 					threadDelay 10000000
@@ -350,11 +351,11 @@ run Options
 		let step i = if endBlock <= 0 || i < endBlock
 			then unsafeInterleaveIO $ do
 				(blockIndex, block) <- atomically $ readTBQueue blockQueue
-				when (blockIndex `rem` 100 == 0) $ putStrLn $ "synced up to " ++ show blockIndex
+				when (blockIndex `rem` 100 == 0) $ hPutStrLn stderr $ "synced up to " ++ show blockIndex
 				(block :) <$> step (blockIndex + 1)
 			else return []
 		writeOutput outputFile blockchainType =<< step beginBlock
-		putStrLn $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
+		hPutStrLn stderr $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
 		{ options_apiUrl = apiUrl
@@ -403,12 +404,12 @@ run Options
 		void $ forkIO $ forever $ do
 			-- get milestone
 			latestMilestoneHash <- iotaGetLatestMilestone iota
-			putStrLn $ "latest milestone: " <> T.unpack latestMilestoneHash
+			hPutStrLn stderr $ "latest milestone: " <> T.unpack latestMilestoneHash
 			-- put milestone into queue
 			addHash latestMilestoneHash
 			-- output queue size
 			queueSize <- readTVarIO queueSizeVar
-			putStrLn $ "queue size: " <> show queueSize
+			hPutStrLn stderr $ "queue size: " <> show queueSize
 			-- pause
 			threadDelay 10000000
 
@@ -427,7 +428,7 @@ run Options
 		-- write blocks into outputs, using lazy IO
 		let step i = unsafeInterleaveIO $ do
 			transaction <- atomically $ readTBQueue transactionQueue
-			when (i `rem` 100 == 0) $ putStrLn $ "synced transactions: " ++ show i
+			when (i `rem` 100 == 0) $ hPutStrLn stderr $ "synced transactions: " ++ show i
 			(transaction :) <$> step (i + 1)
 		writeOutput outputFile "iota" =<< step (0 :: Int)
 
