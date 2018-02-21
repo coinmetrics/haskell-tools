@@ -24,6 +24,7 @@ executable coinmetrics-export
     , coinmetrics-ethereum
     , coinmetrics-iota
     , coinmetrics-nem
+    , coinmetrics-neo
     , coinmetrics-ripple
     , coinmetrics-stellar
     , hanalytics-base

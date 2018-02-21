@@ -7,7 +7,7 @@ module CoinMetrics.Util
 	, decode0xHexBytes
 	, encode0xHexNumber
 	, decode0xHexNumber
-	, decodeDecNumberStr
+	, decodeReadStr
 	, tryWithRepeat
 	) where
 
@@ -46,10 +46,10 @@ decode0xHexNumber = \case
 	(T.stripPrefix "0x" -> Just (readHex . T.unpack -> [(n, "")])) -> return n
 	s -> fail $ "decode0xHexNumber error for: " ++ show s
 
-decodeDecNumberStr :: (Eq a, Num a) => T.Text -> J.Parser a
-decodeDecNumberStr s = case readDec (T.unpack s) of
+decodeReadStr :: Read a => T.Text -> J.Parser a
+decodeReadStr s = case reads (T.unpack s) of
 	[(r, "")] -> return r
-	_ -> fail $ "decodeDecNumberStr error for: " ++ T.unpack s
+	_ -> fail $ "decodeReadStr error for: " ++ T.unpack s
 
 tryWithRepeat :: IO a -> IO a
 tryWithRepeat io = let

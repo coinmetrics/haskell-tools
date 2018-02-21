@@ -104,7 +104,7 @@ The utility tries to have sane defaults for most parameters. Note that rewriting
 | `cardano` | `http://127.0.0.1:8100/` | `2` | `-1000` |
 | `ethereum` | `http://127.0.0.1:8545/` | `0` | `-1000` |
 | `nem` | `http://127.0.0.1:7890/` | `1` | `-360` ([rewrite limit](https://nemproject.github.io/#initiating-transactions)) |
-| `neo` | `http://127.0.0.1:10332/` | `1` | `-1000` |
+| `neo` | `http://127.0.0.1:10332/` | `0` | `-1000` |
 | `ripple` | `https://data.ripple.com/` | `32570` ([genesis ledger](https://ripple.com/build/data-api-v2/#genesis-ledger)) | `0` (history data, no rewrites) |
 | `stellar` | `http://history.stellar.org/prd/core-live/core_live_001` | `1` | `0` (history data, no rewrites) |
 

@@ -13,6 +13,7 @@ import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import GHC.Generics(Generic)
 import Data.Int
+import Data.Scientific
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
@@ -38,11 +39,11 @@ instance Schemable NeoBlock
 
 instance J.FromJSON NeoBlock where
 	parseJSON = J.withObject "neo block" $ \fields -> NeoBlock
-		<$> (decodeHexBytes =<< fields J..: "Hash")
-		<*> (fields J..: "Size")
-		<*> (fields J..: "Time")
-		<*> (fields J..: "Index")
-		<*> (fields J..: "Tx")
+		<$> (decode0xHexBytes =<< fields J..: "hash")
+		<*> (fields J..: "size")
+		<*> (fields J..: "time")
+		<*> (fields J..: "index")
+		<*> (fields J..: "tx")
 
 instance A.HasAvroSchema NeoBlock where
 	schema = genericAvroSchema
@@ -56,8 +57,8 @@ data NeoTransaction = NeoTransaction
 	, et_type :: !T.Text
 	, et_vin :: !(V.Vector NeoTransactionInput)
 	, et_vout :: !(V.Vector NeoTransactionOutput)
-	, et_sys_fee :: !Integer
-	, et_net_fee :: !Integer
+	, et_sys_fee :: !Scientific
+	, et_net_fee :: !Scientific
 	} deriving Generic
 
 instance Schemable NeoTransaction
@@ -65,13 +66,13 @@ instance SchemableField NeoTransaction
 
 instance J.FromJSON NeoTransaction where
 	parseJSON = J.withObject "neo transaction" $ \fields -> NeoTransaction
-		<$> (decodeHexBytes =<< fields J..: "Txid")
-		<*> (fields J..: "Size")
-		<*> (fields J..: "Type")
-		<*> (fields J..: "Vin")
-		<*> (fields J..: "Vout")
-		<*> (decodeDecNumberStr =<< fields J..: "Sys_fee")
-		<*> (decodeDecNumberStr =<< fields J..: "Net_fee")
+		<$> (decode0xHexBytes =<< fields J..: "txid")
+		<*> (fields J..: "size")
+		<*> (fields J..: "type")
+		<*> (fields J..: "vin")
+		<*> (fields J..: "vout")
+		<*> (decodeReadStr =<< fields J..: "sys_fee")
+		<*> (decodeReadStr =<< fields J..: "net_fee")
 
 instance A.HasAvroSchema NeoTransaction where
 	schema = genericAvroSchema
@@ -89,8 +90,8 @@ instance SchemableField NeoTransactionInput
 
 instance J.FromJSON NeoTransactionInput where
 	parseJSON = J.withObject "neo transaction input" $ \fields -> NeoTransactionInput
-		<$> (decodeHexBytes =<< fields J..: "Txid")
-		<*> (fields J..: "Vout")
+		<$> (decode0xHexBytes =<< fields J..: "txid")
+		<*> (fields J..: "vout")
 
 instance A.HasAvroSchema NeoTransactionInput where
 	schema = genericAvroSchema
@@ -100,7 +101,7 @@ instance ToPostgresText NeoTransactionInput
 
 data NeoTransactionOutput = NeoTransactionOutput
 	{ nti_asset :: !B.ByteString
-	, nti_value :: !Integer
+	, nti_value :: !Scientific
 	, nti_address :: !T.Text
 	} deriving Generic
 
@@ -109,9 +110,9 @@ instance SchemableField NeoTransactionOutput
 
 instance J.FromJSON NeoTransactionOutput where
 	parseJSON = J.withObject "neo transaction output" $ \fields -> NeoTransactionOutput
-		<$> (decodeHexBytes =<< fields J..: "Asset")
-		<*> (decodeDecNumberStr =<< fields J..: "Value")
-		<*> (fields J..: "Address")
+		<$> (decode0xHexBytes =<< fields J..: "asset")
+		<*> (decodeReadStr =<< fields J..: "value")
+		<*> (fields J..: "address")
 
 instance A.HasAvroSchema NeoTransactionOutput where
 	schema = genericAvroSchema
@@ -126,7 +127,7 @@ instance BlockChain Neo where
 	type Block Neo = NeoBlock
 	type Transaction Neo = NeoTransaction
 
-	getCurrentBlockHeight (Neo jsonRpc) = jsonRpcRequest jsonRpc "getblockcount" []
+	getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" []
 
 	getBlockByHeight (Neo jsonRpc) blockHeight = jsonRpcRequest jsonRpc "getblock" [J.Number $ fromIntegral blockHeight, J.Number 1]
 

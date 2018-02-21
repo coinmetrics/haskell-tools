@@ -33,6 +33,7 @@ import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
 import CoinMetrics.Nem
+import CoinMetrics.Neo
 import CoinMetrics.Ripple
 import CoinMetrics.Stellar
 import Hanalytics.Schema
@@ -60,7 +61,7 @@ main = run =<< O.execParser parser where
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: ethereum | cardano | nem | ripple | stellar"
+							<> O.help "Type of blockchain: ethereum | cardano | nem | neo | ripple | stellar"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -120,7 +121,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: ethereum | erc20tokens | cardano | iota | nem | ripple | stellar"
+							<> O.help "Type of schema: ethereum | erc20tokens | cardano | iota | nem | neo | ripple | stellar"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -243,6 +244,9 @@ run Options
 			"nem" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:7890/"
 				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- actual rewrite limit
+			"neo" -> do
+				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:10332/"
+				return (SomeBlockChain $ newNeo httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
 			"ripple" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "https://data.ripple.com/"
 				return (SomeBlockChain $ newRipple httpManager httpRequest, 32570, 0) -- history data, no rewrites
@@ -476,6 +480,16 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"nem\" OF \"NemBlock\" (PRIMARY KEY (\"height\"));"
 		("nem", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy NemBlock)
+		("neo", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy NeoTransactionInput)
+				, schemaOf (Proxy :: Proxy NeoTransactionOutput)
+				, schemaOf (Proxy :: Proxy NeoTransaction)
+				, schemaOf (Proxy :: Proxy NeoBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"neo\" OF \"NeoBlock\" (PRIMARY KEY (\"index\"));"
+		("neo", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy NeoBlock)
 		("ripple", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy RippleTransaction)
