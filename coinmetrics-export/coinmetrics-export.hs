@@ -32,6 +32,7 @@ import CoinMetrics.Cardano
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
+import CoinMetrics.Monero
 import CoinMetrics.Nem
 import CoinMetrics.Neo
 import CoinMetrics.Ripple
@@ -61,7 +62,7 @@ main = run =<< O.execParser parser where
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: ethereum | cardano | nem | neo | ripple | stellar"
+							<> O.help "Type of blockchain: ethereum | cardano | monero | nem | neo | ripple | stellar"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -121,7 +122,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: ethereum | erc20tokens | cardano | iota | nem | neo | ripple | stellar"
+							<> O.help "Type of schema: ethereum | erc20tokens | cardano | iota | monero | nem | neo | ripple | stellar"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -241,6 +242,9 @@ run Options
 			"cardano" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8100/"
 				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
+			"monero" -> do
+				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:18081/json_rpc"
+				return (SomeBlockChain $ newMonero httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
 			"nem" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:7890/"
 				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- actual rewrite limit
@@ -471,6 +475,16 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
 		("iota", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
+		("monero", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy MoneroTransactionInput)
+				, schemaOf (Proxy :: Proxy MoneroTransactionOutput)
+				, schemaOf (Proxy :: Proxy MoneroTransaction)
+				, schemaOf (Proxy :: Proxy MoneroBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"monero\" OF \"MoneroBlock\" (PRIMARY KEY (\"height\"));"
+		("monero", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy MoneroBlock)
 		("nem", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy NemNestedTransaction)

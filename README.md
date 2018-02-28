@@ -14,6 +14,7 @@ Supported cryptocurrencies:
 * [Ethereum](https://www.ethereum.org/)
 * [Cardano](https://www.cardanohub.org/)
 * [IOTA](https://iota.org/) (WIP)
+* [Monero](https://getmonero.org/) (WIP)
 * [NEM](https://nem.io/) (WIP)
 * [NEO](https://neo.org/) (WIP)
 * [Ripple](https://ripple.com/)
@@ -48,6 +49,7 @@ Alternatively you can download binaries from Bintray:
 * `coinmetrics-ethereum` - library specific to Ethereum.
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
 * `coinmetrics-iota` - library specific to IOTA.
+* `coinmetrics-monero` - library specific to Monero.
 * `coinmetrics-nem` - library specific to NEM.
 * `coinmetrics-neo` - library specific to NEO.
 * `coinmetrics-ripple` - library specific to Ripple.
@@ -103,6 +105,7 @@ The utility tries to have sane defaults for most parameters. Note that rewriting
 |---|---|---|---|
 | `cardano` | `http://127.0.0.1:8100/` | `2` | `-1000` |
 | `ethereum` | `http://127.0.0.1:8545/` | `0` | `-1000` |
+| `monero` | `http://127.0.0.1:18081/json_rpc` | `0` | `-1000` |
 | `nem` | `http://127.0.0.1:7890/` | `1` | `-360` ([rewrite limit](https://nemproject.github.io/#initiating-transactions)) |
 | `neo` | `http://127.0.0.1:10332/` | `0` | `-1000` |
 | `ripple` | `https://data.ripple.com/` | `32570` ([genesis ledger](https://ripple.com/build/data-api-v2/#genesis-ledger)) | `0` (history data, no rewrites) |

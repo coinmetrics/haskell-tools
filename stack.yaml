@@ -6,6 +6,7 @@ packages:
 - coinmetrics-ethereum
 - coinmetrics-export
 - coinmetrics-iota
+- coinmetrics-monero
 - coinmetrics-nem
 - coinmetrics-neo
 - coinmetrics-ripple

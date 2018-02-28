@@ -1,0 +1,173 @@
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
+
+module CoinMetrics.Monero
+	( newMonero
+	, MoneroBlock(..)
+	, MoneroTransaction(..)
+	, MoneroTransactionInput(..)
+	, MoneroTransactionOutput(..)
+	) where
+
+import Control.Monad
+import qualified Data.Aeson as J
+import qualified Data.Aeson.Types as J
+import qualified Data.Avro as A
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.HashMap.Lazy as HML
+import Data.Maybe
+import GHC.Generics(Generic)
+import Data.Int
+import qualified Data.Text.Encoding as T
+import qualified Data.Vector as V
+import qualified Network.HTTP.Client as H
+
+import CoinMetrics.BlockChain
+import CoinMetrics.JsonRpc
+import CoinMetrics.Util
+import Hanalytics.Schema
+import Hanalytics.Schema.Avro
+import Hanalytics.Schema.Postgres
+
+newtype Monero = Monero JsonRpc
+
+data MoneroBlock = MoneroBlock
+	{ mb_height :: {-# UNPACK #-} !Int64
+	, mb_hash :: !B.ByteString
+	, mb_difficulty :: {-# UNPACK #-} !Int64
+	, mb_reward :: {-# UNPACK #-} !Int64
+	, mb_timestamp :: {-# UNPACK #-} !Int64
+	, mb_nonce :: {-# UNPACK #-} !Int64
+	, mb_miner_tx :: !MoneroTransaction
+	, mb_transactions :: !(V.Vector MoneroTransaction)
+	} deriving Generic
+
+instance Schemable MoneroBlock
+
+instance J.FromJSON MoneroBlock where
+	parseJSON = J.withObject "monero block" $ \fields -> MoneroBlock
+		<$> (fields J..: "height")
+		<*> (decodeHexBytes =<< fields J..: "hash")
+		<*> (fields J..: "difficulty")
+		<*> (fields J..: "reward")
+		<*> (fields J..: "timestamp")
+		<*> (fields J..: "nonce")
+		<*> (fields J..: "miner_tx")
+		<*> (fields J..: "transactions")
+
+instance A.HasAvroSchema MoneroBlock where
+	schema = genericAvroSchema
+instance A.ToAvro MoneroBlock where
+	toAvro = genericToAvro
+instance ToPostgresText MoneroBlock
+
+data MoneroTransaction = MoneroTransaction
+	{ mt_hash :: !(Maybe B.ByteString)
+	, mt_unlock_time :: {-# UNPACK #-} !Int64
+	, mt_vin :: !(V.Vector MoneroTransactionInput)
+	, mt_vout :: !(V.Vector MoneroTransactionOutput)
+	, mt_extra :: !B.ByteString
+	, mt_signatures :: !(V.Vector B.ByteString)
+	} deriving Generic
+
+instance Schemable MoneroTransaction
+instance SchemableField MoneroTransaction
+
+instance J.FromJSON MoneroTransaction where
+	parseJSON = J.withObject "monero transaction" $ \fields -> MoneroTransaction
+		<$> (traverse decodeHexBytes =<< fields J..:? "hash")
+		<*> (fields J..: "unlock_time")
+		<*> (fields J..: "vin")
+		<*> (fields J..: "vout")
+		<*> (B.pack <$> fields J..: "extra")
+		<*> (traverse decodeHexBytes =<< fields J..: "signatures")
+
+instance A.HasAvroSchema MoneroTransaction where
+	schema = genericAvroSchema
+instance A.ToAvro MoneroTransaction where
+	toAvro = genericToAvro
+instance ToPostgresText MoneroTransaction
+
+data MoneroTransactionInput = MoneroTransactionInput
+	{ mti_amount :: !(Maybe Int64)
+	, mti_k_image :: !(Maybe B.ByteString)
+	, mti_key_offsets :: !(V.Vector Int64)
+	, mti_height :: !(Maybe Int64)
+	} deriving Generic
+
+instance Schemable MoneroTransactionInput
+instance SchemableField MoneroTransactionInput
+
+instance J.FromJSON MoneroTransactionInput where
+	parseJSON = J.withObject "monero transaction input" $ \fields -> do
+		maybeKey <- fields J..:? "key"
+		maybeGen <- fields J..:? "gen"
+		MoneroTransactionInput
+			<$> (traverse (J..: "amount") maybeKey)
+			<*> (traverse (decodeHexBytes <=< (J..: "k_image")) maybeKey)
+			<*> (fromMaybe V.empty <$> traverse (J..: "key_offsets") maybeKey)
+			<*> (traverse (J..: "height") maybeGen)
+
+instance A.HasAvroSchema MoneroTransactionInput where
+	schema = genericAvroSchema
+instance A.ToAvro MoneroTransactionInput where
+	toAvro = genericToAvro
+instance ToPostgresText MoneroTransactionInput
+
+data MoneroTransactionOutput = MoneroTransactionOutput
+	{ mto_amount :: !Int64
+	, mto_key :: !B.ByteString
+	} deriving Generic
+
+instance Schemable MoneroTransactionOutput
+instance SchemableField MoneroTransactionOutput
+
+instance J.FromJSON MoneroTransactionOutput where
+	parseJSON = J.withObject "monero transaction output" $ \fields -> MoneroTransactionOutput
+		<$> (fields J..: "amount")
+		<*> (decodeHexBytes =<< (J..: "key") =<< fields J..: "target")
+
+instance A.HasAvroSchema MoneroTransactionOutput where
+	schema = genericAvroSchema
+instance A.ToAvro MoneroTransactionOutput where
+	toAvro = genericToAvro
+instance ToPostgresText MoneroTransactionOutput
+
+newMonero :: H.Manager -> H.Request -> Monero
+newMonero httpManager httpRequest = Monero $ newJsonRpc httpManager httpRequest Nothing
+
+instance BlockChain Monero where
+	type Block Monero = MoneroBlock
+	type Transaction Monero = MoneroTransaction
+
+	getCurrentBlockHeight (Monero jsonRpc) =
+		either fail (return . (+ (-1))) . J.parseEither (J..: "count") =<< jsonRpcRequest jsonRpc "getblockcount" J.Null
+
+	getBlockByHeight (Monero jsonRpc) blockHeight = do
+		blockInfo <- jsonRpcRequest jsonRpc "getblock" (J.Object [("height", J.toJSON blockHeight)])
+		J.Object blockHeaderFields <- either fail return $ J.parseEither (J..: "block_header") blockInfo
+		Just (J.Bool False) <- return $ HML.lookup "orphan_status" blockHeaderFields
+		Just blockHash <- return $ HML.lookup "hash" blockHeaderFields
+		Just blockDifficulty <- return $ HML.lookup "difficulty" blockHeaderFields
+		Just blockReward <- return $ HML.lookup "reward" blockHeaderFields
+		blockJsonFields <- either fail return $ ((J.eitherDecode' . BL.fromStrict . T.encodeUtf8) =<<) $ J.parseEither (J..: "json") blockInfo
+		txHashes <- either fail return $ J.parseEither (J..: "tx_hashes") blockJsonFields
+		transactions <- if V.null txHashes
+			then return V.empty
+			else do
+				transactionsJsons <- either fail return . J.parseEither (J..: "txs_as_json") =<< nonJsonRpcRequest jsonRpc "/gettransactions" (J.Object [("txs_hashes", J.Array txHashes), ("decode_as_json", J.Bool True)])
+				V.forM (V.zip txHashes transactionsJsons) $ \(txHash, transactionJson) -> do
+					transactionFields <- either fail return $ J.eitherDecode' $ BL.fromStrict $ T.encodeUtf8 transactionJson
+					return $ J.Object $ HML.insert "hash" txHash transactionFields
+		let jsonBlock = J.Object
+			$ HML.insert "height" (J.toJSON blockHeight)
+			$ HML.insert "hash" blockHash
+			$ HML.insert "difficulty" blockDifficulty
+			$ HML.insert "reward" blockReward
+			$ HML.insert "transactions" (J.Array transactions)
+			blockJsonFields
+		case J.fromJSON jsonBlock of
+			J.Success block -> return block
+			J.Error err -> fail err
+
+	blockHeightFieldName _ = "height"

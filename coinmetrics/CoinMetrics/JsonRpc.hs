@@ -4,10 +4,12 @@ module CoinMetrics.JsonRpc
 	( JsonRpc()
 	, newJsonRpc
 	, jsonRpcRequest
+	, nonJsonRpcRequest
 	) where
 
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
+import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Network.HTTP.Client as H
@@ -46,3 +48,14 @@ jsonRpcRequest JsonRpc
 			J.Success result -> return result
 			J.Error err -> fail err
 		Left err -> fail err
+
+nonJsonRpcRequest :: (J.FromJSON r, J.ToJSON p) => JsonRpc -> B.ByteString -> p -> IO r
+nonJsonRpcRequest JsonRpc
+	{ jsonRpc_httpManager = httpManager
+	, jsonRpc_httpRequest = httpRequest
+	} path params = do
+	body <- H.responseBody <$> tryWithRepeat (H.httpLbs httpRequest
+		{ H.requestBody = H.RequestBodyLBS $ J.encode $ J.toJSON params
+		, H.path = path
+		} httpManager)
+	either fail return $ J.eitherDecode' body
