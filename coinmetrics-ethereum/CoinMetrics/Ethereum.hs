@@ -198,16 +198,16 @@ instance BlockChain Ethereum where
 	type Transaction Ethereum = EthereumTransaction
 
 	getCurrentBlockHeight (Ethereum jsonRpc) = do
-		J.Success height <- J.parse decode0xHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" []
+		J.Success height <- J.parse decode0xHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" ([] :: V.Vector J.Value)
 		return height
 
 	getBlockByHeight (Ethereum jsonRpc) blockHeight = do
-		blockFields <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" [encode0xHexNumber blockHeight, J.Bool True]
+		blockFields <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" ([encode0xHexNumber blockHeight, J.Bool True] :: V.Vector J.Value)
 		J.Success rawTransactions <- return $ J.parse (J..: "transactions") blockFields
 		J.Success unclesHashes <- return $ J.parse (mapM decode0xHexBytes <=< (J..: "uncles")) blockFields
 		transactions <- V.forM rawTransactions $ \rawTransaction -> do
 			J.Success transactionHash <- return $ J.parse (J..: "hash") rawTransaction
-			J.Object receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" [transactionHash]
+			J.Object receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" ([transactionHash] :: V.Vector J.Value)
 			Just gasUsed <- return $ HML.lookup "gasUsed" receiptFields
 			Just contractAddress <- return $ HML.lookup "contractAddress" receiptFields
 			Just logs <- return $ HML.lookup "logs" receiptFields
@@ -219,7 +219,7 @@ instance BlockChain Ethereum where
 				$ HML.insert "logsBloom" logsBloom
 				rawTransaction
 		uncles <- flip V.imapM unclesHashes $ \i _uncleHash -> do
-			J.Success uncle <- J.fromJSON <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" [encode0xHexNumber blockHeight, encode0xHexNumber i]
+			J.Success uncle <- J.fromJSON <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" ([encode0xHexNumber blockHeight, encode0xHexNumber i] :: V.Vector J.Value)
 			return uncle
 		let jsonBlock = J.Object
 			$ HML.insert "transactions" (J.Array transactions)

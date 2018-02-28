@@ -10,7 +10,6 @@ import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.Util
@@ -29,7 +28,7 @@ newJsonRpc httpManager httpRequest maybeCredentials = JsonRpc
 		}
 	}
 
-jsonRpcRequest :: J.FromJSON r => JsonRpc -> T.Text -> V.Vector J.Value -> IO r
+jsonRpcRequest :: (J.FromJSON r, J.ToJSON p) => JsonRpc -> T.Text -> p -> IO r
 jsonRpcRequest JsonRpc
 	{ jsonRpc_httpManager = httpManager
 	, jsonRpc_httpRequest = httpRequest
@@ -38,7 +37,7 @@ jsonRpcRequest JsonRpc
 		{ H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object
 			[ ("jsonrpc", "2.0")
 			, ("method", J.String method)
-			, ("params", J.Array params)
+			, ("params", J.toJSON params)
 			, ("id", J.String "1")
 			]
 		} httpManager)

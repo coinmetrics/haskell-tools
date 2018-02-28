@@ -27,5 +27,4 @@ library
     , http-client
     , memory
     , text
-    , vector
   default-language:    Haskell2010

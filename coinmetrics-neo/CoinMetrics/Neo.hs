@@ -127,8 +127,8 @@ instance BlockChain Neo where
 	type Block Neo = NeoBlock
 	type Transaction Neo = NeoTransaction
 
-	getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" []
+	getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 
-	getBlockByHeight (Neo jsonRpc) blockHeight = jsonRpcRequest jsonRpc "getblock" [J.Number $ fromIntegral blockHeight, J.Number 1]
+	getBlockByHeight (Neo jsonRpc) blockHeight = jsonRpcRequest jsonRpc "getblock" ([J.Number $ fromIntegral blockHeight, J.Number 1] :: V.Vector J.Value)
 
 	blockHeightFieldName _ = "index"
