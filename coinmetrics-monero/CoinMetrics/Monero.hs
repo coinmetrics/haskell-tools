@@ -34,6 +34,8 @@ newtype Monero = Monero JsonRpc
 data MoneroBlock = MoneroBlock
 	{ mb_height :: {-# UNPACK #-} !Int64
 	, mb_hash :: !B.ByteString
+	, mb_major_version :: {-# UNPACK #-} !Int64
+	, mb_minor_version :: {-# UNPACK #-} !Int64
 	, mb_difficulty :: {-# UNPACK #-} !Int64
 	, mb_reward :: {-# UNPACK #-} !Int64
 	, mb_timestamp :: {-# UNPACK #-} !Int64
@@ -48,6 +50,8 @@ instance J.FromJSON MoneroBlock where
 	parseJSON = J.withObject "monero block" $ \fields -> MoneroBlock
 		<$> (fields J..: "height")
 		<*> (decodeHexBytes =<< fields J..: "hash")
+		<*> (fields J..: "major_version")
+		<*> (fields J..: "minor_version")
 		<*> (fields J..: "difficulty")
 		<*> (fields J..: "reward")
 		<*> (fields J..: "timestamp")
@@ -63,11 +67,12 @@ instance ToPostgresText MoneroBlock
 
 data MoneroTransaction = MoneroTransaction
 	{ mt_hash :: !(Maybe B.ByteString)
+	, mt_version :: {-# UNPACK #-} !Int64
 	, mt_unlock_time :: {-# UNPACK #-} !Int64
 	, mt_vin :: !(V.Vector MoneroTransactionInput)
 	, mt_vout :: !(V.Vector MoneroTransactionOutput)
 	, mt_extra :: !B.ByteString
-	, mt_signatures :: !(V.Vector B.ByteString)
+	, mt_fee :: !(Maybe Int64)
 	} deriving Generic
 
 instance Schemable MoneroTransaction
@@ -76,11 +81,18 @@ instance SchemableField MoneroTransaction
 instance J.FromJSON MoneroTransaction where
 	parseJSON = J.withObject "monero transaction" $ \fields -> MoneroTransaction
 		<$> (traverse decodeHexBytes =<< fields J..:? "hash")
+		<*> (fields J..: "version")
 		<*> (fields J..: "unlock_time")
 		<*> (fields J..: "vin")
 		<*> (fields J..: "vout")
 		<*> (B.pack <$> fields J..: "extra")
-		<*> (traverse decodeHexBytes =<< fields J..: "signatures")
+		<*> (parseFee fields)
+		where
+			parseFee fields = do
+				maybeRctSignatures <- fields J..:? "rct_signatures"
+				case maybeRctSignatures of
+					Just rctSignatures -> rctSignatures J..:? "txnFee"
+					Nothing -> return Nothing
 
 instance A.HasAvroSchema MoneroTransaction where
 	schema = genericAvroSchema
