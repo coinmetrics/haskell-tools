@@ -16,6 +16,7 @@ import qualified Data.ByteString as B
 import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
+import Data.Maybe
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
@@ -92,7 +93,7 @@ data EthereumUncleBlock = EthereumUncleBlock
 	, eub_receiptsRoot :: !B.ByteString
 	, eub_miner :: !B.ByteString
 	, eub_difficulty :: !Integer
-	, eub_totalDifficulty :: !Integer
+	, eub_totalDifficulty :: !(Maybe Integer)
 	, eub_extraData :: !B.ByteString
 	, eub_gasLimit :: {-# UNPACK #-} !Int64
 	, eub_gasUsed :: {-# UNPACK #-} !Int64
@@ -115,7 +116,7 @@ instance J.FromJSON EthereumUncleBlock where
 		<*> (decode0xHexBytes     =<< fields J..: "receiptsRoot")
 		<*> (decode0xHexBytes     =<< fields J..: "miner")
 		<*> (decode0xHexNumber    =<< fields J..: "difficulty")
-		<*> (decode0xHexNumber    =<< fields J..: "totalDifficulty")
+		<*> (traverse decode0xHexNumber =<< fields J..:? "totalDifficulty")
 		<*> (decode0xHexBytes     =<< fields J..: "extraData")
 		<*> (decode0xHexNumber    =<< fields J..: "gasLimit")
 		<*> (decode0xHexNumber    =<< fields J..: "gasUsed")
@@ -140,7 +141,7 @@ data EthereumTransaction = EthereumTransaction
 	, et_gasUsed :: {-# UNPACK #-} !Int64
 	, et_contractAddress :: !(Maybe B.ByteString)
 	, et_logs :: !(V.Vector EthereumLog)
-	, et_logsBloom :: !B.ByteString
+	, et_logsBloom :: !(Maybe B.ByteString)
 	} deriving Generic
 
 instance Schemable EthereumTransaction
@@ -159,7 +160,7 @@ instance J.FromJSON EthereumTransaction where
 		<*> (decode0xHexNumber =<< fields J..: "gasUsed")
 		<*> (traverse decode0xHexBytes =<< fields J..: "contractAddress")
 		<*> (                      fields J..: "logs")
-		<*> (decode0xHexBytes  =<< fields J..: "logsBloom")
+		<*> (traverse decode0xHexBytes =<< fields J..:? "logsBloom")
 
 instance A.HasAvroSchema EthereumTransaction where
 	schema = genericAvroSchema
@@ -211,7 +212,7 @@ instance BlockChain Ethereum where
 			Just gasUsed <- return $ HML.lookup "gasUsed" receiptFields
 			Just contractAddress <- return $ HML.lookup "contractAddress" receiptFields
 			Just logs <- return $ HML.lookup "logs" receiptFields
-			Just logsBloom <- return $ HML.lookup "logsBloom" receiptFields
+			let logsBloom = fromMaybe J.Null $ HML.lookup "logsBloom" receiptFields
 			return $ J.Object
 				$ HML.insert "gasUsed" gasUsed
 				$ HML.insert "contractAddress" contractAddress

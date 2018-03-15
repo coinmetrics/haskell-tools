@@ -36,6 +36,7 @@ encode0xHexBytes = J.String . T.decodeUtf8 . ("0x" <>) . BA.convertToBase BA.Bas
 decode0xHexBytes :: T.Text -> J.Parser B.ByteString
 decode0xHexBytes = \case
 	(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) -> return s
+	"" -> return B.empty
 	s -> fail $ "decode0xHexBytes error for: " ++ show s
 
 encode0xHexNumber :: (Integral a, Show a) => a -> J.Value
