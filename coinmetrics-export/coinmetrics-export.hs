@@ -244,7 +244,7 @@ run Options
 				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
 			"monero" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:18081/json_rpc"
-				return (SomeBlockChain $ newMonero httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
+				return (SomeBlockChain $ newMonero httpManager httpRequest, 0, -200) -- conservative rewrite limit
 			"nem" -> do
 				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:7890/"
 				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- actual rewrite limit
