@@ -13,6 +13,7 @@ import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.HashMap.Strict as HM
 import Data.Int
 import Data.Monoid
 import Data.Scientific
@@ -65,12 +66,26 @@ instance BlockChain Ripple where
 		. J.parseEither ((J..: "ledger_index") <=< (J..: "ledger"))
 		=<< rippleRequest ripple "/v2/ledgers" []
 
-	getBlockByHeight ripple blockHeight = either fail return
-		. J.parseEither (J..: "ledger")
-		=<< rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
-			[ ("transactions", Just "true")
-			, ("expand", Just "true")
-			]
+	getBlockByHeight ripple blockHeight = do
+		eitherLedger <- J.parseEither (J..: "ledger")
+			<$> rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
+				[ ("transactions", Just "true")
+				, ("expand", Just "true")
+				]
+		case eitherLedger of
+			Right ledger -> return ledger
+			Left _ -> do
+				-- fallback to retrieving transactions individually
+				preLedger <- either fail return
+					. J.parseEither (J..: "ledger")
+					=<< rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
+						[ ("transactions", Just "true")
+						]
+				transactionsHashes <- either fail return $ J.parseEither (J..: "transactions") preLedger
+				transactions <- forM transactionsHashes $ \transactionHash ->
+					either (const J.Null) J.Object . J.parseEither (J..: "transaction")
+						<$> rippleRequest ripple ("/v2/transactions/" <> transactionHash) []
+				either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
 
 	blockHeightFieldName _ = "index"
 
@@ -81,7 +96,7 @@ data RippleLedger = RippleLedger
 	, rl_hash :: !B.ByteString
 	, rl_totalCoins :: {-# UNPACK #-} !Scientific
 	, rl_closeTime :: {-# UNPACK #-} !Int64
-	, rl_transactions :: !(V.Vector RippleTransaction)
+	, rl_transactions :: !(V.Vector (Maybe RippleTransaction))
 	} deriving Generic
 
 instance Schemable RippleLedger
