@@ -56,7 +56,9 @@ instance BlockChain Cardano where
 	type Block Cardano = CardanoBlock
 	type Transaction Cardano = CardanoTransaction
 
-	getCurrentBlockHeight cardano = either fail return =<< cardanoRequest cardano "/api/blocks/pages/total" [("pageSize", Just "1")]
+	-- pageSize param doesn't work anymore
+	-- getCurrentBlockHeight cardano = either fail return =<< cardanoRequest cardano "/api/blocks/pages/total" [("pageSize", Just "1")]
+	getCurrentBlockHeight cardano = either fail (return . (+ (-8)) . (* 10)) =<< cardanoRequest cardano "/api/blocks/pages/total" []
 
 	getBlockByHeight cardano blockHeight = do
 		-- calculate page's index and block's index on page
