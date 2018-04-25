@@ -4,6 +4,7 @@ RUN set -ex; \
 	if ! command -v gpg > /dev/null; then \
 		apt-get update; \
 		apt-get install -y --no-install-recommends \
+			libnuma1 \
 			ca-certificates \
 			libpq5 \
 		; \
