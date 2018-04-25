@@ -8,9 +8,11 @@ module CoinMetrics.Nem
 	, NemNestedTransaction(..)
 	) where
 
+import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
+import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import Data.Int
 import Data.Maybe
@@ -41,15 +43,15 @@ newNem httpManager httpRequest = Nem
 			}
 		}
 
-nemRequest :: J.FromJSON r => Nem -> T.Text -> Maybe J.Value -> IO r
+nemRequest :: J.FromJSON r => Nem -> T.Text -> Maybe J.Value -> [(B.ByteString, Maybe B.ByteString)] -> IO r
 nemRequest Nem
 	{ nem_httpManager = httpManager
 	, nem_httpRequest = httpRequest
-	} path maybeBody = tryWithRepeat $ either fail return . J.eitherDecode' . H.responseBody =<< H.httpLbs httpRequest
+	} path maybeBody params = tryWithRepeat $ either fail return . J.eitherDecode' . H.responseBody =<< H.httpLbs (H.setQueryString params httpRequest
 	{ H.path = H.path httpRequest <> T.encodeUtf8 path
 	, H.method = if isJust maybeBody then "POST" else "GET"
 	, H.requestBody = maybe (H.requestBody httpRequest) (H.RequestBodyLBS . J.encode) maybeBody
-	} httpManager
+	}) httpManager
 
 instance BlockChain Nem where
 	type Block Nem = NemBlock
@@ -57,10 +59,22 @@ instance BlockChain Nem where
 
 	getCurrentBlockHeight nem = either fail return
 		. (J.parseEither (J..: "height"))
-		=<< nemRequest nem "/chain/height" Nothing
+		=<< nemRequest nem "/chain/height" Nothing []
 
-	getBlockByHeight nem blockHeight = either fail return . J.parseEither J.parseJSON
-		=<< nemRequest nem "/block/at/public" (Just $ J.Object [("height", J.Number $ fromIntegral blockHeight)])
+	getBlockByHeight nem blockHeight = do
+		block@NemBlock
+			{ nb_transactions = transactions
+			} <- either fail return . J.parseEither J.parseJSON =<< nemRequest nem "/block/at/public" (Just $ J.Object [("height", J.Number $ fromIntegral blockHeight)]) []
+		signersAddresses <- V.forM transactions $ \NemTransaction
+			{ nt_signer = signer
+			} -> do
+			signerInfo <- nemRequest nem "/account/get/from-public-key" Nothing [("publicKey", Just $ BA.convertToBase BA.Base16 signer)]
+			either fail return $ J.parseEither ((J..: "address") <=< (J..: "account")) signerInfo
+		return block
+			{ nb_transactions = V.zipWith (\transaction signerAddress -> transaction
+				{ nt_signerAddress = signerAddress
+				}) transactions signersAddresses
+			}
 
 	blockHeightFieldName _ = "height"
 
@@ -92,6 +106,8 @@ data NemTransaction = NemTransaction
 	, nt_type :: {-# UNPACK #-} !Int64
 	, nt_deadline :: {-# UNPACK #-} !Int64
 	, nt_signer :: !B.ByteString
+	, nt_signerAddress :: !T.Text
+	, nt_recipient :: !(Maybe T.Text)
 	, nt_mode :: !(Maybe Int64)
 	, nt_remoteAccount :: !(Maybe B.ByteString)
 	, nt_creationFee :: !(Maybe Int64)
@@ -117,6 +133,8 @@ instance J.FromJSON NemTransaction where
 		<*> (fields J..: "type")
 		<*> (fields J..: "deadline")
 		<*> (decodeHexBytes =<< fields J..: "signer")
+		<*> (return "")
+		<*> (fields J..:? "recipient")
 		<*> (fields J..:? "mode")
 		<*> (traverse decodeHexBytes =<< fields J..:? "remoteAccount")
 		<*> (fields J..:? "creationFee")
@@ -143,6 +161,7 @@ data NemNestedTransaction = NemNestedTransaction
 	, nnt_type :: {-# UNPACK #-} !Int64
 	, nnt_deadline :: {-# UNPACK #-} !Int64
 	, nnt_signer :: !B.ByteString
+	, nnt_recipient :: !(Maybe T.Text)
 	, nnt_mode :: !(Maybe Int64)
 	, nnt_remoteAccount :: !(Maybe B.ByteString)
 	, nnt_creationFee :: !(Maybe Int64)
@@ -166,6 +185,7 @@ instance J.FromJSON NemNestedTransaction where
 		<*> (fields J..: "type")
 		<*> (fields J..: "deadline")
 		<*> (decodeHexBytes =<< fields J..: "signer")
+		<*> (fields J..:? "recipient")
 		<*> (fields J..:? "mode")
 		<*> (traverse decodeHexBytes =<< fields J..:? "remoteAccount")
 		<*> (fields J..:? "creationFee")
