@@ -11,12 +11,13 @@ The project is in very early stage.
 
 Supported cryptocurrencies:
 
+* [Bitcoin](https://bitcoin.org/) (WIP)
 * [Ethereum](https://www.ethereum.org/)
 * [Cardano](https://www.cardanohub.org/)
 * [IOTA](https://iota.org/) (WIP)
-* [Monero](https://getmonero.org/) (WIP)
-* [NEM](https://nem.io/) (WIP)
-* [NEO](https://neo.org/) (WIP)
+* [Monero](https://getmonero.org/)
+* [NEM](https://nem.io/)
+* [NEO](https://neo.org/)
 * [Ripple](https://ripple.com/)
 * [Stellar](https://www.stellar.org/)
 
@@ -45,6 +46,7 @@ Alternatively you can download binaries from Bintray:
 ## Packages
 
 * `coinmetrics` - library with some base primitives for exporting blockchain data into different formats.
+* `coinmetrics-bitcoin` - library specific to Bitcoin.
 * `coinmetrics-cardano` - library specific to Cardano.
 * `coinmetrics-ethereum` - library specific to Ethereum.
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
@@ -103,6 +105,7 @@ The utility tries to have sane defaults for most parameters. Note that rewriting
 
 | `--blockchain` | `--api-url` | `--begin-block` | `--end-block` |
 |---|---|---|---|
+| `bitcoin` | `http://127.0.0.1:8332/` | `0` | `-1000` |
 | `cardano` | `http://127.0.0.1:8100/` | `2` | `-1000` |
 | `ethereum` | `http://127.0.0.1:8545/` | `0` | `-1000` |
 | `monero` | `http://127.0.0.1:18081/json_rpc` | `0` | `-60` |

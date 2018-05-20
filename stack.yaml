@@ -2,6 +2,7 @@ resolver: lts-11.10
 
 packages:
 - coinmetrics
+- coinmetrics-bitcoin
 - coinmetrics-cardano
 - coinmetrics-ethereum
 - coinmetrics-export

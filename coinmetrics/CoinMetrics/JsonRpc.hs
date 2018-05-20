@@ -26,7 +26,7 @@ newJsonRpc httpManager httpRequest maybeCredentials = JsonRpc
 	{ jsonRpc_httpManager = httpManager
 	, jsonRpc_httpRequest = (maybe id (\(authName, authPass) -> H.applyBasicAuth (T.encodeUtf8 authName) (T.encodeUtf8 authPass)) maybeCredentials) httpRequest
 		{ H.method = "POST"
-		, H.requestHeaders = [("Content-Type", "application/json")]
+		, H.requestHeaders = ("Content-Type", "application/json") : H.requestHeaders httpRequest
 		}
 	}
 

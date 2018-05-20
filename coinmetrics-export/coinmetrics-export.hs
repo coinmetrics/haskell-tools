@@ -14,6 +14,7 @@ import Data.Either
 import Data.Maybe
 import Data.Monoid
 import Data.Proxy
+import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
@@ -27,6 +28,7 @@ import qualified Options.Applicative as O
 import System.IO
 import System.IO.Unsafe
 
+import CoinMetrics.Bitcoin
 import CoinMetrics.BlockChain
 import CoinMetrics.Cardano
 import CoinMetrics.Ethereum
@@ -60,9 +62,21 @@ main = run =<< O.execParser parser where
 							<> O.help "Blockchain API url, like \"http://<host>:<port>/\""
 							)
 						<*> O.strOption
+							(  O.long "api-url-username"
+							<> O.metavar "API_URL_USERNAME"
+							<> O.value ""
+							<> O.help "Blockchain API url username for authentication"
+							)
+						<*> O.strOption
+							(  O.long "api-url-password"
+							<> O.metavar "API_URL_PASSWORD"
+							<> O.value ""
+							<> O.help "Blockchain API url password for authentication"
+							)
+						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: ethereum | cardano | monero | nem | neo | ripple | stellar"
+							<> O.help "Type of blockchain: bitcoin | ethereum | cardano | monero | nem | neo | ripple | stellar"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -122,7 +136,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: ethereum | erc20tokens | cardano | iota | monero | nem | neo | ripple | stellar"
+							<> O.help "Type of schema: bitcoin | ethereum | erc20tokens | cardano | iota | monero | nem | neo | ripple | stellar"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -182,6 +196,8 @@ data Options = Options
 data OptionCommand
 	= OptionExportCommand
 		{ options_apiUrl :: !String
+		, options_apiUrlUserName :: !String
+		, options_apiUrlPassword :: !String
 		, options_blockchain :: !T.Text
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
@@ -220,6 +236,8 @@ run Options
 
 	OptionExportCommand
 		{ options_apiUrl = apiUrl
+		, options_apiUrlUserName = apiUrlUserName
+		, options_apiUrlPassword = apiUrlPassword
 		, options_blockchain = blockchainType
 		, options_beginBlock = maybeBeginBlock
 		, options_endBlock = maybeEndBlock
@@ -234,28 +252,36 @@ run Options
 		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
 			{ H.managerConnCount = threadsCount * 2
 			}
-		let withDefaultApiUrl defaultApiUrl = if null apiUrl then defaultApiUrl else apiUrl
+		let parseApiUrl defaultApiUrl = do
+			let url = if null apiUrl then defaultApiUrl else apiUrl
+			httpRequest <- H.parseRequest url
+			return $ if not (null apiUrlUserName) || not (null apiUrlPassword)
+				then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
+				else httpRequest
 		(SomeBlockChain blockChain, defaultBeginBlock, defaultEndBlock) <- case blockchainType of
+			"bitcoin" -> do
+				httpRequest <- parseApiUrl "http://127.0.0.1:8332/"
+				return (SomeBlockChain $ newBitcoin httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
 			"ethereum" -> do
-				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8545/"
+				httpRequest <- parseApiUrl "http://127.0.0.1:8545/"
 				return (SomeBlockChain $ newEthereum httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
 			"cardano" -> do
-				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:8100/"
+				httpRequest <- parseApiUrl "http://127.0.0.1:8100/"
 				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
 			"monero" -> do
-				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:18081/json_rpc"
+				httpRequest <- parseApiUrl "http://127.0.0.1:18081/json_rpc"
 				return (SomeBlockChain $ newMonero httpManager httpRequest, 0, -60) -- conservative rewrite limit
 			"nem" -> do
-				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:7890/"
+				httpRequest <- parseApiUrl "http://127.0.0.1:7890/"
 				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- actual rewrite limit
 			"neo" -> do
-				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://127.0.0.1:10332/"
+				httpRequest <- parseApiUrl "http://127.0.0.1:10332/"
 				return (SomeBlockChain $ newNeo httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
 			"ripple" -> do
-				httpRequest <- H.parseRequest $ withDefaultApiUrl "https://data.ripple.com/"
+				httpRequest <- parseApiUrl "https://data.ripple.com/"
 				return (SomeBlockChain $ newRipple httpManager httpRequest, 32570, 0) -- history data, no rewrites
 			"stellar" -> do
-				httpRequest <- H.parseRequest $ withDefaultApiUrl "http://history.stellar.org/prd/core-live/core_live_001"
+				httpRequest <- parseApiUrl "http://history.stellar.org/prd/core-live/core_live_001"
 				stellar <- newStellar httpManager httpRequest (2 + threadsCount `quot` 64)
 				return (SomeBlockChain stellar, 1, 0) -- history data, no rewrites
 			_ -> fail "wrong blockchain specified"
