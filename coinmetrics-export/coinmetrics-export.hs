@@ -470,6 +470,16 @@ run Options
 		{ options_schema = schemaTypeStr
 		, options_storage = storageTypeStr
 		} -> case (schemaTypeStr, storageTypeStr) of
+		("bitcoin", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy BitcoinVin)
+				, schemaOf (Proxy :: Proxy BitcoinVout)
+				, schemaOf (Proxy :: Proxy BitcoinTransaction)
+				, schemaOf (Proxy :: Proxy BitcoinBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"bitcoin\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
+		("bitcoin", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy BitcoinBlock)
 		("ethereum", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy EthereumLog)
