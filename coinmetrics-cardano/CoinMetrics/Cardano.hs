@@ -54,7 +54,6 @@ cardanoRequest Cardano
 
 instance BlockChain Cardano where
 	type Block Cardano = CardanoBlock
-	type Transaction Cardano = CardanoTransaction
 
 	-- pageSize param doesn't work anymore
 	-- getCurrentBlockHeight cardano = either fail return =<< cardanoRequest cardano "/api/blocks/pages/total" [("pageSize", Just "1")]

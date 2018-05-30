@@ -93,7 +93,6 @@ withCheckpointCache stellar@Stellar
 
 instance BlockChain Stellar where
 	type Block Stellar = StellarLedger
-	type Transaction Stellar = StellarTransaction
 
 	getCurrentBlockHeight stellar = either fail return
 		. (J.parseEither (J..: "currentLedger") <=< J.eitherDecode)

@@ -55,7 +55,6 @@ nemRequest Nem
 
 instance BlockChain Nem where
 	type Block Nem = NemBlock
-	type Transaction Nem = NemTransaction
 
 	getCurrentBlockHeight nem = either fail return
 		. (J.parseEither (J..: "height"))

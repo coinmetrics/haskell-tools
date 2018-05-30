@@ -47,7 +47,7 @@ data EthereumBlock = EthereumBlock
 	, eb_gasLimit :: {-# UNPACK #-} !Int64
 	, eb_gasUsed :: {-# UNPACK #-} !Int64
 	, eb_timestamp :: {-# UNPACK #-} !Int64
-	, eb_transactions :: !(V.Vector (Transaction Ethereum))
+	, eb_transactions :: !(V.Vector EthereumTransaction)
 	, eb_uncles :: !(V.Vector EthereumUncleBlock)
 	} deriving Generic
 
@@ -196,7 +196,6 @@ newEthereum httpManager httpRequest = Ethereum $ newJsonRpc httpManager httpRequ
 
 instance BlockChain Ethereum where
 	type Block Ethereum = EthereumBlock
-	type Transaction Ethereum = EthereumTransaction
 
 	getCurrentBlockHeight (Ethereum jsonRpc) = do
 		J.Success height <- J.parse decode0xHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" ([] :: V.Vector J.Value)

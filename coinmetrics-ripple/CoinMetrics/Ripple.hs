@@ -60,7 +60,6 @@ rippleRequest Ripple
 
 instance BlockChain Ripple where
 	type Block Ripple = RippleLedger
-	type Transaction Ripple = RippleTransaction
 
 	getCurrentBlockHeight ripple = either fail return
 		. J.parseEither ((J..: "ledger_index") <=< (J..: "ledger"))

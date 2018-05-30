@@ -150,7 +150,6 @@ newMonero httpManager httpRequest = Monero $ newJsonRpc httpManager httpRequest 
 
 instance BlockChain Monero where
 	type Block Monero = MoneroBlock
-	type Transaction Monero = MoneroTransaction
 
 	getCurrentBlockHeight (Monero jsonRpc) =
 		either fail (return . (+ (-1))) . J.parseEither (J..: "count") =<< jsonRpcRequest jsonRpc "getblockcount" J.Null

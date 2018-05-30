@@ -125,7 +125,6 @@ newNeo httpManager httpRequest = Neo $ newJsonRpc httpManager httpRequest Nothin
 
 instance BlockChain Neo where
 	type Block Neo = NeoBlock
-	type Transaction Neo = NeoTransaction
 
 	getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 

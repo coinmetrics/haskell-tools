@@ -33,7 +33,6 @@ newBitcoin httpManager httpRequest = Bitcoin $ newJsonRpc httpManager httpReques
 
 instance BlockChain Bitcoin where
 	type Block Bitcoin = BitcoinBlock
-	type Transaction Bitcoin = BitcoinTransaction
 
 	getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 

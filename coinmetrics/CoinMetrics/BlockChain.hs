@@ -16,7 +16,6 @@ import Hanalytics.Schema.Postgres
 
 class (A.ToAvro (Block a), ToPostgresText (Block a)) => BlockChain a where
 	type Block a :: *
-	type Transaction a :: *
 	getCurrentBlockHeight :: a -> IO Int64
 	getBlockByHeight :: a -> BlockHeight -> IO (Block a)
 	blockHeightFieldName :: a -> T.Text
