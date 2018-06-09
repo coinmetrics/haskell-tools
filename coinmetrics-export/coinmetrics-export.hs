@@ -343,7 +343,7 @@ run Options
 					-- pause
 					threadDelay 10000000
 					-- repeat
-					step endIndex
+					step $ max i endIndex
 				in step beginBlock
 
 		-- work threads getting blocks from blockchain
