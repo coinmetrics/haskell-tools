@@ -94,6 +94,10 @@ main = run =<< O.execParser parser where
 							(  O.long "continue"
 							<> O.help "Get BEGIN_BLOCK from output, to continue after latest written block. Works with --output-postgres only"
 							)
+						<*> O.switch
+							(  O.long "trace"
+							<> O.help "Perform tracing of actions performed by transactions"
+							)
 						<*> optionOutput
 						<*> O.option O.auto
 							(  O.long "threads"
@@ -202,6 +206,7 @@ data OptionCommand
 		, options_beginBlock :: !BlockHeight
 		, options_endBlock :: !BlockHeight
 		, options_continue :: !Bool
+		, options_trace :: !Bool
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
 		, options_ignoreMissingBlocks :: !Bool
@@ -242,6 +247,7 @@ run Options
 		, options_beginBlock = maybeBeginBlock
 		, options_endBlock = maybeEndBlock
 		, options_continue = continue
+		, options_trace = trace
 		, options_outputFile = outputFile@Output
 			{ output_postgres = maybeOutputPostgres
 			, output_postgresTable = maybePostgresTable
@@ -264,7 +270,7 @@ run Options
 				return (SomeBlockChain $ newBitcoin httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
 			"ethereum" -> do
 				httpRequest <- parseApiUrl "http://127.0.0.1:8545/"
-				return (SomeBlockChain $ newEthereum httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
+				return (SomeBlockChain $ newEthereum httpManager httpRequest trace, 0, -1000) -- very conservative rewrite limit
 			"cardano" -> do
 				httpRequest <- parseApiUrl "http://127.0.0.1:8100/"
 				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
@@ -482,7 +488,8 @@ run Options
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy BitcoinBlock)
 		("ethereum", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy EthereumLog)
+				[ schemaOf (Proxy :: Proxy EthereumAction)
+				, schemaOf (Proxy :: Proxy EthereumLog)
 				, schemaOf (Proxy :: Proxy EthereumTransaction)
 				, schemaOf (Proxy :: Proxy EthereumUncleBlock)
 				, schemaOf (Proxy :: Proxy EthereumBlock)

@@ -6,6 +6,7 @@ module CoinMetrics.Ethereum
 	, EthereumUncleBlock(..)
 	, EthereumTransaction(..)
 	, EthereumLog(..)
+	, EthereumAction(..)
 	) where
 
 import Control.Monad
@@ -17,6 +18,8 @@ import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
+import Data.Monoid
+import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
@@ -27,7 +30,7 @@ import Hanalytics.Schema
 import Hanalytics.Schema.Avro
 import Hanalytics.Schema.Postgres
 
-newtype Ethereum = Ethereum JsonRpc
+data Ethereum = Ethereum !JsonRpc !Bool
 
 data EthereumBlock = EthereumBlock
 	{ eb_number :: {-# UNPACK #-} !Int64
@@ -142,6 +145,7 @@ data EthereumTransaction = EthereumTransaction
 	, et_contractAddress :: !(Maybe B.ByteString)
 	, et_logs :: !(V.Vector EthereumLog)
 	, et_logsBloom :: !(Maybe B.ByteString)
+	, et_actions :: !(V.Vector EthereumAction)
 	} deriving Generic
 
 instance Schemable EthereumTransaction
@@ -161,6 +165,7 @@ instance J.FromJSON EthereumTransaction where
 		<*> (traverse decode0xHexBytes =<< fields J..: "contractAddress")
 		<*> (                      fields J..: "logs")
 		<*> (traverse decode0xHexBytes =<< fields J..:? "logsBloom")
+		<*> (fmap (fromMaybe V.empty) $ fields J..:? "actions")
 
 instance A.HasAvroSchema EthereumTransaction where
 	schema = genericAvroSchema
@@ -191,32 +196,100 @@ instance A.ToAvro EthereumLog where
 	toAvro = genericToAvro
 instance ToPostgresText EthereumLog
 
-newEthereum :: H.Manager -> H.Request -> Ethereum
-newEthereum httpManager httpRequest = Ethereum $ newJsonRpc httpManager httpRequest Nothing
+data EthereumAction = EthereumAction
+	{ ea_stack :: !(V.Vector Int64)
+	-- | Type of action: "call", "create", "reward" or "suicide"
+	, ea_type :: !Int64
+	-- | "from" for "call" and "create", "address" for "suicide"
+	, ea_from :: !(Maybe B.ByteString)
+	-- | "to" for "call", "address" for "create", "author" for "reward", "refund_address" for "suicide"
+	, ea_to :: !(Maybe B.ByteString)
+	-- | "value" for "call", "create", and "reward" , "balance" for "suicide"
+	, ea_value :: !(Maybe Integer)
+	-- | "gas" for "call" and "create"
+	, ea_gas :: !(Maybe Int64)
+	-- | "gas_used" for "call" and "create"
+	, ea_gasUsed :: !(Maybe Int64)
+	} deriving Generic
+
+instance Schemable EthereumAction
+instance SchemableField EthereumAction
+
+instance J.FromJSON EthereumAction where
+	parseJSON = J.withObject "ethereum action" $ \fields -> do
+		action <- fields J..: "action"
+		actionType <- fields J..: "type"
+		stack <- fields J..: "traceAddress"
+		maybeResult <- fields J..:? "result"
+		case actionType :: T.Text of
+			"call" -> EthereumAction stack 0
+				<$> (traverse decode0xHexBytes =<< action J..:? "from")
+				<*> (traverse decode0xHexBytes =<< action J..:? "to")
+				<*> (traverse decode0xHexNumber =<< action J..:? "value")
+				<*> (traverse decode0xHexNumber =<< action J..:? "gas")
+				<*> (traverse (decode0xHexNumber <=< (J..: "gasUsed")) maybeResult)
+			"create" -> EthereumAction stack 1
+				<$> (traverse decode0xHexBytes =<< action J..:? "from")
+				<*> (maybe (return Nothing) (traverse decode0xHexBytes <=< (J..:? "address")) maybeResult)
+				<*> (traverse decode0xHexNumber =<< action J..:? "value")
+				<*> (traverse decode0xHexNumber =<< action J..:? "gas")
+				<*> (traverse (decode0xHexNumber <=< (J..: "gasUsed")) maybeResult)
+			"reward" -> EthereumAction stack 2
+				<$> (return Nothing)
+				<*> (traverse decode0xHexBytes =<< action J..:? "author")
+				<*> (traverse decode0xHexNumber =<< action J..:? "value")
+				<*> (return Nothing)
+				<*> (return Nothing)
+			"suicide" -> EthereumAction stack 3
+				<$> (traverse decode0xHexBytes =<< action J..:? "address")
+				<*> (traverse decode0xHexBytes =<< action J..:? "refund_address")
+				<*> (maybe (return Nothing) (traverse decode0xHexNumber <=< (J..:? "balance")) maybeResult)
+				<*> (return Nothing)
+				<*> (return Nothing)
+			_ -> fail $ "unknown ethereum action: " <> T.unpack actionType
+
+instance A.HasAvroSchema EthereumAction where
+	schema = genericAvroSchema
+instance A.ToAvro EthereumAction where
+	toAvro = genericToAvro
+instance ToPostgresText EthereumAction
+
+newEthereum :: H.Manager -> H.Request -> Bool -> Ethereum
+newEthereum httpManager httpRequest enableTrace = Ethereum (newJsonRpc httpManager httpRequest Nothing) enableTrace
 
 instance BlockChain Ethereum where
 	type Block Ethereum = EthereumBlock
 
-	getCurrentBlockHeight (Ethereum jsonRpc) = do
+	getCurrentBlockHeight (Ethereum jsonRpc _enableTrace) = do
 		J.Success height <- J.parse decode0xHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" ([] :: V.Vector J.Value)
 		return height
 
-	getBlockByHeight (Ethereum jsonRpc) blockHeight = do
+	getBlockByHeight (Ethereum jsonRpc enableTrace) blockHeight = do
 		blockFields <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" ([encode0xHexNumber blockHeight, J.Bool True] :: V.Vector J.Value)
 		J.Success rawTransactions <- return $ J.parse (J..: "transactions") blockFields
 		J.Success unclesHashes <- return $ J.parse (mapM decode0xHexBytes <=< (J..: "uncles")) blockFields
-		transactions <- V.forM rawTransactions $ \rawTransaction -> do
+		blockActions <- if enableTrace
+			then do
+				jsonActions <- jsonRpcRequest jsonRpc "trace_block" ([encode0xHexNumber blockHeight] :: V.Vector J.Value)
+				forM jsonActions $ \jsonAction -> do
+					maybeTxIndex <- either fail return $ J.parseEither (J.withObject "ethereum action" (J..:? "transactionPosition")) jsonAction
+					action <- either fail return $ J.parseEither J.parseJSON jsonAction
+					return (fromMaybe (-1) maybeTxIndex, action)
+			else return V.empty
+		transactions <- flip V.imapM rawTransactions $ \i rawTransaction -> do
 			J.Success transactionHash <- return $ J.parse (J..: "hash") rawTransaction
 			J.Object receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" ([transactionHash] :: V.Vector J.Value)
 			Just gasUsed <- return $ HML.lookup "gasUsed" receiptFields
 			Just contractAddress <- return $ HML.lookup "contractAddress" receiptFields
 			Just logs <- return $ HML.lookup "logs" receiptFields
 			let logsBloom = fromMaybe J.Null $ HML.lookup "logsBloom" receiptFields
+			let actions = J.Array $ V.map snd $ V.filter ((== i) . fst) blockActions
 			return $ J.Object
 				$ HML.insert "gasUsed" gasUsed
 				$ HML.insert "contractAddress" contractAddress
 				$ HML.insert "logs" logs
 				$ HML.insert "logsBloom" logsBloom
+				$ HML.insert "actions" actions
 				rawTransaction
 		uncles <- flip V.imapM unclesHashes $ \i _uncleHash -> do
 			J.Success uncle <- J.fromJSON <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" ([encode0xHexNumber blockHeight, encode0xHexNumber i] :: V.Vector J.Value)
