@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ethereum
 	( newEthereum
@@ -21,6 +21,8 @@ import Data.Maybe
 import Data.Monoid
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import Data.Vector.Instances()
+import qualified Data.Vector.Mutable as VM
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
@@ -197,9 +199,16 @@ instance A.ToAvro EthereumLog where
 instance ToPostgresText EthereumLog
 
 data EthereumAction = EthereumAction
-	{ ea_stack :: !(V.Vector Int64)
+	{
 	-- | Type of action: "call", "create", "reward" or "suicide"
-	, ea_type :: !Int64
+	  ea_type :: !Int64
+	, ea_stack :: !(V.Vector Int64)
+	-- | Call is valid (not errored).
+	, ea_valid :: !Bool
+	-- | Call is succeeded (valid, and operation succeeded).
+	, ea_succeeded :: !Bool
+	-- | Changes to the state made by this call are not reverted.
+	, ea_accounted :: !Bool
 	-- | "from" for "call" and "create", "address" for "suicide"
 	, ea_from :: !(Maybe B.ByteString)
 	-- | "to" for "call", "address" for "create", "author" for "reward", "refund_address" for "suicide"
@@ -221,26 +230,29 @@ instance J.FromJSON EthereumAction where
 		actionType <- fields J..: "type"
 		stack <- fields J..: "traceAddress"
 		maybeResult <- fields J..:? "result"
+		valid <- fields J..: "valid"
+		succeeded <- fields J..: "succeeded"
+		accounted <- fields J..: "accounted"
 		case actionType :: T.Text of
-			"call" -> EthereumAction stack 0
+			"call" -> EthereumAction 0 stack valid succeeded accounted
 				<$> (traverse decode0xHexBytes =<< action J..:? "from")
 				<*> (traverse decode0xHexBytes =<< action J..:? "to")
 				<*> (traverse decode0xHexNumber =<< action J..:? "value")
 				<*> (traverse decode0xHexNumber =<< action J..:? "gas")
 				<*> (traverse (decode0xHexNumber <=< (J..: "gasUsed")) maybeResult)
-			"create" -> EthereumAction stack 1
+			"create" -> EthereumAction 1 stack valid succeeded accounted
 				<$> (traverse decode0xHexBytes =<< action J..:? "from")
 				<*> (maybe (return Nothing) (traverse decode0xHexBytes <=< (J..:? "address")) maybeResult)
 				<*> (traverse decode0xHexNumber =<< action J..:? "value")
 				<*> (traverse decode0xHexNumber =<< action J..:? "gas")
 				<*> (traverse (decode0xHexNumber <=< (J..: "gasUsed")) maybeResult)
-			"reward" -> EthereumAction stack 2
+			"reward" -> EthereumAction 2 stack valid succeeded accounted
 				<$> (return Nothing)
 				<*> (traverse decode0xHexBytes =<< action J..:? "author")
 				<*> (traverse decode0xHexNumber =<< action J..:? "value")
 				<*> (return Nothing)
 				<*> (return Nothing)
-			"suicide" -> EthereumAction stack 3
+			"suicide" -> EthereumAction 3 stack valid succeeded accounted
 				<$> (traverse decode0xHexBytes =<< action J..:? "address")
 				<*> (traverse decode0xHexBytes =<< action J..:? "refund_address")
 				<*> (maybe (return Nothing) (traverse decode0xHexNumber <=< (J..:? "balance")) maybeResult)
@@ -271,35 +283,71 @@ instance BlockChain Ethereum where
 		blockActions <- if enableTrace
 			then do
 				jsonActions <- jsonRpcRequest jsonRpc "trace_block" ([encode0xHexNumber blockHeight] :: V.Vector J.Value)
-				forM jsonActions $ \jsonAction -> do
-					maybeTxIndex <- either fail return $ J.parseEither (J.withObject "ethereum action" (J..:? "transactionPosition")) jsonAction
-					action <- either fail return $ J.parseEither J.parseJSON jsonAction
-					return (fromMaybe (-1) maybeTxIndex, action)
+				-- add valid and succeeded fields, and note transaction indices
+				indexedActions <- forM jsonActions $ \jsonAction -> either fail return $ flip J.parseEither jsonAction $ J.withObject "ethereum action" $ \actionFields -> do
+					let valid = not $ HML.member "error" actionFields
+					succeeded <- let
+						isObject = \case
+							Just (J.Object _) -> True
+							_ -> False
+						in isObject <$> actionFields J..:? "result"
+					txIndex <- fromMaybe (-1) <$> actionFields J..:? "transactionPosition"
+					action <- J.parseJSON $ J.Object
+						$ HML.insert "valid" (J.Bool valid)
+						$ HML.insert "succeeded" (J.Bool succeeded)
+						$ HML.insert "accounted" (J.Bool $ valid && succeeded)
+						actionFields
+					return (txIndex, action)
+				-- propagate succeeded field and remember as "accounted"
+				return $ V.create $ do
+					actions <- V.thaw indexedActions
+					let
+						indexedActionsMap = HML.fromList $ V.toList $ V.map (\(txIndex, action) -> ((txIndex, ea_stack action), action)) indexedActions
+						actionsCount = V.length indexedActions
+						step i actionsMap = when (i < actionsCount) $ do
+							(txIndex, action@EthereumAction
+								{ ea_stack = stack
+								, ea_accounted = accounted
+								}) <- VM.read actions i
+							let
+								parentAccounted = if V.null stack
+									then True
+									else ea_accounted $ actionsMap HML.! (txIndex, V.init stack)
+								newAction = action
+									{ ea_accounted = accounted && parentAccounted
+									}
+							VM.write actions i (txIndex, newAction)
+							step (i + 1) (HML.insert (txIndex, stack) newAction actionsMap)
+						in step 0 indexedActionsMap
+					return actions
 			else return V.empty
 		transactions <- flip V.imapM rawTransactions $ \i rawTransaction -> do
-			J.Success transactionHash <- return $ J.parse (J..: "hash") rawTransaction
-			J.Object receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" ([transactionHash] :: V.Vector J.Value)
-			Just gasUsed <- return $ HML.lookup "gasUsed" receiptFields
-			Just contractAddress <- return $ HML.lookup "contractAddress" receiptFields
-			Just logs <- return $ HML.lookup "logs" receiptFields
-			let logsBloom = fromMaybe J.Null $ HML.lookup "logsBloom" receiptFields
-			let actions = J.Array $ V.map snd $ V.filter ((== i) . fst) blockActions
-			return $ J.Object
-				$ HML.insert "gasUsed" gasUsed
-				$ HML.insert "contractAddress" contractAddress
-				$ HML.insert "logs" logs
-				$ HML.insert "logsBloom" logsBloom
-				$ HML.insert "actions" actions
-				rawTransaction
-		uncles <- flip V.imapM unclesHashes $ \i _uncleHash -> do
-			J.Success uncle <- J.fromJSON <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" ([encode0xHexNumber blockHeight, encode0xHexNumber i] :: V.Vector J.Value)
-			return uncle
-		let jsonBlock = J.Object
-			$ HML.insert "transactions" (J.Array transactions)
-			$ HML.insert "uncles" (J.Array uncles)
+			transactionHash <- either fail return $ J.parseEither (J..: "hash") rawTransaction
+			receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" ([transactionHash] :: V.Vector J.Value)
+			either fail return $ flip J.parseEither receiptFields $ \receiptFields' -> do
+				gasUsed <- receiptFields' J..: "gasUsed"
+				contractAddress <- receiptFields' J..: "contractAddress"
+				logs <- receiptFields' J..: "logs"
+				logsBloom <- fromMaybe J.Null <$> receiptFields' J..:? "logsBloom"
+				transaction <- J.parseJSON $ J.Object
+					$ HML.insert "gasUsed" gasUsed
+					$ HML.insert "contractAddress" contractAddress
+					$ HML.insert "logs" logs
+					$ HML.insert "logsBloom" logsBloom
+					$ HML.insert "actions" (J.Array [])
+					rawTransaction
+				return transaction
+					{ et_actions = V.map snd $ V.filter ((== i) . fst) blockActions
+					}
+		uncles <- flip V.imapM unclesHashes $ \i _uncleHash ->
+			jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" ([encode0xHexNumber blockHeight, encode0xHexNumber i] :: V.Vector J.Value)
+		block <- either fail return $ J.parseEither J.parseJSON $ J.Object
+			$ HML.insert "transactions" (J.Array [])
+			$ HML.insert "uncles" (J.Array [])
 			blockFields
-		case J.fromJSON jsonBlock of
-			J.Success block -> return block
-			J.Error err -> fail err
+		return block
+			{ eb_transactions = transactions
+			, eb_uncles = uncles
+			}
 
 	blockHeightFieldName _ = "number"
