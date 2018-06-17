@@ -99,6 +99,8 @@ In case you need to export a manually selected range of blocks you can use `--be
 
 Higher number of threads talking to blockchain daemon (`--threads` parameter) usually increases speed of synchronization, but only up until some limit: test what number on your machine works better. It usually makes sense to make it even higher when connecting to blockchain daemon via network (daemon URL is set with `--api-url` parameter).
 
+No connection pooling for PostgreSQL is performed, new connection is opened and then closed for every write transaction. Usage of external connection pooling middleware such as `pgbouncer` is advised.
+
 ## Blockchain export defaults
 
 The utility tries to have sane defaults for most parameters. Note that rewriting history is not supported, and utility is supposed to export main chain only, therefore on most blockchains we have to keep distance from top block (usually called "rewrite limit"), in case the daemon got wrong chain; this distance is specified as negative value of `--end-block` parameter. The exception is Ripple and Stellar, because for them we use history data instead of live node data, and it's never rewritten.
