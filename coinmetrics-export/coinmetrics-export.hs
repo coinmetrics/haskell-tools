@@ -609,17 +609,16 @@ run Options
 					Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map (postgresSqlInsertGroup tableName) blocks]
 					Nothing -> []
 				, case maybeOutputPostgres of
-					Just outputPostgres ->
-						[ do
-							connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
-							connectionStatus <- PQ.status connection
-							unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
-							forM_ blocks $ \block -> do
-								resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSqlInsertGroup tableName block
-								unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus
-							PQ.finish connection
-							]
+					Just outputPostgres -> [mapM_ (writeBlockToPostgres outputPostgres tableName) blocks]
 					Nothing -> []
 				]
+
+		writeBlockToPostgres outputPostgres tableName block = do
+			connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
+			connectionStatus <- PQ.status connection
+			unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
+			resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSqlInsertGroup tableName block
+			unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus
+			PQ.finish connection
 
 		concatFields = foldr1 $ \a b -> a <> ", " <> b
