@@ -487,10 +487,10 @@ run Options
 		-- thread adding milestones to hash queue
 		void $ forkIO $ forever $ do
 			-- get milestone
-			latestMilestoneHash <- iotaGetLatestMilestone iota
-			hPutStrLn stderr $ "latest milestone: " <> T.unpack latestMilestoneHash
-			-- put milestone into queue
-			addHash latestMilestoneHash
+			milestones <- iotaGetMilestones iota
+			hPutStrLn stderr $ "milestones: " <> show milestones
+			-- put milestones into queue
+			mapM_ addHash milestones
 			-- output queue size
 			queueSize <- readTVarIO queueSizeVar
 			hPutStrLn stderr $ "queue size: " <> show queueSize
@@ -499,7 +499,10 @@ run Options
 
 		-- work threads getting transactions from blockchain
 		forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
-			hashes <- V.fromList <$> atomically (takeHashes 10)
+			hashes <- atomically $ do
+				hashes <- V.fromList <$> takeHashes 10
+				when (V.null hashes) retry
+				return hashes
 			transactions <- iotaGetTransactions iota hashes
 			forM_ transactions $ \transaction@IotaTransaction
 				{ it_trunkTransaction = trunkTransaction

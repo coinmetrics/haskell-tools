@@ -5,7 +5,7 @@ module CoinMetrics.Iota
 	, Iota(..)
 	, newIota
 	, iotaGetTips
-	, iotaGetLatestMilestone
+	, iotaGetMilestones
 	, iotaGetTransactions
 	) where
 
@@ -152,10 +152,14 @@ iotaGetTips iota = iotaRequest iota (J..: "hashes") $ J.Object
 	[ ("command", "getTips")
 	]
 
-iotaGetLatestMilestone :: Iota -> IO T.Text
-iotaGetLatestMilestone iota = iotaRequest iota (J..: "latestMilestone") $ J.Object
+iotaGetMilestones :: Iota -> IO (V.Vector T.Text)
+iotaGetMilestones iota = iotaRequest iota parseMilestones $ J.Object
 	[ ("command", "getNodeInfo")
-	]
+	] where
+	parseMilestones o = do
+		milestone <- o J..: "latestMilestone"
+		solidMilestone <- o J..: "latestSolidSubtangleMilestone"
+		return $ V.fromList [milestone, solidMilestone]
 
 iotaGetTransactions :: Iota -> V.Vector T.Text -> IO (V.Vector IotaTransaction)
 iotaGetTransactions iota hashes = f <$> iotaRequest iota (J..: "trytes") (J.Object
