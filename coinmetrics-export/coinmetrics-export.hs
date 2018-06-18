@@ -25,6 +25,7 @@ import qualified Database.PostgreSQL.LibPQ as PQ
 import qualified Network.HTTP.Client as H
 import qualified Network.HTTP.Client.TLS as H
 import qualified Options.Applicative as O
+import System.Directory
 import System.IO
 import System.IO.Unsafe
 
@@ -400,7 +401,10 @@ run Options
 	OptionExportIotaCommand
 		{ options_apiUrl = apiUrl
 		, options_syncDbFile = syncDbFile
-		, options_outputFile = outputFile
+		, options_outputFile = outputFile@Output
+			{ output_postgres = maybeOutputPostgres
+			, output_postgresTable = maybePostgresTable
+			}
 		, options_threadsCount = threadsCount
 		} -> do
 		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
@@ -417,16 +421,33 @@ run Options
 
 		-- thread working with sync db
 		syncDbActionsQueue <- newTQueueIO
+		removeFile syncDbFile `catch` (\SomeException {} -> return ())
 		void $ forkIO $ DH.withDiskHashRW syncDbFile 82 $ \syncDb -> forever $ do
 			action <- atomically $ readTQueue syncDbActionsQueue
 			action syncDb
 
+		outputPostgres <- maybe (fail "postgres output is mandatory") return maybeOutputPostgres
+
 		let addHash hash@(T.encodeUtf8 -> hashBytes) = atomically $ writeTQueue syncDbActionsQueue $ \syncDb -> do
 			hashProcessed <- isJust <$> DH.htLookupRW hashBytes syncDb
-			unless (hashProcessed) $ do
+			unless hashProcessed $ do
 				ok <- DH.htInsert hashBytes () syncDb
 				unless ok $ fail "can't write into sync db"
-				atomically $ do
+
+				-- check that hash is not in the database
+				connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
+				connectionStatus <- PQ.status connection
+				unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
+				let query = "SELECT COUNT(*) FROM " <> maybe "iota" T.pack maybePostgresTable <> " WHERE \"hash\" = '" <> hash <> "'"
+				result <- maybe (fail "cannot get hash status from postgres") return =<< PQ.execParams connection (T.encodeUtf8 query) [] PQ.Text
+				resultStatus <- PQ.resultStatus result
+				unless (resultStatus == PQ.TuplesOk) $ fail $ "cannot get hash status from postgres: " <> show resultStatus
+				tuplesCount <- PQ.ntuples result
+				unless (tuplesCount == 1) $ fail "cannot decode tuples from postgres"
+				inDatabase <- maybe False (/= "0") <$> PQ.getvalue result 0 0
+				PQ.finish connection
+
+				unless inDatabase $ atomically $ do
 					writeTQueue hashQueue hash
 					modifyTVar' queueSizeVar (+ 1)
 
@@ -439,6 +460,29 @@ run Options
 						step (n - 1) (hash : hashes)
 					Nothing -> return hashes
 			in step limit []
+
+		-- initial hashes (ones pointed by other hashes, but not in the database)
+		do
+			connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
+			connectionStatus <- PQ.status connection
+			unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
+			let tableName = maybe "iota" T.pack maybePostgresTable
+			let query = "SELECT q.\"hash\" FROM ( \
+				\ (SELECT t.\"trunkTransaction\" \"hash\" FROM " <> tableName <> " t LEFT JOIN " <> tableName <> " a ON t.\"trunkTransaction\" = a.\"hash\" WHERE t.\"trunkTransaction\" IS NOT NULL AND a IS NULL) \
+				\ UNION \
+				\ (SELECT t.\"branchTransaction\" \"hash\" FROM " <> tableName <> " t LEFT JOIN " <> tableName <> " b ON t.\"branchTransaction\" = b.\"hash\" WHERE t.\"branchTransaction\" IS NOT NULL AND b IS NULL) \
+				\ ) q"
+			result <- maybe (fail "cannot get initial hashes from postgres") return =<< PQ.execParams connection (T.encodeUtf8 query) [] PQ.Text
+			resultStatus <- PQ.resultStatus result
+			unless (resultStatus == PQ.TuplesOk) $ fail $ "cannot get initial hashes from postgres: " <> show resultStatus
+			tuplesCount <- PQ.ntuples result
+			let
+				step i = when (i < tuplesCount) $ do
+					hash <- maybe (fail "failed to get initial hash from postgres") (return . T.decodeUtf8) =<< PQ.getvalue result i 0
+					addHash hash
+					step $ i + 1
+				in step 0
+			PQ.finish connection
 
 		-- thread adding milestones to hash queue
 		void $ forkIO $ forever $ do

@@ -32,6 +32,7 @@ executable coinmetrics-export
     , hanalytics-base
     , hanalytics-bigquery
     , hanalytics-postgres
+    , directory
     , diskhash
     , http-client
     , http-client-tls
