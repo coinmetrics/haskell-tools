@@ -499,7 +499,7 @@ run Options
 
 		-- work threads getting transactions from blockchain
 		forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
-			hashes <- V.fromList <$> atomically (takeHashes 1000)
+			hashes <- V.fromList <$> atomically (takeHashes 10)
 			transactions <- iotaGetTransactions iota hashes
 			forM_ transactions $ \transaction@IotaTransaction
 				{ it_trunkTransaction = trunkTransaction
