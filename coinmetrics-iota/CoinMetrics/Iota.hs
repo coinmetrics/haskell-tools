@@ -7,6 +7,7 @@ module CoinMetrics.Iota
 	, iotaGetTips
 	, iotaGetMilestones
 	, iotaGetTransactions
+	, deserIotaTransaction
 	) where
 
 import Control.Monad

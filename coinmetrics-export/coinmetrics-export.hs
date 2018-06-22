@@ -14,9 +14,11 @@ import Data.Either
 import Data.Maybe
 import Data.Monoid
 import Data.Proxy
+import qualified Data.Serialize as S
 import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TL
 import qualified Data.Text.Lazy.Encoding as TL
@@ -126,6 +128,10 @@ main = run =<< O.execParser parser where
 							<> O.metavar "SYNC_DB"
 							<> O.help "Sync DB file"
 							)
+						<*> O.switch
+							(  O.long "read-dump"
+							<> O.help "Read transaction dump from stdin"
+							)
 						<*> optionOutput
 						<*> O.option O.auto
 							(  O.long "threads"
@@ -215,6 +221,7 @@ data OptionCommand
 	| OptionExportIotaCommand
 		{ options_apiUrl :: !String
 		, options_syncDbFile :: !String
+		, options_readDump :: !Bool
 		, options_outputFile :: !Output
 		, options_threadsCount :: !Int
 		}
@@ -401,6 +408,7 @@ run Options
 	OptionExportIotaCommand
 		{ options_apiUrl = apiUrl
 		, options_syncDbFile = syncDbFile
+		, options_readDump = readDump
 		, options_outputFile = outputFile@Output
 			{ output_postgres = maybeOutputPostgres
 			, output_postgresTable = maybePostgresTable
@@ -420,15 +428,15 @@ run Options
 		queueSizeVar <- newTVarIO 0 :: IO (TVar Int)
 
 		-- thread working with sync db
-		syncDbActionsQueue <- newTQueueIO
+		syncDbActionsQueue <- newTBQueueIO (threadsCount * 2)
 		removeFile syncDbFile `catch` (\SomeException {} -> return ())
 		void $ forkIO $ DH.withDiskHashRW syncDbFile 82 $ \syncDb -> forever $ do
-			action <- atomically $ readTQueue syncDbActionsQueue
+			action <- atomically $ readTBQueue syncDbActionsQueue
 			action syncDb
 
 		outputPostgres <- maybe (fail "postgres output is mandatory") return maybeOutputPostgres
 
-		let addHash hash@(T.encodeUtf8 -> hashBytes) = atomically $ writeTQueue syncDbActionsQueue $ \syncDb -> do
+		let checkHash hash@(T.encodeUtf8 -> hashBytes) f = atomically $ writeTBQueue syncDbActionsQueue $ \syncDb -> do
 			hashProcessed <- isJust <$> DH.htLookupRW hashBytes syncDb
 			unless hashProcessed $ do
 				ok <- DH.htInsert hashBytes () syncDb
@@ -447,9 +455,15 @@ run Options
 				inDatabase <- maybe False (/= "0") <$> PQ.getvalue result 0 0
 				PQ.finish connection
 
-				unless inDatabase $ atomically $ do
-					writeTQueue hashQueue hash
-					modifyTVar' queueSizeVar (+ 1)
+				unless inDatabase f
+
+		let addHash hash = checkHash hash $ atomically $ do
+			writeTQueue hashQueue hash
+			modifyTVar' queueSizeVar (+ 1)
+
+		let addTransaction transaction@IotaTransaction
+			{ it_hash = hash
+			} = checkHash hash $ atomically $ writeTBQueue transactionQueue transaction
 
 		let takeHashes limit = let
 			step n hashes = if n <= (0 :: Int) then return hashes else do
@@ -461,8 +475,21 @@ run Options
 					Nothing -> return hashes
 			in step limit []
 
+		-- read dumps from stdin
+		when readDump $ void $ forkIO $ let
+			step i = do
+				maybeLine <- either (\SomeException {} -> return Nothing) (return . Just) =<< try T.getLine
+				case maybeLine of
+					Just (T.splitOn "," -> [transactionHash@(T.length -> 81), transactionData@(T.length -> 2673)]) -> do
+						transaction <- either (fail "failed to parse transaction from dump") return $ S.runGet (deserIotaTransaction transactionHash) $ T.encodeUtf8 transactionData
+						addTransaction transaction
+						step $ i + 1
+					Nothing -> hPutStrLn stderr $ "read " <> show i <> " transactions from dump"
+					_ -> fail "wrong line in transaction dump"
+			in step (0 :: Int)
+
 		-- initial hashes (ones pointed by other hashes, but not in the database)
-		do
+		unless readDump $ do
 			connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
 			connectionStatus <- PQ.status connection
 			unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
@@ -485,7 +512,7 @@ run Options
 			PQ.finish connection
 
 		-- thread adding milestones to hash queue
-		void $ forkIO $ forever $ do
+		unless readDump $ void $ forkIO $ forever $ do
 			-- get milestone
 			milestones <- iotaGetMilestones iota
 			hPutStrLn stderr $ "milestones: " <> show milestones
@@ -498,7 +525,7 @@ run Options
 			threadDelay 10000000
 
 		-- work threads getting transactions from blockchain
-		forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
+		unless readDump $ forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
 			hashes <- atomically $ do
 				hashes <- V.fromList <$> takeHashes 10
 				when (V.null hashes) retry

@@ -19,6 +19,7 @@ executable coinmetrics-export
     , avro
     , base
     , bytestring
+    , cereal
     , coinmetrics
     , coinmetrics-bitcoin
     , coinmetrics-cardano
