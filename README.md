@@ -116,6 +116,25 @@ The utility tries to have sane defaults for most parameters. Note that rewriting
 | `ripple` | `https://data.ripple.com/` | `32570` ([genesis ledger](https://ripple.com/build/data-api-v2/#genesis-ledger)) | `0` (history data, no rewrites) |
 | `stellar` | `http://history.stellar.org/prd/core-live/core_live_001` | `1` | `0` (history data, no rewrites) |
 
-## Note on IOTA
+## Exporting IOTA
 
-IOTA is harder to synchronize than other blockchains because of its non-linear nature. There's separate command in the works (`export-iota`), but it is not really supported at the moment.
+There is a separate command `export-iota` for exporting IOTA transaction data. PostgreSQL database output is required at the moment. Run like this:
+
+```bash
+coinmetrics-export export-iota \
+	--sync-db iota-sync.db \
+	--threads 16 \
+	--output-postgres "host=127.0.0.1 user=postgres"
+```
+
+The tool can be safely interrupted as it resumes synchronization upon restart. It maintains a small single-file internal helper database (denoted by `--sync-db`) which is not needed to be persisted as it is recreated from scratch on every restart. On start the tool performs special one-time discovery query against PostgreSQL in order to get a list of non-synchronized transactions (i.e. ones referenced by other transactions but not yet existing in database), so it is able to "fill holes" left after interruption.
+
+Normally IOTA node is able to only return transactions happened after latest snapshot. If you have a textual dump file with previous transactions, you can import it using `--read-dump` switch:
+
+```bash
+coinmetrics-export export-iota \
+	--sync-db iota-sync.db \
+	--read-dump \
+	--output-postgres "host=127.0.0.1 user=postgres" \
+	< transactions.dmp
+```
