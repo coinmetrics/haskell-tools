@@ -118,7 +118,7 @@ The utility tries to have sane defaults for most parameters. Note that rewriting
 
 ## Exporting IOTA
 
-There is a separate command `export-iota` for exporting IOTA transaction data. PostgreSQL database output is required at the moment. Run like this:
+There is a separate command `export-iota` for exporting IOTA transaction data. Comparing to `export` command, `export-iota` essentially always works in `--continue` mode and there is no way to specify synchronization bounds. Also PostgreSQL database output is required at the moment. Run like this:
 
 ```bash
 coinmetrics-export export-iota \
