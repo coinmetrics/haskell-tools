@@ -124,6 +124,7 @@ data RippleTransaction = RippleTransaction
 	, rt_currency :: !(Maybe T.Text)
 	, rt_issuer :: !(Maybe T.Text)
 	, rt_destination :: !(Maybe T.Text)
+	, rt_result :: !T.Text
 	} deriving Generic
 
 instance Schemable RippleTransaction
@@ -146,6 +147,7 @@ instance J.FromJSON RippleTransaction where
 						return (Just amount, Just currency, Just issuer)
 					_ -> fail "wrong amount"
 				Nothing -> return (Nothing, Nothing, Nothing)
+		meta <- fields J..: "meta"
 		RippleTransaction
 			<$> (decodeHexBytes =<< fields J..: "hash")
 			<*> (decodeDate =<< fields J..: "date")
@@ -156,6 +158,7 @@ instance J.FromJSON RippleTransaction where
 			<*> (return maybeCurrency)
 			<*> (return maybeIssuer)
 			<*> (tx J..:? "Destination")
+			<*> (meta J..: "TransactionResult")
 
 instance A.HasAvroSchema RippleTransaction where
 	schema = genericAvroSchema
