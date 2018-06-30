@@ -199,6 +199,10 @@ main = run =<< O.execParser parser where
 			<> O.metavar "PACK_SIZE"
 			<> O.help "Number of records in pack (SQL INSERT command, or Avro block)"
 			)
+		<*> O.switch
+			(  O.long "upsert"
+			<> O.help "Perform UPSERT instead of INSERT"
+			)
 
 data Options = Options
 	{ options_command :: !OptionCommand
@@ -240,6 +244,7 @@ data Output = Output
 	, output_postgres :: !(Maybe String)
 	, output_postgresTable :: !(Maybe String)
 	, output_packSize :: !Int
+	, output_upsert :: !Bool
 	}
 
 run :: Options -> IO ()
@@ -299,6 +304,15 @@ run Options
 				stellar <- newStellar httpManager httpRequest (2 + threadsCount `quot` 64)
 				return (SomeBlockChain stellar, 1, 0) -- history data, no rewrites
 			_ -> fail "wrong blockchain specified"
+
+		let
+			schema = let
+				p :: BlockChain a => a -> Block a
+				p _ = undefined
+				q :: a -> Proxy a
+				q _ = Proxy
+				in schemaOf $ q $ p blockChain
+			primaryField = blockHeightFieldName blockChain
 
 		-- get begin block, from output postgres if needed
 		beginBlock <- if maybeBeginBlock >= 0 then return maybeBeginBlock else
@@ -402,7 +416,7 @@ run Options
 				when (blockIndex `rem` 100 == 0) $ hPutStrLn stderr $ "synced up to " ++ show blockIndex
 				(block :) <$> step (blockIndex + 1)
 			else return []
-		writeOutput outputFile blockchainType =<< step beginBlock
+		writeOutput outputFile blockchainType schema primaryField =<< step beginBlock
 		hPutStrLn stderr $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
@@ -544,7 +558,7 @@ run Options
 			transaction <- atomically $ readTBQueue transactionQueue
 			when (i `rem` 100 == 0) $ hPutStrLn stderr $ "synced transactions: " ++ show i
 			(transaction :) <$> step (i + 1)
-		writeOutput outputFile "iota" =<< step (0 :: Int)
+		writeOutput outputFile "iota" (schemaOf (Proxy :: Proxy IotaTransaction)) "hash" =<< step (0 :: Int)
 
 	OptionPrintSchemaCommand
 		{ options_schema = schemaTypeStr
@@ -646,7 +660,7 @@ run Options
 		, options_outputFile = outputFile
 		} -> do
 		tokensInfos <- either fail return . J.eitherDecode' =<< BL.readFile inputJsonFile
-		writeOutput outputFile "erc20tokens" (tokensInfos :: [ERC20Info])
+		writeOutput outputFile "erc20tokens" (schemaOf (Proxy :: Proxy ERC20Info)) "symbol" (tokensInfos :: [ERC20Info])
 
 	where
 		blockSplit :: Int -> [a] -> [[a]]
@@ -654,14 +668,15 @@ run Options
 			[] -> []
 			xs -> let (a, b) = splitAt packSize xs in a : blockSplit packSize b
 
-		writeOutput :: (A.ToAvro a, ToPostgresText a) => Output -> T.Text -> [a] -> IO ()
+		writeOutput :: (A.ToAvro a, ToPostgresText a) => Output -> T.Text -> Schema -> T.Text -> [a] -> IO ()
 		writeOutput Output
 			{ output_avroFile = maybeOutputAvroFile
 			, output_postgresFile = maybeOutputPostgresFile
 			, output_postgres = maybeOutputPostgres
 			, output_postgresTable = maybePostgresTable
 			, output_packSize = packSize
-			} defaultTableName (blockSplit packSize -> blocks) = do
+			, output_upsert = upsert
+			} defaultTableName schema primaryField (blockSplit packSize -> blocks) = do
 			vars <- forM outputs $ \output -> do
 				var <- newTVarIO Nothing
 				void $ forkFinally output $ atomically . writeTVar var . Just
@@ -675,24 +690,29 @@ run Options
 				print erroredResults
 				fail "output failed"
 
-			where outputs = let tableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable in concat
-				[ case maybeOutputAvroFile of
-					Just outputAvroFile -> [BL.writeFile outputAvroFile =<< A.encodeContainer blocks]
-					Nothing -> []
-				, case maybeOutputPostgresFile of
-					Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map (postgresSqlInsertGroup tableName) blocks]
-					Nothing -> []
-				, case maybeOutputPostgres of
-					Just outputPostgres -> [mapM_ (writeBlockToPostgres outputPostgres tableName) blocks]
-					Nothing -> []
-				]
+			where
+				outputs = concat
+					[ case maybeOutputAvroFile of
+						Just outputAvroFile -> [BL.writeFile outputAvroFile =<< A.encodeContainer blocks]
+						Nothing -> []
+					, case maybeOutputPostgresFile of
+						Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map postgresSql blocks]
+						Nothing -> []
+					, case maybeOutputPostgres of
+						Just outputPostgres -> [mapM_ (writeBlockToPostgres outputPostgres) blocks]
+						Nothing -> []
+					]
 
-		writeBlockToPostgres outputPostgres tableName block = do
-			connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
-			connectionStatus <- PQ.status connection
-			unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
-			resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSqlInsertGroup tableName block
-			unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus
-			PQ.finish connection
+				writeBlockToPostgres outputPostgres block = do
+					connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
+					connectionStatus <- PQ.status connection
+					unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
+					resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSql block
+					unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus <> " " <> (T.unpack $ TL.toStrict $ TL.toLazyText $ postgresSql block)
+					PQ.finish connection
+
+				postgresSql = (if upsert then postgresSqlUpsertGroup primaryField else postgresSqlInsertGroup) schema tableName
+
+				tableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable
 
 		concatFields = foldr1 $ \a b -> a <> ", " <> b

@@ -22,6 +22,7 @@ library
     , avro
     , base
     , bytestring
+    , hanalytics-base
     , hanalytics-postgres
     , hashable
     , http-client
