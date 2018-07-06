@@ -9,6 +9,7 @@ module CoinMetrics.Util
 	, decode0xHexNumber
 	, decodeReadStr
 	, tryWithRepeat
+	, currentLocalTimeToUTC
 	) where
 
 import Control.Concurrent
@@ -20,7 +21,10 @@ import qualified Data.ByteString as B
 import Data.Monoid
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock
+import Data.Time.LocalTime
 import Numeric
+import System.IO.Unsafe
 
 encodeHexBytes :: B.ByteString -> J.Value
 encodeHexBytes = J.String . T.decodeUtf8 . BA.convertToBase BA.Base16
@@ -65,3 +69,10 @@ tryWithRepeat io = let
 					step (i + 1)
 		else fail "repeating failed"
 	in step (0 :: Int)
+
+currentLocalTimeToUTC :: LocalTime -> UTCTime
+currentLocalTimeToUTC = localTimeToUTC currentTimeZone
+
+{-# NOINLINE currentTimeZone #-}
+currentTimeZone :: TimeZone
+currentTimeZone = unsafePerformIO getCurrentTimeZone

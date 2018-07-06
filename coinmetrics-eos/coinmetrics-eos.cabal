@@ -1,4 +1,4 @@
-name:                coinmetrics
+name:                coinmetrics-eos
 version:             0.1.0.0
 -- synopsis:            
 -- description:         
@@ -13,20 +13,18 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-    CoinMetrics.BlockChain
-    CoinMetrics.JsonRpc
-    CoinMetrics.Schema.Util
-    CoinMetrics.Util
+    CoinMetrics.EOS
   build-depends:
     aeson
     , avro
     , base
     , bytestring
+    , coinmetrics
+    , hanalytics-avro
     , hanalytics-base
     , hanalytics-postgres
-    , hashable
     , http-client
-    , memory
     , text
     , time
+    , vector
   default-language:    Haskell2010

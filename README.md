@@ -14,6 +14,7 @@ Supported cryptocurrencies:
 * [Bitcoin](https://bitcoin.org/) (WIP)
 * [Ethereum](https://www.ethereum.org/)
 * [Cardano](https://www.cardanohub.org/)
+* [EOS](https://eos.io/) (WIP)
 * [IOTA](https://iota.org/)
 * [Monero](https://getmonero.org/)
 * [NEM](https://nem.io/)
@@ -48,6 +49,7 @@ Alternatively you can download binaries from Bintray:
 * `coinmetrics` - library with some base primitives for exporting blockchain data into different formats.
 * `coinmetrics-bitcoin` - library specific to Bitcoin.
 * `coinmetrics-cardano` - library specific to Cardano.
+* `coinmetrics-eos` - library specific to EOS.
 * `coinmetrics-ethereum` - library specific to Ethereum.
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
 * `coinmetrics-iota` - library specific to IOTA.
@@ -128,6 +130,7 @@ The tool tries to have sane defaults for most parameters. Note that as the tool 
 |----------------|----------------------------------------------------------|-----------------|---------------|
 | `bitcoin`      | `http://127.0.0.1:8332/`                                 | `0`             | `-1000`       |
 | `cardano`      | `http://127.0.0.1:8100/`                                 | `2`             | `-1000`       |
+| `eos`          | `http://127.0.0.1:8888/`                                 | `1`             | `-1` (no need in a gap, uses irreversible block number) |
 | `ethereum`     | `http://127.0.0.1:8545/`                                 | `0`             | `-1000`       |
 | `monero`       | `http://127.0.0.1:18081/json_rpc`                        | `0`             | `-60`         |
 | `nem`          | `http://127.0.0.1:7890/`                                 | `1`             | `-360` ([rewrite limit](https://nemproject.github.io/#initiating-transactions)) |

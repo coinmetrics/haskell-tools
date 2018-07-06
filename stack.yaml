@@ -4,6 +4,7 @@ packages:
 - coinmetrics
 - coinmetrics-bitcoin
 - coinmetrics-cardano
+- coinmetrics-eos
 - coinmetrics-ethereum
 - coinmetrics-export
 - coinmetrics-iota

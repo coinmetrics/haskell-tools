@@ -34,6 +34,7 @@ import System.IO.Unsafe
 import CoinMetrics.Bitcoin
 import CoinMetrics.BlockChain
 import CoinMetrics.Cardano
+import CoinMetrics.EOS
 import CoinMetrics.Ethereum
 import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
@@ -79,7 +80,7 @@ main = run =<< O.execParser parser where
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: bitcoin | ethereum | cardano | monero | nem | neo | ripple | stellar"
+							<> O.help "Type of blockchain: bitcoin | ethereum | cardano | eos | monero | nem | neo | ripple | stellar"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -147,7 +148,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: bitcoin | ethereum | erc20tokens | cardano | iota | monero | nem | neo | ripple | stellar"
+							<> O.help "Type of schema: bitcoin | ethereum | erc20tokens | cardano | eos | iota | monero | nem | neo | ripple | stellar"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -287,6 +288,9 @@ run Options
 			"cardano" -> do
 				httpRequest <- parseApiUrl "http://127.0.0.1:8100/"
 				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
+			"eos" -> do
+				httpRequest <- parseApiUrl "http://127.0.0.1:8888/"
+				return (SomeBlockChain $ newEos httpManager httpRequest, 1, -1) -- no need in a gap, as it uses irreversible block number
 			"monero" -> do
 				httpRequest <- parseApiUrl "http://127.0.0.1:18081/json_rpc"
 				return (SomeBlockChain $ newMonero httpManager httpRequest, 0, -60) -- conservative rewrite limit
@@ -599,6 +603,16 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"cardano\" OF \"CardanoBlock\" (PRIMARY KEY (\"height\"));"
 		("cardano", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy CardanoBlock)
+		("eos", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy EosAuthorization)
+				, schemaOf (Proxy :: Proxy EosAction)
+				, schemaOf (Proxy :: Proxy EosTransaction)
+				, schemaOf (Proxy :: Proxy EosBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"eos\" OF \"EosBlock\" (PRIMARY KEY (\"number\"));"
+		("eos", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EosBlock)
 		("iota", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy IotaTransaction)

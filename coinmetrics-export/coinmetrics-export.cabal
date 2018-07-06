@@ -23,6 +23,7 @@ executable coinmetrics-export
     , coinmetrics
     , coinmetrics-bitcoin
     , coinmetrics-cardano
+    , coinmetrics-eos
     , coinmetrics-ethereum
     , coinmetrics-iota
     , coinmetrics-monero
