@@ -113,7 +113,7 @@ instance J.FromJSON EosAction where
 		<$> (fields J..: "account")
 		<*> (fields J..: "name")
 		<*> (fields J..: "authorization")
-		<*> (decodeHexBytes =<< fields J..: "hex_data")
+		<*> (decodeHexBytes =<< maybe (fields J..: "data") return =<< fields J..:? "hex_data")
 
 instance A.HasAvroSchema EosAction where
 	schema = genericAvroSchema
