@@ -76,21 +76,36 @@ instance SchemableField EosTransaction
 
 instance J.FromJSON EosTransaction where
 	parseJSON = J.withObject "eos transaction" $ \fields -> do
-		trx <- fields J..: "trx"
-		trxTrans <- trx J..: "transaction"
-		EosTransaction
-			<$> (decodeHexBytes  =<< trx J..: "id")
-			<*> (fields J..: "status")
-			<*> (fields J..: "cpu_usage_us")
-			<*> (fields J..: "net_usage_words")
-			<*> (round . utcTimeToPOSIXSeconds . currentLocalTimeToUTC <$> trxTrans J..: "expiration")
-			<*> (trxTrans J..: "ref_block_num")
-			<*> (trxTrans J..: "ref_block_prefix")
-			<*> (trxTrans J..: "max_net_usage_words")
-			<*> (trxTrans J..: "max_cpu_usage_ms")
-			<*> (trxTrans J..: "delay_sec")
-			<*> (trxTrans J..: "context_free_actions")
-			<*> (trxTrans J..: "actions")
+		trxVal <- fields J..: "trx"
+		case trxVal of
+			J.Object trx -> do
+				trxTrans <- trx J..: "transaction"
+				EosTransaction
+					<$> (decodeHexBytes =<< trx J..: "id")
+					<*> (fields J..: "status")
+					<*> (fields J..: "cpu_usage_us")
+					<*> (fields J..: "net_usage_words")
+					<*> (round . utcTimeToPOSIXSeconds . currentLocalTimeToUTC <$> trxTrans J..: "expiration")
+					<*> (trxTrans J..: "ref_block_num")
+					<*> (trxTrans J..: "ref_block_prefix")
+					<*> (trxTrans J..: "max_net_usage_words")
+					<*> (trxTrans J..: "max_cpu_usage_ms")
+					<*> (trxTrans J..: "delay_sec")
+					<*> (trxTrans J..: "context_free_actions")
+					<*> (trxTrans J..: "actions")
+			_ -> EosTransaction
+				"" -- id
+				<$> (fields J..: "status")
+				<*> (fields J..: "cpu_usage_us")
+				<*> (fields J..: "net_usage_words")
+				<*> (return 0)
+				<*> (return 0)
+				<*> (return 0)
+				<*> (return 0)
+				<*> (return 0)
+				<*> (return 0)
+				<*> (return [])
+				<*> (return [])
 
 instance A.HasAvroSchema EosTransaction where
 	schema = genericAvroSchema
