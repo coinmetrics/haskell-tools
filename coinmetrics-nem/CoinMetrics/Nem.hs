@@ -16,7 +16,6 @@ import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import Data.Int
 import Data.Maybe
-import Data.Monoid
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V

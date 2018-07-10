@@ -29,14 +29,14 @@ stripBeforeUnderscore = \case
 	[] -> []
 
 -- | ByteString which serializes to JSON as base64 string.
-newtype Base64ByteString = Base64ByteString B.ByteString deriving (Eq, Ord, Monoid, Hashable, BA.ByteArray, BA.ByteArrayAccess)
+newtype Base64ByteString = Base64ByteString B.ByteString deriving (Eq, Ord, Semigroup, Monoid, Hashable, BA.ByteArray, BA.ByteArrayAccess)
 instance J.FromJSON Base64ByteString where
 	parseJSON = either fail return . BA.convertFromBase BA.Base64URLUnpadded . T.encodeUtf8 <=< J.parseJSON
 instance J.ToJSON Base64ByteString where
 	toJSON = J.toJSON . T.decodeUtf8 . BA.convertToBase BA.Base64URLUnpadded
 
 -- | ByteString which serializes to JSON as hex string.
-newtype Base16ByteString = Base16ByteString B.ByteString deriving (Eq, Ord, Monoid, Hashable, BA.ByteArray, BA.ByteArrayAccess)
+newtype Base16ByteString = Base16ByteString B.ByteString deriving (Eq, Ord, Semigroup, Monoid, Hashable, BA.ByteArray, BA.ByteArrayAccess)
 instance J.FromJSON Base16ByteString where
 	parseJSON = either fail return . BA.convertFromBase BA.Base16 . T.encodeUtf8 <=< J.parseJSON
 instance J.ToJSON Base16ByteString where

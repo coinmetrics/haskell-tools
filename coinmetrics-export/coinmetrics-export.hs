@@ -12,7 +12,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.DiskHash as DH
 import Data.Either
 import Data.Maybe
-import Data.Monoid
 import Data.Proxy
 import qualified Data.Serialize as S
 import Data.String

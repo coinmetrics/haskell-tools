@@ -16,7 +16,6 @@ import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import qualified Data.HashMap.Strict as HM
 import Data.Int
-import Data.Monoid
 import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T

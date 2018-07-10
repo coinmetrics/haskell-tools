@@ -15,7 +15,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HM
 import Data.Int
-import Data.Monoid
 import Data.Scientific
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T

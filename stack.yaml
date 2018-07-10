@@ -1,4 +1,4 @@
-resolver: lts-11.10
+resolver: lts-12.0
 
 packages:
 - coinmetrics
@@ -15,11 +15,9 @@ packages:
 - coinmetrics-stellar
 
 extra-deps:
-- avro-0.3.0.4
-- pure-zlib-0.6.3
 - diskhash-0.0.4.0
 - git: https://github.com/quyse/hanalytics.git
-  commit: ac84e9f29b48dc98277a5bac7652505aabda1a7c
+  commit: ab08436ab47a9da8cbe36adbb7d25091049240dd
   subdirs:
   - hanalytics-avro
   - hanalytics-base

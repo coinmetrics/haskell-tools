@@ -18,7 +18,6 @@ import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
-import Data.Monoid
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import Data.Vector.Instances()
