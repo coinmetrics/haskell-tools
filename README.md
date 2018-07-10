@@ -21,6 +21,7 @@ Supported cryptocurrencies:
 * [NEO](https://neo.org/)
 * [Ripple](https://ripple.com/)
 * [Stellar](https://www.stellar.org/)
+* [Waves](https://wavesplatform.com/) (WIP)
 
 ## Prebuilt Binaries (experimental)
 
@@ -58,6 +59,7 @@ Alternatively you can download binaries from Bintray:
 * `coinmetrics-neo` - library specific to NEO.
 * `coinmetrics-ripple` - library specific to Ripple.
 * `coinmetrics-stellar` - library specific to Stellar.
+* `coinmetrics-waves` - library specific to Waves.
 
 ## Building
 
@@ -137,6 +139,7 @@ The tool tries to have sane defaults for most parameters. Note that as the tool 
 | `neo`          | `http://127.0.0.1:10332/`                                | `0`             | `-1000`       |
 | `ripple`       | `https://data.ripple.com/`                               | `32570` ([genesis ledger](https://ripple.com/build/data-api-v2/#genesis-ledger)) | `0` (history data, no rewrites) |
 | `stellar`      | `http://history.stellar.org/prd/core-live/core_live_001` | `1`             | `0` (history data, no rewrites) |
+| `waves`        | `http://127.0.0.1:6869/`                                 | `1`             | `-100`        |
 
 By default the tool issues `INSERT` SQL statements and does not overwrite already synchronized records, but this can be changed with `--upsert` flag.
 

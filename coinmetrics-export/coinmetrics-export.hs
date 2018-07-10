@@ -42,6 +42,7 @@ import CoinMetrics.Nem
 import CoinMetrics.Neo
 import CoinMetrics.Ripple
 import CoinMetrics.Stellar
+import CoinMetrics.Waves
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
@@ -79,7 +80,7 @@ main = run =<< O.execParser parser where
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain: bitcoin | ethereum | cardano | eos | monero | nem | neo | ripple | stellar"
+							<> O.help "Type of blockchain: bitcoin | ethereum | cardano | eos | monero | nem | neo | ripple | stellar | waves"
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -147,7 +148,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema: bitcoin | ethereum | erc20tokens | cardano | eos | iota | monero | nem | neo | ripple | stellar"
+							<> O.help "Type of schema: bitcoin | ethereum | erc20tokens | cardano | eos | iota | monero | nem | neo | ripple | stellar | waves"
 							)
 						<*> O.strOption
 							(  O.long "storage"
@@ -306,6 +307,9 @@ run Options
 				httpRequest <- parseApiUrl "http://history.stellar.org/prd/core-live/core_live_001"
 				stellar <- newStellar httpManager httpRequest (2 + threadsCount `quot` 64)
 				return (SomeBlockChain stellar, 1, 0) -- history data, no rewrites
+			"waves" -> do
+				httpRequest <- parseApiUrl "http://127.0.0.1:6869/"
+				return (SomeBlockChain $ newWaves httpManager httpRequest, 1, -100) -- conservative limit
 			_ -> fail "wrong blockchain specified"
 
 		let
@@ -666,6 +670,16 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"stellar\" OF \"StellarLedger\" (PRIMARY KEY (\"sequence\"));"
 		("stellar", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy StellarLedger)
+		("waves", "postgres") -> do
+			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+				[ schemaOf (Proxy :: Proxy WavesTransfer)
+				, schemaOf (Proxy :: Proxy WavesOrder)
+				, schemaOf (Proxy :: Proxy WavesTransaction)
+				, schemaOf (Proxy :: Proxy WavesBlock)
+				]
+			putStrLn $ T.unpack $ "CREATE TABLE \"waves\" OF \"WavesBlock\" (PRIMARY KEY (\"height\"));"
+		("waves", "bigquery") ->
+			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy WavesBlock)
 		_ -> fail "wrong pair schema+storage"
 
 	OptionExportERC20InfoCommand

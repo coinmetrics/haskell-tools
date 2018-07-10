@@ -31,6 +31,7 @@ executable coinmetrics-export
     , coinmetrics-neo
     , coinmetrics-ripple
     , coinmetrics-stellar
+    , coinmetrics-waves
     , hanalytics-base
     , hanalytics-bigquery
     , hanalytics-postgres
