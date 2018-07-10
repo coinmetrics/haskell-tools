@@ -32,10 +32,10 @@ data Eos = Eos
 
 data EosBlock = EosBlock
 	{ eb_id :: !B.ByteString
-	, eb_number :: !Int64
+	, eb_number :: {-# UNPACK #-} !Int64
 	, eb_timestamp :: {-# UNPACK #-} !Int64
 	, eb_producer :: !T.Text
-	, eb_ref_block_prefix :: !Int64
+	, eb_ref_block_prefix :: {-# UNPACK #-} !Int64
 	, eb_transactions :: !(V.Vector EosTransaction)
 	} deriving Generic
 
@@ -59,14 +59,14 @@ instance ToPostgresText EosBlock
 data EosTransaction = EosTransaction
 	{ et_id :: !B.ByteString
 	, et_status :: !T.Text
-	, et_cpu_usage_us :: !Int64
-	, et_net_usage_words :: !Int64
-	, et_expiration :: !Int64
-	, et_ref_block_num :: !Int64
-	, et_ref_block_prefix :: !Int64
-	, et_max_net_usage_words :: !Int64
-	, et_max_cpu_usage_ms :: !Int64
-	, et_delay_sec :: !Int64
+	, et_cpu_usage_us :: {-# UNPACK #-} !Int64
+	, et_net_usage_words :: {-# UNPACK #-} !Int64
+	, et_expiration :: {-# UNPACK #-} !Int64
+	, et_ref_block_num :: {-# UNPACK #-} !Int64
+	, et_ref_block_prefix :: {-# UNPACK #-} !Int64
+	, et_max_net_usage_words :: {-# UNPACK #-} !Int64
+	, et_max_cpu_usage_ms :: {-# UNPACK #-} !Int64
+	, et_delay_sec :: {-# UNPACK #-} !Int64
 	, et_context_free_actions :: !(V.Vector EosAction)
 	, et_actions :: !(V.Vector EosAction)
 	} deriving Generic
