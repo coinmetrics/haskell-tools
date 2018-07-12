@@ -40,6 +40,7 @@ data MoneroBlock = MoneroBlock
 	, mb_reward :: {-# UNPACK #-} !Int64
 	, mb_timestamp :: {-# UNPACK #-} !Int64
 	, mb_nonce :: {-# UNPACK #-} !Int64
+	, mb_size :: {-# UNPACK #-} !Int64
 	, mb_miner_tx :: !MoneroTransaction
 	, mb_transactions :: !(V.Vector MoneroTransaction)
 	} deriving Generic
@@ -56,6 +57,7 @@ instance J.FromJSON MoneroBlock where
 		<*> (fields J..: "reward")
 		<*> (fields J..: "timestamp")
 		<*> (fields J..: "nonce")
+		<*> (fields J..: "size")
 		<*> (fields J..: "miner_tx")
 		<*> (fields J..: "transactions")
 
@@ -161,6 +163,7 @@ instance BlockChain Monero where
 		Just blockHash <- return $ HML.lookup "hash" blockHeaderFields
 		Just blockDifficulty <- return $ HML.lookup "difficulty" blockHeaderFields
 		Just blockReward <- return $ HML.lookup "reward" blockHeaderFields
+		Just blockSize <- return $ HML.lookup "block_size" blockHeaderFields
 		blockJsonFields <- either fail return $ ((J.eitherDecode' . BL.fromStrict . T.encodeUtf8) =<<) $ J.parseEither (J..: "json") blockInfo
 		txHashes <- either fail return $ J.parseEither (J..: "tx_hashes") blockJsonFields
 		transactions <- if V.null txHashes
@@ -175,6 +178,7 @@ instance BlockChain Monero where
 			$ HML.insert "hash" blockHash
 			$ HML.insert "difficulty" blockDifficulty
 			$ HML.insert "reward" blockReward
+			$ HML.insert "size" blockSize
 			$ HML.insert "transactions" (J.Array transactions)
 			blockJsonFields
 		case J.fromJSON jsonBlock of
