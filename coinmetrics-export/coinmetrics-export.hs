@@ -35,7 +35,6 @@ import CoinMetrics.BlockChain
 import CoinMetrics.Cardano
 import CoinMetrics.EOS
 import CoinMetrics.Ethereum
-import CoinMetrics.Ethereum.ERC20
 import CoinMetrics.Iota
 import CoinMetrics.Monero
 import CoinMetrics.Nem
@@ -157,17 +156,6 @@ main = run =<< O.execParser parser where
 							)
 					)) (O.fullDesc <> O.progDesc "Prints schema")
 				)
-			<> O.command "export-erc20-info"
-				(  O.info
-					(O.helper <*> (OptionExportERC20InfoCommand
-						<$> O.strOption
-							(  O.long "input-json-file"
-							<> O.metavar "INPUT_JSON_FILE"
-							<> O.help "Input JSON file"
-							)
-						<*> optionOutput
-					)) (O.fullDesc <> O.progDesc "Exports ERC20 info")
-				)
 			)
 	optionOutput = Output
 		<$> O.option (O.maybeReader (Just . Just))
@@ -233,10 +221,6 @@ data OptionCommand
 	| OptionPrintSchemaCommand
 		{ options_schema :: !T.Text
 		, options_storage :: !T.Text
-		}
-	| OptionExportERC20InfoCommand
-		{ options_inputJsonFile :: !String
-		, options_outputFile :: !Output
 		}
 
 data Output = Output
@@ -592,10 +576,6 @@ run Options
 			putStrLn $ T.unpack $ "CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
 		("ethereum", "bigquery") ->
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
-		("erc20tokens", "postgres") ->
-			putStrLn $ T.unpack $ TL.toStrict $ TL.toLazyText $ "CREATE TABLE erc20tokens (" <> concatFields (postgresSchemaFields True $ schemaOf (Proxy :: Proxy ERC20Info)) <> ");"
-		("erc20tokens", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy ERC20Info)
 		("cardano", "postgres") -> do
 			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
 				[ schemaOf (Proxy :: Proxy CardanoInput)
@@ -682,12 +662,6 @@ run Options
 			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy WavesBlock)
 		_ -> fail "wrong pair schema+storage"
 
-	OptionExportERC20InfoCommand
-		{ options_inputJsonFile = inputJsonFile
-		, options_outputFile = outputFile
-		} -> do
-		tokensInfos <- either fail return . J.eitherDecode' =<< BL.readFile inputJsonFile
-		writeOutput outputFile "erc20tokens" (schemaOf (Proxy :: Proxy ERC20Info)) "symbol" (tokensInfos :: [ERC20Info])
 
 	where
 		blockSplit :: Int -> [a] -> [[a]]
