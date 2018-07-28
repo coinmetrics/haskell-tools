@@ -24,6 +24,7 @@ import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -118,6 +119,8 @@ instance A.HasAvroSchema CardanoBlock where
 instance A.ToAvro CardanoBlock where
 	toAvro = genericToAvro
 instance ToPostgresText CardanoBlock
+
+instance IsUnifiedBlock CardanoBlock
 
 data CardanoTransaction = CardanoTransaction
 	{ ct_id :: !B.ByteString

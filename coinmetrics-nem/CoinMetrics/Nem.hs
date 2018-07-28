@@ -23,6 +23,7 @@ import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -97,6 +98,8 @@ instance A.HasAvroSchema NemBlock where
 instance A.ToAvro NemBlock where
 	toAvro = genericToAvro
 instance ToPostgresText NemBlock
+
+instance IsUnifiedBlock NemBlock
 
 data NemTransaction = NemTransaction
 	{ nt_timeStamp :: {-# UNPACK #-} !Int64

@@ -20,6 +20,7 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -50,6 +51,8 @@ instance A.HasAvroSchema NeoBlock where
 instance A.ToAvro NeoBlock where
 	toAvro = genericToAvro
 instance ToPostgresText NeoBlock
+
+instance IsUnifiedBlock NeoBlock
 
 data NeoTransaction = NeoTransaction
 	{ et_txid :: !B.ByteString

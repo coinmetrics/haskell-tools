@@ -33,6 +33,7 @@ import Numeric
 import System.IO.Unsafe(unsafeInterleaveIO)
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -127,6 +128,8 @@ instance A.HasAvroSchema StellarLedger where
 instance A.ToAvro StellarLedger where
 	toAvro = genericToAvro
 instance ToPostgresText StellarLedger
+
+instance IsUnifiedBlock StellarLedger
 
 data StellarTransaction = StellarTransaction
 	{ st_sourceAccount :: !B.ByteString

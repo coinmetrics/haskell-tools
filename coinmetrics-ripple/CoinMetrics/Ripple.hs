@@ -26,6 +26,7 @@ import qualified Network.HTTP.Client as H
 import Text.ParserCombinators.ReadP
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -112,6 +113,8 @@ instance A.HasAvroSchema RippleLedger where
 instance A.ToAvro RippleLedger where
 	toAvro = genericToAvro
 instance ToPostgresText RippleLedger
+
+instance IsUnifiedBlock RippleLedger
 
 data RippleTransaction = RippleTransaction
 	{ rt_hash :: !B.ByteString

@@ -27,6 +27,7 @@ library
     , http-client
     , memory
     , text
+    , time
     , unordered-containers
     , vector
     , vector-instances

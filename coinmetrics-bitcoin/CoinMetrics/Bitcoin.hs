@@ -21,6 +21,7 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -75,6 +76,8 @@ instance A.HasAvroSchema BitcoinBlock where
 instance A.ToAvro BitcoinBlock where
 	toAvro = genericToAvro
 instance ToPostgresText BitcoinBlock
+
+instance IsUnifiedBlock BitcoinBlock
 
 data BitcoinTransaction = BitcoinTransaction
 	{ bt_hash :: !B.ByteString

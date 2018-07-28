@@ -1,0 +1,53 @@
+{ "mappings":
+	{ "block":
+		{ "properties":
+			{ "time": { "type": "date" }
+			, "height": { "type": "integer" }
+			, "hash": { "type": "keyword" }
+			, "size": { "type": "integer" }
+			, "transactions":
+				{ "type": "nested"
+				, "properties":
+					{ "time": { "type": "date" }
+					, "hash": { "type": "keyword" }
+					, "fee":
+						{ "properties":
+							{ "amount": { "type": "double" }
+							, "asset": { "type": "keyword" }
+							}
+						}
+					, "actions":
+						{ "type": "nested"
+						, "properties":
+							{ "time": { "type": "date" }
+							, "from": { "type": "keyword" }
+							, "to": { "type": "keyword" }
+							, "value":
+								{ "properties":
+									{ "amount": { "type": "double" }
+									, "asset": { "type": "keyword" }
+									}
+								}
+							, "effects":
+								{ "type": "nested"
+								, "properties":
+									{ "type": { "type": "keyword" }
+									, "account": { "type": "keyword" }
+									, "value":
+										{ "properties":
+											{ "amount": { "type": "double" }
+											, "asset": { "type": "keyword" }
+											}
+										}
+									, "contract": { "type": "keyword" }
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		, "dynamic": "strict"
+		}
+	}
+}

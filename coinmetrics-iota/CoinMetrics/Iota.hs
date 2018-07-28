@@ -23,6 +23,7 @@ import qualified Data.Vector as V
 import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -53,6 +54,8 @@ instance A.HasAvroSchema IotaTransaction where
 instance A.ToAvro IotaTransaction where
 	toAvro = genericToAvro
 instance ToPostgresText IotaTransaction
+
+instance IsUnifiedBlock IotaTransaction
 
 -- | Deserialize transaction.
 deserIotaTransaction :: T.Text -> S.Get IotaTransaction

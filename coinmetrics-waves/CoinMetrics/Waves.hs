@@ -20,6 +20,7 @@ import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -57,6 +58,8 @@ instance A.HasAvroSchema WavesBlock where
 instance A.ToAvro WavesBlock where
 	toAvro = genericToAvro
 instance ToPostgresText WavesBlock
+
+instance IsUnifiedBlock WavesBlock
 
 data WavesTransaction = WavesTransaction
 	{ wt_type :: {-# UNPACK #-} !Int64

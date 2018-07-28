@@ -24,6 +24,7 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -66,6 +67,8 @@ instance A.HasAvroSchema MoneroBlock where
 instance A.ToAvro MoneroBlock where
 	toAvro = genericToAvro
 instance ToPostgresText MoneroBlock
+
+instance IsUnifiedBlock MoneroBlock
 
 data MoneroTransaction = MoneroTransaction
 	{ mt_hash :: !(Maybe B.ByteString)

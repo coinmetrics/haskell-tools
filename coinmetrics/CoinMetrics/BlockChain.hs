@@ -12,10 +12,11 @@ import qualified Data.ByteString as B
 import Data.Int
 import qualified Data.Text as T
 
+import CoinMetrics.Unified
 import Hanalytics.Schema
 import Hanalytics.Schema.Postgres
 
-class (Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a)) => BlockChain a where
+class (Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a), IsUnifiedBlock (Block a)) => BlockChain a where
 	type Block a :: *
 	getCurrentBlockHeight :: a -> IO Int64
 	getBlockByHeight :: a -> BlockHeight -> IO (Block a)

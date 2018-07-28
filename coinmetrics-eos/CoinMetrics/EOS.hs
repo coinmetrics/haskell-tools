@@ -20,6 +20,7 @@ import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 import Hanalytics.Schema.Avro
@@ -55,6 +56,8 @@ instance A.HasAvroSchema EosBlock where
 instance A.ToAvro EosBlock where
 	toAvro = genericToAvro
 instance ToPostgresText EosBlock
+
+instance IsUnifiedBlock EosBlock
 
 data EosTransaction = EosTransaction
 	{ et_id :: !B.ByteString

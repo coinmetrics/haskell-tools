@@ -7,6 +7,7 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
 import qualified Data.Aeson as J
+import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.DiskHash as DH
@@ -41,6 +42,7 @@ import CoinMetrics.Nem
 import CoinMetrics.Neo
 import CoinMetrics.Ripple
 import CoinMetrics.Stellar
+import CoinMetrics.Unified
 import CoinMetrics.Waves
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
@@ -171,16 +173,34 @@ main = run =<< O.execParser parser where
 			<> O.help "Output PostgreSQL file"
 			)
 		<*> O.option (O.maybeReader (Just . Just))
+			(  O.long "output-elastic-file"
+			<> O.value Nothing
+			<> O.metavar "OUTPUT_ELASTIC_FILE"
+			<> O.help "Output ElasticSearch JSON file"
+			)
+		<*> O.option (O.maybeReader (Just . Just))
 			(  O.long "output-postgres"
 			<> O.value Nothing
 			<> O.metavar "OUTPUT_POSTGRES"
 			<> O.help "Output directly to PostgreSQL DB"
 			)
 		<*> O.option (O.maybeReader (Just . Just))
+			(  O.long "output-elastic"
+			<> O.value Nothing
+			<> O.metavar "OUTPUT_ELASTIC"
+			<> O.help "Output directly to ElasticSearch"
+			)
+		<*> O.option (O.maybeReader (Just . Just))
 			(  O.long "output-postgres-table"
 			<> O.value Nothing
 			<> O.metavar "OUTPUT_POSTGRES_TABLE"
 			<> O.help "Table name for PostgreSQL output"
+			)
+		<*> O.option (O.maybeReader (Just . Just))
+			(  O.long "output-elastic-index"
+			<> O.value Nothing
+			<> O.metavar "OUTPUT_ELASTIC_INDEX"
+			<> O.help "Index name for ElasticSearch output"
 			)
 		<*> O.option O.auto
 			(  O.long "pack-size"
@@ -226,8 +246,11 @@ data OptionCommand
 data Output = Output
 	{ output_avroFile :: !(Maybe String)
 	, output_postgresFile :: !(Maybe String)
+	, output_elasticFile :: !(Maybe String)
 	, output_postgres :: !(Maybe String)
+	, output_elastic :: !(Maybe String)
 	, output_postgresTable :: !(Maybe String)
+	, output_elasticIndex :: !(Maybe String)
 	, output_packSize :: !Int
 	, output_upsert :: !Bool
 	}
@@ -407,7 +430,7 @@ run Options
 				when (blockIndex `rem` 100 == 0) $ hPutStrLn stderr $ "synced up to " ++ show blockIndex
 				(block :) <$> step (blockIndex + 1)
 			else return []
-		writeOutput outputFile blockchainType schema primaryField =<< step beginBlock
+		writeOutput httpManager outputFile blockchainType schema primaryField =<< step beginBlock
 		hPutStrLn stderr $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
@@ -549,7 +572,7 @@ run Options
 			transaction <- atomically $ readTBQueue transactionQueue
 			when (i `rem` 100 == 0) $ hPutStrLn stderr $ "synced transactions: " ++ show i
 			(transaction :) <$> step (i + 1)
-		writeOutput outputFile "iota" (schemaOf (Proxy :: Proxy IotaTransaction)) "hash" =<< step (0 :: Int)
+		writeOutput httpManager outputFile "iota" (schemaOf (Proxy :: Proxy IotaTransaction)) "hash" =<< step (0 :: Int)
 
 	OptionPrintSchemaCommand
 		{ options_schema = schemaTypeStr
@@ -669,12 +692,15 @@ run Options
 			[] -> []
 			xs -> let (a, b) = splitAt packSize xs in a : packSplit packSize b
 
-		writeOutput :: (A.ToAvro a, ToPostgresText a) => Output -> T.Text -> Schema -> T.Text -> [a] -> IO ()
-		writeOutput Output
+		writeOutput :: (A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => H.Manager -> Output -> T.Text -> Schema -> T.Text -> [a] -> IO ()
+		writeOutput httpManager Output
 			{ output_avroFile = maybeOutputAvroFile
 			, output_postgresFile = maybeOutputPostgresFile
+			, output_elasticFile = maybeOutputElasticFile
 			, output_postgres = maybeOutputPostgres
+			, output_elastic = maybeOutputElastic
 			, output_postgresTable = maybePostgresTable
+			, output_elasticIndex = maybeElasticIndex
 			, output_packSize = packSize
 			, output_upsert = upsert
 			} defaultTableName schema primaryField (packSplit packSize -> packs) = do
@@ -699,8 +725,14 @@ run Options
 					, case maybeOutputPostgresFile of
 						Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map postgresSql packs]
 						Nothing -> []
+					, case maybeOutputElasticFile of
+						Just outputElasticFile -> [BL.writeFile outputElasticFile $ mconcat $ map elasticPack packs]
+						Nothing -> []
 					, case maybeOutputPostgres of
 						Just outputPostgres -> [mapM_ (writePackToPostgres outputPostgres) packs]
+						Nothing -> []
+					, case maybeOutputElastic of
+						Just outputElastic -> [mapM_ (writePackToElastic outputElastic . elasticPack) packs]
 						Nothing -> []
 					]
 
@@ -712,7 +744,23 @@ run Options
 					unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus <> " " <> (T.unpack $ TL.toStrict $ TL.toLazyText $ postgresSql pack)
 					PQ.finish connection
 
+				writePackToElastic outputElastic pack = do
+					httpRequest <- H.parseRequest outputElastic
+					response <- H.responseBody <$> H.httpLbs httpRequest
+						{ H.method = "POST"
+						, H.requestHeaders = [("Content-Type", "application/json")]
+						, H.path = "/_bulk"
+						, H.requestBody = H.RequestBodyLBS pack
+						} httpManager
+					errors <- either fail return . J.parseEither (J..: "errors") =<< either fail return (J.eitherDecode response)
+					when errors $ fail "errors while inserting to ElasticSearch"
+
+				elasticLine doc = "{\"index\":{\"_index\":" <> J.encode elasticIndexName <> ",\"_type\":\"block\"}}\n" <> doc <> "\n"
+
+				elasticPack = mconcat . map (elasticLine . J.encode . unifyBlock)
+
 				postgresSql = (if upsert then postgresSqlUpsertGroup primaryField else postgresSqlInsertGroup) schema tableName
 
 				tableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable
 
+				elasticIndexName = fromMaybe defaultTableName $ T.pack <$> maybeElasticIndex
