@@ -664,10 +664,10 @@ run Options
 
 
 	where
-		blockSplit :: Int -> [a] -> [[a]]
-		blockSplit packSize = \case
+		packSplit :: Int -> [a] -> [[a]]
+		packSplit packSize = \case
 			[] -> []
-			xs -> let (a, b) = splitAt packSize xs in a : blockSplit packSize b
+			xs -> let (a, b) = splitAt packSize xs in a : packSplit packSize b
 
 		writeOutput :: (A.ToAvro a, ToPostgresText a) => Output -> T.Text -> Schema -> T.Text -> [a] -> IO ()
 		writeOutput Output
@@ -677,7 +677,7 @@ run Options
 			, output_postgresTable = maybePostgresTable
 			, output_packSize = packSize
 			, output_upsert = upsert
-			} defaultTableName schema primaryField (blockSplit packSize -> blocks) = do
+			} defaultTableName schema primaryField (packSplit packSize -> packs) = do
 			vars <- forM outputs $ \output -> do
 				var <- newTVarIO Nothing
 				void $ forkFinally output $ atomically . writeTVar var . Just
@@ -694,26 +694,25 @@ run Options
 			where
 				outputs = concat
 					[ case maybeOutputAvroFile of
-						Just outputAvroFile -> [BL.writeFile outputAvroFile =<< A.encodeContainer blocks]
+						Just outputAvroFile -> [BL.writeFile outputAvroFile =<< A.encodeContainer packs]
 						Nothing -> []
 					, case maybeOutputPostgresFile of
-						Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map postgresSql blocks]
+						Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map postgresSql packs]
 						Nothing -> []
 					, case maybeOutputPostgres of
-						Just outputPostgres -> [mapM_ (writeBlockToPostgres outputPostgres) blocks]
+						Just outputPostgres -> [mapM_ (writePackToPostgres outputPostgres) packs]
 						Nothing -> []
 					]
 
-				writeBlockToPostgres outputPostgres block = do
+				writePackToPostgres outputPostgres pack = do
 					connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
 					connectionStatus <- PQ.status connection
 					unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
-					resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSql block
-					unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus <> " " <> (T.unpack $ TL.toStrict $ TL.toLazyText $ postgresSql block)
+					resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSql pack
+					unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus <> " " <> (T.unpack $ TL.toStrict $ TL.toLazyText $ postgresSql pack)
 					PQ.finish connection
 
 				postgresSql = (if upsert then postgresSqlUpsertGroup primaryField else postgresSqlInsertGroup) schema tableName
 
 				tableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable
 
-		concatFields = foldr1 $ \a b -> a <> ", " <> b
