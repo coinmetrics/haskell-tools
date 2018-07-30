@@ -2,7 +2,6 @@
 
 module CoinMetrics.Cardano
 	( Cardano(..)
-	, newCardano
 	, CardanoBlock(..)
 	, CardanoTransaction(..)
 	, CardanoInput(..)
@@ -16,6 +15,7 @@ import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import qualified Data.HashMap.Strict as HM
 import Data.Int
+import Data.Proxy
 import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -36,12 +36,6 @@ data Cardano = Cardano
 	, cardano_httpRequest :: !H.Request
 	}
 
-newCardano :: H.Manager -> H.Request -> Cardano
-newCardano httpManager httpRequest = Cardano
-	{ cardano_httpManager = httpManager
-	, cardano_httpRequest = httpRequest
-	}
-
 cardanoRequest :: J.FromJSON r => Cardano -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> IO r
 cardanoRequest Cardano
 	{ cardano_httpManager = httpManager
@@ -54,6 +48,26 @@ cardanoRequest Cardano
 
 instance BlockChain Cardano where
 	type Block Cardano = CardanoBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return Cardano
+				{ cardano_httpManager = httpManager
+				, cardano_httpRequest = httpRequest
+				}
+		, bci_defaultApiUrl = "http://127.0.0.1:8100/"
+		, bci_defaultBeginBlock = 2
+		, bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy CardanoBlock))
+			[ schemaOf (Proxy :: Proxy CardanoInput)
+			, schemaOf (Proxy :: Proxy CardanoOutput)
+			, schemaOf (Proxy :: Proxy CardanoTransaction)
+			]
+			"CREATE TABLE \"cardano\" OF \"CardanoBlock\" (PRIMARY KEY (\"height\"));"
+		}
 
 	-- pageSize param doesn't work anymore
 	-- getCurrentBlockHeight cardano = either fail return =<< cardanoRequest cardano "/api/blocks/pages/total" [("pageSize", Just "1")]

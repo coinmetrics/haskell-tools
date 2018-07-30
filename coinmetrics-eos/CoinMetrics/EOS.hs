@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.EOS
-	( newEos
+	( Eos(..)
 	, EosBlock(..)
 	, EosTransaction(..)
 	, EosAction(..)
@@ -14,6 +14,7 @@ import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import GHC.Generics(Generic)
 import Data.Int
+import Data.Proxy
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
@@ -158,11 +159,28 @@ instance A.ToAvro EosAuthorization where
 	toAvro = genericToAvro
 instance ToPostgresText EosAuthorization
 
-newEos :: H.Manager -> H.Request -> Eos
-newEos = Eos
-
 instance BlockChain Eos where
 	type Block Eos = EosBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return Eos
+				{ eos_httpManager = httpManager
+				, eos_httpRequest = httpRequest
+				}
+		, bci_defaultApiUrl = "http://127.0.0.1:8888/"
+		, bci_defaultBeginBlock = 1
+		, bci_defaultEndBlock = -1 -- no need in a gap, as it uses irreversible block number
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy EosBlock))
+			[ schemaOf (Proxy :: Proxy EosAuthorization)
+			, schemaOf (Proxy :: Proxy EosAction)
+			, schemaOf (Proxy :: Proxy EosTransaction)
+			]
+			"CREATE TABLE \"eos\" OF \"EosBlock\" (PRIMARY KEY (\"number\"));"
+		}
 
 	getCurrentBlockHeight Eos
 		{ eos_httpManager = httpManager

@@ -12,6 +12,7 @@ import qualified Data.Avro as A
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.DiskHash as DH
 import Data.Either
+import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import Data.Proxy
 import qualified Data.Serialize as S
@@ -31,19 +32,10 @@ import System.Directory
 import System.IO
 import System.IO.Unsafe
 
-import CoinMetrics.Bitcoin
 import CoinMetrics.BlockChain
-import CoinMetrics.Cardano
-import CoinMetrics.EOS
-import CoinMetrics.Ethereum
+import CoinMetrics.BlockChain.All
 import CoinMetrics.Iota
-import CoinMetrics.Monero
-import CoinMetrics.Nem
-import CoinMetrics.Neo
-import CoinMetrics.Ripple
-import CoinMetrics.Stellar
 import CoinMetrics.Unified
-import CoinMetrics.Waves
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
@@ -279,45 +271,30 @@ run Options
 		httpManager <- H.newTlsManagerWith H.tlsManagerSettings
 			{ H.managerConnCount = threadsCount * 2
 			}
-		let parseApiUrl defaultApiUrl = do
+
+		-- get blockchain info by name
+		SomeBlockChainInfo BlockChainInfo
+			{ bci_init = initBlockChain
+			, bci_defaultApiUrl = defaultApiUrl
+			, bci_defaultBeginBlock = defaultBeginBlock
+			, bci_defaultEndBlock = defaultEndBlock
+			} <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
+
+		-- form http request
+		httpRequest <- do
 			let url = if null apiUrl then defaultApiUrl else apiUrl
 			httpRequest <- H.parseRequest url
 			return $ if not (null apiUrlUserName) || not (null apiUrlPassword)
 				then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
 				else httpRequest
-		(SomeBlockChain blockChain, defaultBeginBlock, defaultEndBlock) <- case blockchainType of
-			"bitcoin" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:8332/"
-				return (SomeBlockChain $ newBitcoin httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
-			"ethereum" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:8545/"
-				return (SomeBlockChain $ newEthereum httpManager httpRequest trace, 0, -1000) -- very conservative rewrite limit
-			"cardano" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:8100/"
-				return (SomeBlockChain $ newCardano httpManager httpRequest, 2, -1000) -- very conservative rewrite limit
-			"eos" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:8888/"
-				return (SomeBlockChain $ newEos httpManager httpRequest, 1, -1) -- no need in a gap, as it uses irreversible block number
-			"monero" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:18081/json_rpc"
-				return (SomeBlockChain $ newMonero httpManager httpRequest, 0, -60) -- conservative rewrite limit
-			"nem" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:7890/"
-				return (SomeBlockChain $ newNem httpManager httpRequest, 1, -360) -- actual rewrite limit
-			"neo" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:10332/"
-				return (SomeBlockChain $ newNeo httpManager httpRequest, 0, -1000) -- very conservative rewrite limit
-			"ripple" -> do
-				httpRequest <- parseApiUrl "https://data.ripple.com/"
-				return (SomeBlockChain $ newRipple httpManager httpRequest, 32570, 0) -- history data, no rewrites
-			"stellar" -> do
-				httpRequest <- parseApiUrl "http://history.stellar.org/prd/core-live/core_live_001"
-				stellar <- newStellar httpManager httpRequest (2 + threadsCount `quot` 64)
-				return (SomeBlockChain stellar, 1, 0) -- history data, no rewrites
-			"waves" -> do
-				httpRequest <- parseApiUrl "http://127.0.0.1:6869/"
-				return (SomeBlockChain $ newWaves httpManager httpRequest, 1, -100) -- conservative limit
-			_ -> fail "wrong blockchain specified"
+
+		-- init blockchain
+		blockChain <- initBlockChain BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			, bcp_trace = trace
+			, bcp_threadsCount = threadsCount
+			}
 
 		let
 			schema = let
@@ -577,113 +554,19 @@ run Options
 	OptionPrintSchemaCommand
 		{ options_schema = schemaTypeStr
 		, options_storage = storageTypeStr
-		} -> case (schemaTypeStr, storageTypeStr) of
-		("bitcoin", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy BitcoinVin)
-				, schemaOf (Proxy :: Proxy BitcoinVout)
-				, schemaOf (Proxy :: Proxy BitcoinTransaction)
-				, schemaOf (Proxy :: Proxy BitcoinBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"bitcoin\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
-		("bitcoin", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy BitcoinBlock)
-		("ethereum", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy EthereumAction)
-				, schemaOf (Proxy :: Proxy EthereumLog)
-				, schemaOf (Proxy :: Proxy EthereumTransaction)
-				, schemaOf (Proxy :: Proxy EthereumUncleBlock)
-				, schemaOf (Proxy :: Proxy EthereumBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
-		("ethereum", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EthereumBlock)
-		("cardano", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy CardanoInput)
-				, schemaOf (Proxy :: Proxy CardanoOutput)
-				, schemaOf (Proxy :: Proxy CardanoTransaction)
-				, schemaOf (Proxy :: Proxy CardanoBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"cardano\" OF \"CardanoBlock\" (PRIMARY KEY (\"height\"));"
-		("cardano", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy CardanoBlock)
-		("eos", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy EosAuthorization)
-				, schemaOf (Proxy :: Proxy EosAction)
-				, schemaOf (Proxy :: Proxy EosTransaction)
-				, schemaOf (Proxy :: Proxy EosBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"eos\" OF \"EosBlock\" (PRIMARY KEY (\"number\"));"
-		("eos", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy EosBlock)
-		("iota", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy IotaTransaction)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
-		("iota", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
-		("monero", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy MoneroTransactionInput)
-				, schemaOf (Proxy :: Proxy MoneroTransactionOutput)
-				, schemaOf (Proxy :: Proxy MoneroTransaction)
-				, schemaOf (Proxy :: Proxy MoneroBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"monero\" OF \"MoneroBlock\" (PRIMARY KEY (\"height\"));"
-		("monero", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy MoneroBlock)
-		("nem", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy NemNestedTransaction)
-				, schemaOf (Proxy :: Proxy NemTransaction)
-				, schemaOf (Proxy :: Proxy NemBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"nem\" OF \"NemBlock\" (PRIMARY KEY (\"height\"));"
-		("nem", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy NemBlock)
-		("neo", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy NeoTransactionInput)
-				, schemaOf (Proxy :: Proxy NeoTransactionOutput)
-				, schemaOf (Proxy :: Proxy NeoTransaction)
-				, schemaOf (Proxy :: Proxy NeoBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"neo\" OF \"NeoBlock\" (PRIMARY KEY (\"index\"));"
-		("neo", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy NeoBlock)
-		("ripple", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy RippleTransaction)
-				, schemaOf (Proxy :: Proxy RippleLedger)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
-		("ripple", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy RippleLedger)
-		("stellar", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy StellarAsset)
-				, schemaOf (Proxy :: Proxy StellarOperation)
-				, schemaOf (Proxy :: Proxy StellarTransaction)
-				, schemaOf (Proxy :: Proxy StellarLedger)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"stellar\" OF \"StellarLedger\" (PRIMARY KEY (\"sequence\"));"
-		("stellar", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy StellarLedger)
-		("waves", "postgres") -> do
-			putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-				[ schemaOf (Proxy :: Proxy WavesTransfer)
-				, schemaOf (Proxy :: Proxy WavesOrder)
-				, schemaOf (Proxy :: Proxy WavesTransaction)
-				, schemaOf (Proxy :: Proxy WavesBlock)
-				]
-			putStrLn $ T.unpack $ "CREATE TABLE \"waves\" OF \"WavesBlock\" (PRIMARY KEY (\"height\"));"
-		("waves", "bigquery") ->
-			putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy WavesBlock)
-		_ -> fail "wrong pair schema+storage"
+		} -> case getSomeBlockChainInfo schemaTypeStr of
+		Just (SomeBlockChainInfo BlockChainInfo
+			{ bci_schemas = HM.lookup storageTypeStr -> Just schema
+			}) -> T.putStrLn schema
+		_ -> case (schemaTypeStr, storageTypeStr) of
+			("iota", "postgres") -> do
+				putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
+					[ schemaOf (Proxy :: Proxy IotaTransaction)
+					]
+				putStrLn $ T.unpack $ "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
+			("iota", "bigquery") ->
+				putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
+			_ -> fail "wrong pair schema+storage"
 
 
 	where

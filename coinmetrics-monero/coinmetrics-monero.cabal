@@ -23,7 +23,6 @@ library
     , hanalytics-avro
     , hanalytics-base
     , hanalytics-postgres
-    , http-client
     , text
     , unordered-containers
     , vector

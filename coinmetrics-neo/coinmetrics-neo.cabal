@@ -23,7 +23,6 @@ library
     , hanalytics-avro
     , hanalytics-base
     , hanalytics-postgres
-    , http-client
     , scientific
     , text
     , vector

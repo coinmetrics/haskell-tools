@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ethereum
-	( newEthereum
+	( Ethereum(..)
 	, EthereumBlock(..)
 	, EthereumUncleBlock(..)
 	, EthereumTransaction(..)
@@ -19,13 +19,13 @@ import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
+import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import Data.Vector.Instances()
 import qualified Data.Vector.Mutable as VM
-import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
@@ -367,11 +367,27 @@ instance A.ToAvro EthereumAction where
 	toAvro = genericToAvro
 instance ToPostgresText EthereumAction
 
-newEthereum :: H.Manager -> H.Request -> Bool -> Ethereum
-newEthereum httpManager httpRequest enableTrace = Ethereum (newJsonRpc httpManager httpRequest Nothing) enableTrace
-
 instance BlockChain Ethereum where
 	type Block Ethereum = EthereumBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			, bcp_trace = trace
+			} -> return $ Ethereum (newJsonRpc httpManager httpRequest Nothing) trace
+		, bci_defaultApiUrl = "http://127.0.0.1:8545/"
+		, bci_defaultBeginBlock = 0
+		, bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy EthereumBlock))
+			[ schemaOf (Proxy :: Proxy EthereumAction)
+			, schemaOf (Proxy :: Proxy EthereumLog)
+			, schemaOf (Proxy :: Proxy EthereumTransaction)
+			, schemaOf (Proxy :: Proxy EthereumUncleBlock)
+			]
+			"CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
+		}
 
 	getCurrentBlockHeight (Ethereum jsonRpc _enableTrace) = do
 		J.Success height <- J.parse decode0xHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" ([] :: V.Vector J.Value)

@@ -2,7 +2,6 @@
 
 module CoinMetrics.Nem
 	( Nem(..)
-	, newNem
 	, NemBlock(..)
 	, NemTransaction(..)
 	, NemNestedTransaction(..)
@@ -16,6 +15,7 @@ import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import Data.Int
 import Data.Maybe
+import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
@@ -35,14 +35,6 @@ data Nem = Nem
 	, nem_httpRequest :: !H.Request
 	}
 
-newNem :: H.Manager -> H.Request -> Nem
-newNem httpManager httpRequest = Nem
-		{ nem_httpManager = httpManager
-		, nem_httpRequest = httpRequest
-			{ H.requestHeaders = [("Content-Type", "application/json")]
-			}
-		}
-
 nemRequest :: J.FromJSON r => Nem -> T.Text -> Maybe J.Value -> [(B.ByteString, Maybe B.ByteString)] -> IO r
 nemRequest Nem
 	{ nem_httpManager = httpManager
@@ -55,6 +47,27 @@ nemRequest Nem
 
 instance BlockChain Nem where
 	type Block Nem = NemBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return Nem
+				{ nem_httpManager = httpManager
+				, nem_httpRequest = httpRequest
+					{ H.requestHeaders = [("Content-Type", "application/json")]
+					}
+				}
+		, bci_defaultApiUrl = "http://127.0.0.1:7890/"
+		, bci_defaultBeginBlock = 1
+		, bci_defaultEndBlock = -360 -- actual rewrite limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy NemBlock))
+			[ schemaOf (Proxy :: Proxy NemNestedTransaction)
+			, schemaOf (Proxy :: Proxy NemTransaction)
+			]
+			"CREATE TABLE \"nem\" OF \"NemBlock\" (PRIMARY KEY (\"height\"));"
+		}
 
 	getCurrentBlockHeight nem = either fail return
 		. (J.parseEither (J..: "height"))

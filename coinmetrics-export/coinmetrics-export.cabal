@@ -21,17 +21,8 @@ executable coinmetrics-export
     , bytestring
     , cereal
     , coinmetrics
-    , coinmetrics-bitcoin
-    , coinmetrics-cardano
-    , coinmetrics-eos
-    , coinmetrics-ethereum
+    , coinmetrics-all-blockchains
     , coinmetrics-iota
-    , coinmetrics-monero
-    , coinmetrics-nem
-    , coinmetrics-neo
-    , coinmetrics-ripple
-    , coinmetrics-stellar
-    , coinmetrics-waves
     , hanalytics-base
     , hanalytics-bigquery
     , hanalytics-postgres
@@ -44,5 +35,6 @@ executable coinmetrics-export
     , postgresql-libpq
     , stm
     , text
+    , unordered-containers
     , vector
   default-language:    Haskell2010

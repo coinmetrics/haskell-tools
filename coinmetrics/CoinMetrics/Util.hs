@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, OverloadedStrings, ViewPatterns #-}
+{-# LANGUAGE LambdaCase, OverloadedLists, OverloadedStrings, ViewPatterns #-}
 
 module CoinMetrics.Util
 	( encodeHexBytes
@@ -10,6 +10,7 @@ module CoinMetrics.Util
 	, decodeReadStr
 	, tryWithRepeat
 	, currentLocalTimeToUTC
+	, standardBlockChainSchemas
 	) where
 
 import Control.Concurrent
@@ -18,12 +19,20 @@ import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TL
 import Data.Time.Clock
 import Data.Time.LocalTime
 import Numeric
 import System.IO.Unsafe
+
+import Hanalytics.Schema
+import Hanalytics.Schema.BigQuery
+import Hanalytics.Schema.Postgres
 
 encodeHexBytes :: B.ByteString -> J.Value
 encodeHexBytes = J.String . T.decodeUtf8 . BA.convertToBase BA.Base16
@@ -75,3 +84,14 @@ currentLocalTimeToUTC = localTimeToUTC currentTimeZone
 {-# NOINLINE currentTimeZone #-}
 currentTimeZone :: TimeZone
 currentTimeZone = unsafePerformIO getCurrentTimeZone
+
+-- | Helper function for initializing blockchain schemas info.
+standardBlockChainSchemas :: Schema -> [Schema] -> TL.Builder -> HM.HashMap T.Text T.Text
+standardBlockChainSchemas blockSchema additionalSchemas createTableStmt =
+	[ ( "postgres"
+		, TL.toStrict $ TL.toLazyText $ mconcat (map postgresSqlCreateType (additionalSchemas ++ [blockSchema])) <> createTableStmt
+		)
+	, ( "bigquery"
+		, T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ blockSchema
+		)
+	]

@@ -2,6 +2,7 @@ resolver: lts-12.0
 
 packages:
 - coinmetrics
+- coinmetrics-all-blockchains
 - coinmetrics-bitcoin
 - coinmetrics-cardano
 - coinmetrics-eos

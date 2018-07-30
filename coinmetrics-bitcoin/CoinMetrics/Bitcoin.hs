@@ -2,7 +2,6 @@
 
 module CoinMetrics.Bitcoin
 	( Bitcoin(..)
-	, newBitcoin
 	, BitcoinBlock(..)
 	, BitcoinTransaction(..)
 	, BitcoinVin(..)
@@ -14,10 +13,10 @@ import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import Data.Int
 import Data.Maybe
+import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import GHC.Generics(Generic)
-import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
@@ -29,11 +28,25 @@ import Hanalytics.Schema.Postgres
 
 newtype Bitcoin = Bitcoin JsonRpc
 
-newBitcoin :: H.Manager -> H.Request -> Bitcoin
-newBitcoin httpManager httpRequest = Bitcoin $ newJsonRpc httpManager httpRequest Nothing
-
 instance BlockChain Bitcoin where
 	type Block Bitcoin = BitcoinBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return $ Bitcoin $ newJsonRpc httpManager httpRequest Nothing
+		, bci_defaultApiUrl = "http://127.0.0.1:8332/"
+		, bci_defaultBeginBlock = 0
+		, bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy BitcoinBlock))
+			[ schemaOf (Proxy :: Proxy BitcoinVin)
+			, schemaOf (Proxy :: Proxy BitcoinVout)
+			, schemaOf (Proxy :: Proxy BitcoinTransaction)
+			]
+			"CREATE TABLE \"bitcoin\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
+		}
 
 	getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 

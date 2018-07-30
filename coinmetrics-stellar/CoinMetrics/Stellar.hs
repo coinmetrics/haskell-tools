@@ -4,7 +4,6 @@
 
 module CoinMetrics.Stellar
 	( Stellar(..)
-	, newStellar
 	, StellarLedger(..)
 	, StellarTransaction(..)
 	, StellarOperation(..)
@@ -22,6 +21,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Int
+import Data.Proxy
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -46,16 +46,6 @@ data Stellar = Stellar
 	, stellar_checkpointCacheVar :: {-# UNPACK #-} !(TVar [(Int64, [StellarLedger])])
 	, stellar_checkpointCacheSize :: {-# UNPACK #-} !Int
 	}
-
-newStellar :: H.Manager -> H.Request -> Int -> IO Stellar
-newStellar httpManager httpRequest checkpointCacheSize = do
-	checkpointCacheVar <- newTVarIO []
-	return Stellar
-		{ stellar_httpManager = httpManager
-		, stellar_httpRequest = httpRequest
-		, stellar_checkpointCacheVar = checkpointCacheVar
-		, stellar_checkpointCacheSize = checkpointCacheSize
-		}
 
 stellarRequest :: Stellar -> T.Text -> IO BL.ByteString
 stellarRequest Stellar
@@ -93,6 +83,31 @@ withCheckpointCache stellar@Stellar
 
 instance BlockChain Stellar where
 	type Block Stellar = StellarLedger
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			, bcp_threadsCount = threadsCount
+			} -> do
+			checkpointCacheVar <- newTVarIO []
+			return Stellar
+				{ stellar_httpManager = httpManager
+				, stellar_httpRequest = httpRequest
+				, stellar_checkpointCacheVar = checkpointCacheVar
+				, stellar_checkpointCacheSize = 2 + threadsCount `quot` 64
+				}
+		, bci_defaultApiUrl = "http://history.stellar.org/prd/core-live/core_live_001"
+		, bci_defaultBeginBlock = 1
+		, bci_defaultEndBlock = 0 -- history data, no rewrites
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy StellarLedger))
+			[ schemaOf (Proxy :: Proxy StellarAsset)
+			, schemaOf (Proxy :: Proxy StellarOperation)
+			, schemaOf (Proxy :: Proxy StellarTransaction)
+			]
+			"CREATE TABLE \"stellar\" OF \"StellarLedger\" (PRIMARY KEY (\"sequence\"));"
+		}
 
 	getCurrentBlockHeight stellar = either fail return
 		. (J.parseEither (J..: "currentLedger") <=< J.eitherDecode)

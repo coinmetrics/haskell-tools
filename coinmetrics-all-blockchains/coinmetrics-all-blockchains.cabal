@@ -1,0 +1,113 @@
+name:                coinmetrics-all-blockchains
+version:             0.1.0.0
+-- synopsis:            
+-- description:         
+license:             MIT
+author:              Alexander Bich
+maintainer:          quyse0@gmail.com
+-- copyright:           
+category:            Cryptocurrency
+build-type:          Simple
+-- extra-source-files:  
+cabal-version:       >=1.10
+
+flag bitcoin
+  description:         Support Bitcoin
+  default:             True
+  manual:              True
+
+flag cardano
+  description:         Support Cardano
+  default:             True
+  manual:              True
+
+flag eos
+  description:         Support Eos
+  default:             True
+  manual:              True
+
+flag ethereum
+  description:         Support Ethereum
+  default:             True
+  manual:              True
+
+flag monero
+  description:         Support Monero
+  default:             True
+  manual:              True
+
+flag nem
+  description:         Support Nem
+  default:             True
+  manual:              True
+
+flag neo
+  description:         Support Neo
+  default:             True
+  manual:              True
+
+flag ripple
+  description:         Support Ripple
+  default:             True
+  manual:              True
+
+flag stellar
+  description:         Support Stellar
+  default:             True
+  manual:              True
+
+flag waves
+  description:         Support Waves
+  default:             True
+  manual:              True
+
+library
+  exposed-modules:
+    CoinMetrics.BlockChain.All
+  build-depends:
+    base
+    , coinmetrics
+    , text
+    , unordered-containers
+
+  if flag(bitcoin)
+    build-depends:       coinmetrics-bitcoin
+    cpp-options:         -DCM_SUPPORT_BITCOIN
+
+  if flag(cardano)
+    build-depends:       coinmetrics-cardano
+    cpp-options:         -DCM_SUPPORT_CARDANO
+
+  if flag(eos)
+    build-depends:       coinmetrics-eos
+    cpp-options:         -DCM_SUPPORT_EOS
+
+  if flag(ethereum)
+    build-depends:       coinmetrics-ethereum
+    cpp-options:         -DCM_SUPPORT_ETHEREUM
+
+  if flag(monero)
+    build-depends:       coinmetrics-monero
+    cpp-options:         -DCM_SUPPORT_MONERO
+
+  if flag(nem)
+    build-depends:       coinmetrics-nem
+    cpp-options:         -DCM_SUPPORT_NEM
+
+  if flag(neo)
+    build-depends:       coinmetrics-neo
+    cpp-options:         -DCM_SUPPORT_NEO
+
+  if flag(ripple)
+    build-depends:       coinmetrics-ripple
+    cpp-options:         -DCM_SUPPORT_RIPPLE
+
+  if flag(stellar)
+    build-depends:       coinmetrics-stellar
+    cpp-options:         -DCM_SUPPORT_STELLAR
+
+  if flag(waves)
+    build-depends:       coinmetrics-waves
+    cpp-options:         -DCM_SUPPORT_WAVES
+
+  default-language:    Haskell2010

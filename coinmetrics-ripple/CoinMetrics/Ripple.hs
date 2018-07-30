@@ -2,7 +2,6 @@
 
 module CoinMetrics.Ripple
 	( Ripple(..)
-	, newRipple
 	, RippleLedger(..)
 	, RippleTransaction(..)
 	) where
@@ -15,6 +14,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HM
 import Data.Int
+import Data.Proxy
 import Data.Scientific
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -38,12 +38,6 @@ data Ripple = Ripple
 	, ripple_httpRequest :: !H.Request
 	}
 
-newRipple :: H.Manager -> H.Request -> Ripple
-newRipple httpManager httpRequest = Ripple
-	{ ripple_httpManager = httpManager
-	, ripple_httpRequest = httpRequest
-	}
-
 rippleRequest :: J.FromJSON r => Ripple -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> IO r
 rippleRequest Ripple
 	{ ripple_httpManager = httpManager
@@ -60,6 +54,24 @@ rippleRequest Ripple
 
 instance BlockChain Ripple where
 	type Block Ripple = RippleLedger
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return Ripple
+				{ ripple_httpManager = httpManager
+				, ripple_httpRequest = httpRequest
+				}
+		, bci_defaultApiUrl = "https://data.ripple.com/"
+		, bci_defaultBeginBlock = 32570 -- genesis ledger
+		, bci_defaultEndBlock = 0 -- history data, no rewrites
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy RippleLedger))
+			[ schemaOf (Proxy :: Proxy RippleTransaction)
+			]
+			"CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
+		}
 
 	getCurrentBlockHeight ripple = either fail return
 		. J.parseEither ((J..: "ledger_index") <=< (J..: "ledger"))

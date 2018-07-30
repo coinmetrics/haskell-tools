@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Monero
-	( newMonero
+	( Monero(..)
 	, MoneroBlock(..)
 	, MoneroTransaction(..)
 	, MoneroTransactionInput(..)
@@ -18,9 +18,9 @@ import qualified Data.HashMap.Lazy as HML
 import Data.Maybe
 import GHC.Generics(Generic)
 import Data.Int
+import Data.Proxy
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
-import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
@@ -150,11 +150,25 @@ instance A.ToAvro MoneroTransactionOutput where
 	toAvro = genericToAvro
 instance ToPostgresText MoneroTransactionOutput
 
-newMonero :: H.Manager -> H.Request -> Monero
-newMonero httpManager httpRequest = Monero $ newJsonRpc httpManager httpRequest Nothing
-
 instance BlockChain Monero where
 	type Block Monero = MoneroBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return $ Monero $ newJsonRpc httpManager httpRequest Nothing
+		, bci_defaultApiUrl = "http://127.0.0.1:18081/json_rpc"
+		, bci_defaultBeginBlock = 0
+		, bci_defaultEndBlock = -60 -- conservative rewrite limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy MoneroBlock))
+			[ schemaOf (Proxy :: Proxy MoneroTransactionInput)
+			, schemaOf (Proxy :: Proxy MoneroTransactionOutput)
+			, schemaOf (Proxy :: Proxy MoneroTransaction)
+			]
+			"CREATE TABLE \"monero\" OF \"MoneroBlock\" (PRIMARY KEY (\"height\"));"
+		}
 
 	getCurrentBlockHeight (Monero jsonRpc) =
 		either fail (return . (+ (-1))) . J.parseEither (J..: "count") =<< jsonRpcRequest jsonRpc "getblockcount" J.Null

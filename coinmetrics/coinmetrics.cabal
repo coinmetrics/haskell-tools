@@ -24,6 +24,7 @@ library
     , base
     , bytestring
     , hanalytics-base
+    , hanalytics-bigquery
     , hanalytics-postgres
     , hashable
     , http-client
@@ -31,5 +32,6 @@ library
     , scientific
     , text
     , time
+    , unordered-containers
     , vector
   default-language:    Haskell2010

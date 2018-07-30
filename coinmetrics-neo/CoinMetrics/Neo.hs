@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TypeFamilies #-}
 
 module CoinMetrics.Neo
-	( newNeo
+	( Neo(..)
 	, NeoBlock(..)
 	, NeoTransaction(..)
 	, NeoTransactionInput(..)
@@ -13,10 +13,10 @@ import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import GHC.Generics(Generic)
 import Data.Int
+import Data.Proxy
 import Data.Scientific
 import qualified Data.Text as T
 import qualified Data.Vector as V
-import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
@@ -123,11 +123,25 @@ instance A.ToAvro NeoTransactionOutput where
 	toAvro = genericToAvro
 instance ToPostgresText NeoTransactionOutput
 
-newNeo :: H.Manager -> H.Request -> Neo
-newNeo httpManager httpRequest = Neo $ newJsonRpc httpManager httpRequest Nothing
-
 instance BlockChain Neo where
 	type Block Neo = NeoBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return $ Neo $ newJsonRpc httpManager httpRequest Nothing
+		, bci_defaultApiUrl = "http://127.0.0.1:10332/"
+		, bci_defaultBeginBlock = 0
+		, bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy NeoBlock))
+			[ schemaOf (Proxy :: Proxy NeoTransactionInput)
+			, schemaOf (Proxy :: Proxy NeoTransactionOutput)
+			, schemaOf (Proxy :: Proxy NeoTransaction)
+			]
+			"CREATE TABLE \"neo\" OF \"NeoBlock\" (PRIMARY KEY (\"index\"));"
+		}
 
 	getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 

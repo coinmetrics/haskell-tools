@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Waves
-	( newWaves
+	( Waves(..)
 	, WavesBlock(..)
 	, WavesTransaction(..)
 	, WavesOrder(..)
@@ -14,6 +14,7 @@ import qualified Data.Avro as A
 import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
+import Data.Proxy
 import Data.String
 import qualified Data.Text as T
 import qualified Data.Vector as V
@@ -180,11 +181,28 @@ instance A.ToAvro WavesTransfer where
 	toAvro = genericToAvro
 instance ToPostgresText WavesTransfer
 
-newWaves :: H.Manager -> H.Request -> Waves
-newWaves = Waves
-
 instance BlockChain Waves where
 	type Block Waves = WavesBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return Waves
+				{ waves_httpManager = httpManager
+				, waves_httpRequest = httpRequest
+				}
+		, bci_defaultApiUrl = "http://127.0.0.1:6869/"
+		, bci_defaultBeginBlock = 1
+		, bci_defaultEndBlock = -100 -- conservative limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy WavesBlock))
+			[ schemaOf (Proxy :: Proxy WavesTransfer)
+			, schemaOf (Proxy :: Proxy WavesOrder)
+			, schemaOf (Proxy :: Proxy WavesTransaction)
+			]
+			"CREATE TABLE \"waves\" OF \"WavesBlock\" (PRIMARY KEY (\"height\"));"
+		}
 
 	getCurrentBlockHeight Waves
 		{ waves_httpManager = httpManager
