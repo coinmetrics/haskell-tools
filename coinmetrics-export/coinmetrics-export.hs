@@ -7,7 +7,6 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
 import qualified Data.Aeson as J
-import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.DiskHash as DH
@@ -22,7 +21,6 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TL
-import qualified Data.Text.Lazy.Encoding as TL
 import qualified Data.Vector as V
 import qualified Database.PostgreSQL.LibPQ as PQ
 import qualified Network.HTTP.Client as H
@@ -34,6 +32,11 @@ import System.IO.Unsafe
 
 import CoinMetrics.BlockChain
 import CoinMetrics.BlockChain.All
+import CoinMetrics.Export.Storage
+import CoinMetrics.Export.Storage.AvroFile
+import CoinMetrics.Export.Storage.Elastic
+import CoinMetrics.Export.Storage.Postgres
+import CoinMetrics.Export.Storage.PostgresFile
 import CoinMetrics.Iota
 import CoinMetrics.Unified
 import Hanalytics.Schema
@@ -219,7 +222,7 @@ data OptionCommand
 		, options_endBlock :: !BlockHeight
 		, options_continue :: !Bool
 		, options_trace :: !Bool
-		, options_outputFile :: !Output
+		, options_output :: !Output
 		, options_threadsCount :: !Int
 		, options_ignoreMissingBlocks :: !Bool
 		}
@@ -227,7 +230,7 @@ data OptionCommand
 		{ options_apiUrl :: !String
 		, options_syncDbFile :: !String
 		, options_readDump :: !Bool
-		, options_outputFile :: !Output
+		, options_output :: !Output
 		, options_threadsCount :: !Int
 		}
 	| OptionPrintSchemaCommand
@@ -261,10 +264,7 @@ run Options
 		, options_endBlock = maybeEndBlock
 		, options_continue = continue
 		, options_trace = trace
-		, options_outputFile = outputFile@Output
-			{ output_postgres = maybeOutputPostgres
-			, output_postgresTable = maybePostgresTable
-			}
+		, options_output = output
 		, options_threadsCount = threadsCount
 		, options_ignoreMissingBlocks = ignoreMissingBlocks
 		} -> do
@@ -280,56 +280,28 @@ run Options
 			, bci_defaultEndBlock = defaultEndBlock
 			} <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
 
-		-- form http request
-		httpRequest <- do
-			let url = if null apiUrl then defaultApiUrl else apiUrl
-			httpRequest <- H.parseRequest url
-			return $ if not (null apiUrlUserName) || not (null apiUrlPassword)
-				then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
-				else httpRequest
-
 		-- init blockchain
-		blockChain <- initBlockChain BlockChainParams
-			{ bcp_httpManager = httpManager
-			, bcp_httpRequest = httpRequest
-			, bcp_trace = trace
-			, bcp_threadsCount = threadsCount
-			}
+		blockChain <- do
+			httpRequest <- do
+				let url = if null apiUrl then defaultApiUrl else apiUrl
+				httpRequest <- H.parseRequest url
+				return $ if not (null apiUrlUserName) || not (null apiUrlPassword)
+					then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
+					else httpRequest
+			initBlockChain BlockChainParams
+				{ bcp_httpManager = httpManager
+				, bcp_httpRequest = httpRequest
+				, bcp_trace = trace
+				, bcp_threadsCount = threadsCount
+				}
 
-		let
-			schema = let
-				p :: BlockChain a => a -> Block a
-				p _ = undefined
-				q :: a -> Proxy a
-				q _ = Proxy
-				in schemaOf $ q $ p blockChain
-			primaryField = blockHeightFieldName blockChain
-
-		-- get begin block, from output postgres if needed
-		beginBlock <- if maybeBeginBlock >= 0 then return maybeBeginBlock else
+		-- init output storages and begin block
+		(outputStorages, beginBlock) <- do
+			outputStorages <- initOutputStorages httpManager output blockchainType (blockHeightFieldName blockChain)
+			let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
 			if continue
-				then case maybeOutputPostgres of
-					Just outputPostgres -> do
-						connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
-						connectionStatus <- PQ.status connection
-						unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
-						let query = "SELECT MAX(\"" <> blockHeightFieldName blockChain <> "\") FROM \"" <> maybe blockchainType T.pack maybePostgresTable <> "\""
-						result <- maybe (fail "cannot get latest block from postgres") return =<< PQ.execParams connection (T.encodeUtf8 $ query) [] PQ.Text
-						resultStatus <- PQ.resultStatus result
-						unless (resultStatus == PQ.TuplesOk) $ fail $ "cannot get latest block from postgres: " <> show resultStatus
-						tuplesCount <- PQ.ntuples result
-						unless (tuplesCount == 1) $ fail "cannot decode tuples from postgres"
-						maybeValue <- PQ.getvalue result 0 0
-						beginBlock <- case maybeValue of
-							Just beginBlockStr -> do
-								let maxBlock = read (T.unpack $ T.decodeUtf8 beginBlockStr)
-								hPutStrLn stderr $ "got latest block synchronized to postgres: " <> show maxBlock
-								return $ maxBlock + 1
-							Nothing -> return defaultBeginBlock
-						PQ.finish connection
-						return beginBlock
-					Nothing -> fail "--continue requires --output-postgres"
-				else return defaultBeginBlock
+				then initContinuingOutputStorages outputStorages specifiedBeginBlock
+				else return (outputStorages, specifiedBeginBlock)
 
 		let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
@@ -407,14 +379,14 @@ run Options
 				when (blockIndex `rem` 100 == 0) $ hPutStrLn stderr $ "synced up to " ++ show blockIndex
 				(block :) <$> step (blockIndex + 1)
 			else return []
-		writeOutput httpManager outputFile blockchainType schema primaryField =<< step beginBlock
+		writeToOutputStorages outputStorages =<< step beginBlock
 		hPutStrLn stderr $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
 		{ options_apiUrl = apiUrl
 		, options_syncDbFile = syncDbFile
 		, options_readDump = readDump
-		, options_outputFile = outputFile@Output
+		, options_output = output@Output
 			{ output_postgres = maybeOutputPostgres
 			, output_postgresTable = maybePostgresTable
 			}
@@ -425,6 +397,8 @@ run Options
 			}
 		httpRequest <- H.parseRequest apiUrl
 		let iota = newIota httpManager httpRequest
+
+		outputStorages <- initOutputStorages httpManager output "iota" "hash"
 
 		-- simple multithreaded pipeline
 		hashQueue <- newTQueueIO
@@ -549,7 +523,7 @@ run Options
 			transaction <- atomically $ readTBQueue transactionQueue
 			when (i `rem` 100 == 0) $ hPutStrLn stderr $ "synced transactions: " ++ show i
 			(transaction :) <$> step (i + 1)
-		writeOutput httpManager outputFile "iota" (schemaOf (Proxy :: Proxy IotaTransaction)) "hash" =<< step (0 :: Int)
+		writeToOutputStorages outputStorages =<< step (0 :: Int)
 
 	OptionPrintSchemaCommand
 		{ options_schema = schemaTypeStr
@@ -568,82 +542,134 @@ run Options
 				putStrLn $ T.unpack $ T.decodeUtf8 $ BL.toStrict $ J.encode $ bigQuerySchema $ schemaOf (Proxy :: Proxy IotaTransaction)
 			_ -> fail "wrong pair schema+storage"
 
+-- | Helper struct for output storage.
+data OutputStorage = OutputStorage
+	{ os_storage :: !SomeExportStorage
+	, os_skipBlocks :: {-# UNPACK #-} !Int
+	}
+
+-- | Helper struct for output storages.
+data OutputStorages = OutputStorages
+	{ oss_storages :: ![OutputStorage]
+	, oss_packSize :: {-# UNPACK #-} !Int
+	}
+
+initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text -> IO OutputStorages
+initOutputStorages httpManager Output
+	{ output_avroFile = maybeOutputAvroFile
+	, output_postgresFile = maybeOutputPostgresFile
+	, output_elasticFile = maybeOutputElasticFile
+	, output_postgres = maybeOutputPostgres
+	, output_elastic = maybeOutputElastic
+	, output_postgresTable = maybePostgresTable
+	, output_elasticIndex = maybeElasticIndex
+	, output_packSize = packSize
+	, output_upsert = upsert
+	} defaultTableName primaryField = mkOutputStorages . map mkOutputStorage . concat <$> sequence
+	[ case maybeOutputAvroFile of
+		Just outputAvroFile -> initStorage (Proxy :: Proxy AvroFileExportStorage) storageOptions
+			{ eso_destination = outputAvroFile
+			}
+		Nothing -> return []
+	, case maybeOutputPostgresFile of
+		Just outputPostgresFile -> initStorage (Proxy :: Proxy PostgresFileExportStorage) storageOptions
+			{ eso_destination = outputPostgresFile
+			, eso_table = postgresTableName
+			}
+		Nothing -> return []
+	, case maybeOutputElasticFile of
+		Just outputElasticFile -> initStorage (Proxy :: Proxy ElasticFileExportStorage) storageOptions
+			{ eso_destination = outputElasticFile
+			, eso_table = elasticIndexName
+			}
+		Nothing -> return []
+	, case maybeOutputPostgres of
+		Just outputPostgres -> initStorage (Proxy :: Proxy PostgresExportStorage) storageOptions
+			{ eso_destination = outputPostgres
+			, eso_table = postgresTableName
+			}
+		Nothing -> return []
+	, case maybeOutputElastic of
+		Just outputElastic -> initStorage (Proxy :: Proxy ElasticExportStorage) storageOptions
+			{ eso_destination = outputElastic
+			, eso_table = elasticIndexName
+			}
+		Nothing -> return []
+	]
+	where
+		storageOptions = ExportStorageOptions
+			{ eso_httpManager = httpManager
+			, eso_destination = ""
+			, eso_table = ""
+			, eso_primaryField = primaryField
+			, eso_upsert = upsert
+			}
+
+		initStorage :: ExportStorage s => Proxy s -> ExportStorageOptions -> IO [SomeExportStorage]
+		initStorage p o = let
+			f :: ExportStorage s => Proxy s -> ExportStorageOptions -> IO s
+			f Proxy = initExportStorage
+			in do
+				storage <- f p o
+				return [SomeExportStorage storage]
+
+		mkOutputStorage storage = OutputStorage
+			{ os_storage = storage
+			, os_skipBlocks = 0
+			}
+
+		mkOutputStorages storages = OutputStorages
+			{ oss_storages = storages
+			, oss_packSize = packSize
+			}
+
+		postgresTableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable
+		elasticIndexName = fromMaybe defaultTableName $ T.pack <$> maybeElasticIndex
+
+-- | Get minimum begin block among storages, and initialize them with skip blocks values.
+-- All storages must support getting max block.
+initContinuingOutputStorages :: OutputStorages -> BlockHeight -> IO (OutputStorages, BlockHeight)
+initContinuingOutputStorages outputStorages@OutputStorages
+	{ oss_storages = storages
+	} defaultBeginBlock = do
+	getBeginBlockFuncs <- forM storages $ \OutputStorage
+		{ os_storage = SomeExportStorage storage
+		} -> do
+		getBeginBlockFunc <- maybe (fail "output storage does not support getting max block") return $ getExportStorageMaxBlock storage
+		return $ maybe defaultBeginBlock (max defaultBeginBlock . (+ 1)) <$> getBeginBlockFunc
+	beginBlocks <- sequence getBeginBlockFuncs
+	let beginBlock = if null beginBlocks then defaultBeginBlock else minimum beginBlocks
+	return
+		( outputStorages
+			{ oss_storages = zipWith (\storage storageBeginBlock -> storage
+				{ os_skipBlocks = fromIntegral $ storageBeginBlock - beginBlock
+				}) storages beginBlocks
+			}
+		, beginBlock
+		)
+
+writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => OutputStorages -> [a] -> IO ()
+writeToOutputStorages OutputStorages
+	{ oss_storages = storages
+	, oss_packSize = packSize
+	} blocks = do
+	vars <- forM storages $ \OutputStorage
+		{ os_storage = SomeExportStorage storage
+		, os_skipBlocks = skipBlocks
+		} -> do
+		var <- newTVarIO Nothing
+		void $ forkFinally (writeExportStorage storage $ packSplit $ drop skipBlocks blocks) $ atomically . writeTVar var . Just
+		return var
+	results <- atomically $ do
+		results <- mapM readTVar vars
+		unless (all isJust results || any (maybe False isLeft) results) retry
+		return results
+	let erroredResults = concat $ map (maybe [] (either pure (const []))) results
+	unless (null erroredResults) $ do
+		print erroredResults
+		fail "output failed"
 
 	where
-		packSplit :: Int -> [a] -> [[a]]
-		packSplit packSize = \case
+		packSplit = \case
 			[] -> []
-			xs -> let (a, b) = splitAt packSize xs in a : packSplit packSize b
-
-		writeOutput :: (A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => H.Manager -> Output -> T.Text -> Schema -> T.Text -> [a] -> IO ()
-		writeOutput httpManager Output
-			{ output_avroFile = maybeOutputAvroFile
-			, output_postgresFile = maybeOutputPostgresFile
-			, output_elasticFile = maybeOutputElasticFile
-			, output_postgres = maybeOutputPostgres
-			, output_elastic = maybeOutputElastic
-			, output_postgresTable = maybePostgresTable
-			, output_elasticIndex = maybeElasticIndex
-			, output_packSize = packSize
-			, output_upsert = upsert
-			} defaultTableName schema primaryField (packSplit packSize -> packs) = do
-			vars <- forM outputs $ \output -> do
-				var <- newTVarIO Nothing
-				void $ forkFinally output $ atomically . writeTVar var . Just
-				return var
-			results <- atomically $ do
-				results <- mapM readTVar vars
-				unless (all isJust results || any (maybe False isLeft) results) retry
-				return results
-			let erroredResults = concat $ map (maybe [] (either pure (const []))) results
-			unless (null erroredResults) $ do
-				print erroredResults
-				fail "output failed"
-
-			where
-				outputs = concat
-					[ case maybeOutputAvroFile of
-						Just outputAvroFile -> [BL.writeFile outputAvroFile =<< A.encodeContainer packs]
-						Nothing -> []
-					, case maybeOutputPostgresFile of
-						Just outputPostgresFile -> [BL.writeFile outputPostgresFile $ TL.encodeUtf8 $ TL.toLazyText $ mconcat $ map postgresSql packs]
-						Nothing -> []
-					, case maybeOutputElasticFile of
-						Just outputElasticFile -> [BL.writeFile outputElasticFile $ mconcat $ map elasticPack packs]
-						Nothing -> []
-					, case maybeOutputPostgres of
-						Just outputPostgres -> [mapM_ (writePackToPostgres outputPostgres) packs]
-						Nothing -> []
-					, case maybeOutputElastic of
-						Just outputElastic -> [mapM_ (writePackToElastic outputElastic . elasticPack) packs]
-						Nothing -> []
-					]
-
-				writePackToPostgres outputPostgres pack = do
-					connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack outputPostgres
-					connectionStatus <- PQ.status connection
-					unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
-					resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus <=< PQ.exec connection $ T.encodeUtf8 $ TL.toStrict $ TL.toLazyText $ postgresSql pack
-					unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus <> " " <> (T.unpack $ TL.toStrict $ TL.toLazyText $ postgresSql pack)
-					PQ.finish connection
-
-				writePackToElastic outputElastic pack = do
-					httpRequest <- H.parseRequest outputElastic
-					response <- H.responseBody <$> H.httpLbs httpRequest
-						{ H.method = "POST"
-						, H.requestHeaders = [("Content-Type", "application/json")]
-						, H.path = "/_bulk"
-						, H.requestBody = H.RequestBodyLBS pack
-						} httpManager
-					errors <- either fail return . J.parseEither (J..: "errors") =<< either fail return (J.eitherDecode response)
-					when errors $ fail "errors while inserting to ElasticSearch"
-
-				elasticLine doc = "{\"index\":{\"_index\":" <> J.encode elasticIndexName <> ",\"_type\":\"block\"}}\n" <> doc <> "\n"
-
-				elasticPack = mconcat . map (elasticLine . J.encode . unifyBlock)
-
-				postgresSql = (if upsert then postgresSqlUpsertGroup primaryField else postgresSqlInsertGroup) schema tableName
-
-				tableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable
-
-				elasticIndexName = fromMaybe defaultTableName $ T.pack <$> maybeElasticIndex
+			xs -> let (a, b) = splitAt packSize xs in a : packSplit b

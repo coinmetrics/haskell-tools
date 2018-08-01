@@ -14,6 +14,11 @@ cabal-version:       >=1.10
 executable coinmetrics-export
   main-is:           coinmetrics-export.hs
   other-modules:
+    CoinMetrics.Export.Storage
+    CoinMetrics.Export.Storage.AvroFile
+    CoinMetrics.Export.Storage.Elastic
+    CoinMetrics.Export.Storage.Postgres
+    CoinMetrics.Export.Storage.PostgresFile
   build-depends:
     aeson
     , avro
