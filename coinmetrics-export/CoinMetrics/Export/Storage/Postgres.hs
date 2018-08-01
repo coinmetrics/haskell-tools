@@ -10,7 +10,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TL
-import System.IO
 
 import CoinMetrics.Export.Storage
 import CoinMetrics.Export.Storage.PostgresFile
@@ -35,14 +34,8 @@ instance ExportStorage PostgresExportStorage where
 		tuplesCount <- PQ.ntuples result
 		unless (tuplesCount == 1) $ fail "cannot decode tuples from postgres"
 		maybeValue <- PQ.getvalue result 0 0
-		maxBlock <- case maybeValue of
-			Just maxBlockStr -> do
-				let maxBlock = read (T.unpack $ T.decodeUtf8 maxBlockStr)
-				hPutStrLn stderr $ "got latest block synchronized to postgres: " <> show maxBlock
-				return $ Just maxBlock
-			Nothing -> return Nothing
 		PQ.finish connection
-		return maxBlock
+		return $ read . T.unpack . T.decodeUtf8 <$> maybeValue
 
 	writeExportStorage (PostgresExportStorage options@ExportStorageOptions
 		{ eso_destination = destination

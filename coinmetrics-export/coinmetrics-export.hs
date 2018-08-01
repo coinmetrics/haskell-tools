@@ -638,6 +638,7 @@ initContinuingOutputStorages outputStorages@OutputStorages
 		getBeginBlockFunc <- maybe (fail "output storage does not support getting max block") return $ getExportStorageMaxBlock storage
 		return $ maybe defaultBeginBlock (max defaultBeginBlock . (+ 1)) <$> getBeginBlockFunc
 	beginBlocks <- sequence getBeginBlockFuncs
+	hPutStrLn stderr $ "continuing from blocks: " <> show beginBlocks
 	let beginBlock = if null beginBlocks then defaultBeginBlock else minimum beginBlocks
 	return
 		( outputStorages
