@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedLists, OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists, OverloadedStrings, ViewPatterns #-}
 
 module CoinMetrics.Export.Storage.Elastic
 	( ElasticExportStorage()
@@ -59,7 +59,7 @@ instance ExportStorage ElasticExportStorage where
 				, H.requestBody = H.RequestBodyLBS $ elasticExportStoragePack options pack
 				} httpManager
 			errors <- either fail return . J.parseEither (J..: "errors") =<< either fail return (J.eitherDecode response)
-			when errors $ fail "errors while inserting to ElasticSearch"
+			when errors $ fail "errors while uploading to ElasticSearch"
 
 newtype ElasticFileExportStorage = ElasticFileExportStorage ExportStorageOptions
 
@@ -73,6 +73,15 @@ instance ExportStorage ElasticFileExportStorage where
 elasticExportStoragePack :: IsUnifiedBlock a => ExportStorageOptions -> [a] -> BL.ByteString
 elasticExportStoragePack ExportStorageOptions
 	{ eso_table = table
+	, eso_upsert = upsert
 	} = mconcat . map elasticLine
 	where
-		elasticLine doc = "{\"index\":{\"_index\":" <> J.encode table <> ",\"_type\":\"block\"}}\n" <> J.encode (unifyBlock doc) <> "\n"
+		elasticLine block = let
+			unifiedBlock@(ub_height -> height) = unifyBlock block
+			in J.encode (J.Object
+				[ (if upsert then "index" else "create", J.Object
+					[ ("_index", J.toJSON table)
+					, ("_type", "block")
+					, ("_id", J.toJSON $ show height)
+					])
+				]) <> "\n" <> J.encode unifiedBlock <> "\n"
