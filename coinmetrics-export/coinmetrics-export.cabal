@@ -42,4 +42,5 @@ executable coinmetrics-export
     , text
     , unordered-containers
     , vector
+  ghc-options:         -threaded -Wall -Wno-tabs
   default-language:    Haskell2010

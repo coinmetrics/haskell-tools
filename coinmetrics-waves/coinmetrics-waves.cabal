@@ -25,4 +25,5 @@ library
     , http-client
     , text
     , vector
+  ghc-options:         -Wall -Wno-tabs
   default-language:    Haskell2010

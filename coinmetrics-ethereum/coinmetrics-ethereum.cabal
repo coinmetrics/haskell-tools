@@ -30,4 +30,5 @@ library
     , unordered-containers
     , vector
     , vector-instances
+  ghc-options:         -Wall -Wno-tabs
   default-language:    Haskell2010

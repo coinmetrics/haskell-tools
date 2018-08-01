@@ -110,4 +110,5 @@ library
     build-depends:       coinmetrics-waves
     cpp-options:         -DCM_SUPPORT_WAVES
 
+  ghc-options:         -Wall -Wno-tabs
   default-language:    Haskell2010
