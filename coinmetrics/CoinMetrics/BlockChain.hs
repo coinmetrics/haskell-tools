@@ -35,6 +35,8 @@ data BlockChainParams = BlockChainParams
 	, bcp_httpRequest :: !H.Request
 	-- | Include transaction trace information.
 	, bcp_trace :: !Bool
+	-- | Exclude unaccounted actions from trace information.
+	, bcp_excludeUnaccountedActions :: !Bool
 	-- | Number of threads working with blockchain.
 	, bcp_threadsCount :: !Int
 	}

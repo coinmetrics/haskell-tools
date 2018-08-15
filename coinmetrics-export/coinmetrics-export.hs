@@ -98,6 +98,10 @@ main = run =<< O.execParser parser where
 							(  O.long "trace"
 							<> O.help "Perform tracing of actions performed by transactions"
 							)
+						<*> O.switch
+							(  O.long "exclude-unaccounted-actions"
+							<> O.help "When --trace is on, exclude unaccounted actions"
+							)
 						<*> optionOutput
 						<*> O.option O.auto
 							(  O.long "threads"
@@ -222,6 +226,7 @@ data OptionCommand
 		, options_endBlock :: !BlockHeight
 		, options_continue :: !Bool
 		, options_trace :: !Bool
+		, options_excludeUnaccountedActions :: !Bool
 		, options_output :: !Output
 		, options_threadsCount :: !Int
 		, options_ignoreMissingBlocks :: !Bool
@@ -264,6 +269,7 @@ run Options
 		, options_endBlock = maybeEndBlock
 		, options_continue = continue
 		, options_trace = trace
+		, options_excludeUnaccountedActions = excludeUnaccountedActions
 		, options_output = output
 		, options_threadsCount = threadsCount
 		, options_ignoreMissingBlocks = ignoreMissingBlocks
@@ -292,6 +298,7 @@ run Options
 				{ bcp_httpManager = httpManager
 				, bcp_httpRequest = httpRequest
 				, bcp_trace = trace
+				, bcp_excludeUnaccountedActions = excludeUnaccountedActions
 				, bcp_threadsCount = threadsCount
 				}
 

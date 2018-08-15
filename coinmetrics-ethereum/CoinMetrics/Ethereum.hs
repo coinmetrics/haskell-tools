@@ -35,7 +35,11 @@ import Hanalytics.Schema
 import Hanalytics.Schema.Avro
 import Hanalytics.Schema.Postgres
 
-data Ethereum = Ethereum !JsonRpc !Bool
+data Ethereum = Ethereum
+	{ ethereum_jsonRpc :: !JsonRpc
+	, ethereum_enableTrace :: !Bool
+	, ethereum_excludeUnaccountedActions :: !Bool
+	}
 
 data EthereumBlock = EthereumBlock
 	{ eb_number :: {-# UNPACK #-} !Int64
@@ -375,7 +379,12 @@ instance BlockChain Ethereum where
 			{ bcp_httpManager = httpManager
 			, bcp_httpRequest = httpRequest
 			, bcp_trace = trace
-			} -> return $ Ethereum (newJsonRpc httpManager httpRequest Nothing) trace
+			, bcp_excludeUnaccountedActions = excludeUnaccountedActions
+			} -> return Ethereum
+			{ ethereum_jsonRpc = newJsonRpc httpManager httpRequest Nothing
+			, ethereum_enableTrace = trace
+			, ethereum_excludeUnaccountedActions = excludeUnaccountedActions
+			}
 		, bci_defaultApiUrl = "http://127.0.0.1:8545/"
 		, bci_defaultBeginBlock = 0
 		, bci_defaultEndBlock = -1000 -- very conservative rewrite limit
@@ -389,11 +398,17 @@ instance BlockChain Ethereum where
 			"CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
 		}
 
-	getCurrentBlockHeight (Ethereum jsonRpc _enableTrace) = do
+	getCurrentBlockHeight Ethereum
+		{ ethereum_jsonRpc = jsonRpc
+		} = do
 		J.Success height <- J.parse decode0xHexNumber <$> jsonRpcRequest jsonRpc "eth_blockNumber" ([] :: V.Vector J.Value)
 		return height
 
-	getBlockByHeight (Ethereum jsonRpc enableTrace) blockHeight = do
+	getBlockByHeight Ethereum
+		{ ethereum_jsonRpc = jsonRpc
+		, ethereum_enableTrace = enableTrace
+		, ethereum_excludeUnaccountedActions = excludeUnaccountedActions
+		} blockHeight = do
 		blockFields <- jsonRpcRequest jsonRpc "eth_getBlockByNumber" ([encode0xHexNumber blockHeight, J.Bool True] :: V.Vector J.Value)
 		J.Success rawTransactions <- return $ J.parse (J..: "transactions") blockFields
 		J.Success unclesHashes <- return $ J.parse (mapM decode0xHexBytes <=< (J..: "uncles")) blockFields
@@ -416,7 +431,7 @@ instance BlockChain Ethereum where
 						actionFields
 					return (txIndex, action)
 				-- propagate succeeded field and remember as "accounted"
-				return $ V.create $ do
+				return $ (if excludeUnaccountedActions then V.filter (ea_accounted . snd) else id) $ V.create $ do
 					actions <- V.thaw indexedActions
 					let
 						indexedActionsMap = HML.fromList $ V.toList $ V.map (\(txIndex, action) -> ((txIndex, ea_stack action), action)) indexedActions
