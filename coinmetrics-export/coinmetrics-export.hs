@@ -29,6 +29,7 @@ import qualified Options.Applicative as O
 import System.Directory
 import System.IO
 import System.IO.Unsafe
+import qualified System.Process as P
 
 import CoinMetrics.BlockChain
 import CoinMetrics.BlockChain.All
@@ -207,6 +208,18 @@ main = run =<< O.execParser parser where
 			<> O.metavar "PACK_SIZE"
 			<> O.help "Number of records in pack (SQL INSERT command, or Avro block)"
 			)
+		<*> O.option O.auto
+			(  O.long "file-size"
+			<> O.value (-1) <> O.showDefault
+			<> O.metavar "FILE_SIZE"
+			<> O.help "Number of records per file (-1 means infinite)"
+			)
+		<*> O.option (O.maybeReader (Just . Just))
+			(  O.long "file-exec"
+			<> O.value Nothing
+			<> O.metavar "FILE_EXEC"
+			<> O.help "Command to execute per output file. Variable substitutions: %F - file name"
+			)
 		<*> O.switch
 			(  O.long "upsert"
 			<> O.help "Perform UPSERT instead of INSERT"
@@ -252,6 +265,8 @@ data Output = Output
 	, output_postgresTable :: !(Maybe String)
 	, output_elasticIndex :: !(Maybe String)
 	, output_packSize :: !Int
+	, output_fileSize :: !Int
+	, output_fileExec :: !(Maybe String)
 	, output_upsert :: !Bool
 	}
 
@@ -386,7 +401,7 @@ run Options
 				when (blockIndex `rem` 100 == 0) $ hPutStrLn stderr $ "synced up to " ++ show blockIndex
 				(block :) <$> step (blockIndex + 1)
 			else return []
-		writeToOutputStorages outputStorages =<< step beginBlock
+		writeToOutputStorages outputStorages beginBlock =<< step beginBlock
 		hPutStrLn stderr $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
@@ -530,7 +545,7 @@ run Options
 			transaction <- atomically $ readTBQueue transactionQueue
 			when (i `rem` 100 == 0) $ hPutStrLn stderr $ "synced transactions: " ++ show i
 			(transaction :) <$> step (i + 1)
-		writeToOutputStorages outputStorages =<< step (0 :: Int)
+		writeToOutputStorages outputStorages 0 =<< step (0 :: Int)
 
 	OptionPrintSchemaCommand
 		{ options_schema = schemaTypeStr
@@ -553,12 +568,15 @@ run Options
 data OutputStorage = OutputStorage
 	{ os_storage :: !SomeExportStorage
 	, os_skipBlocks :: {-# UNPACK #-} !Int
+	, os_destFunc :: !(BlockHeight -> String)
+	, os_fileExec :: !(String -> IO ())
 	}
 
 -- | Helper struct for output storages.
 data OutputStorages = OutputStorages
 	{ oss_storages :: ![OutputStorage]
 	, oss_packSize :: {-# UNPACK #-} !Int
+	, oss_fileSize :: {-# UNPACK #-} !Int
 	}
 
 initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text -> IO OutputStorages
@@ -571,64 +589,66 @@ initOutputStorages httpManager Output
 	, output_postgresTable = maybePostgresTable
 	, output_elasticIndex = maybeElasticIndex
 	, output_packSize = packSize
+	, output_fileSize = fileSize
+	, output_fileExec = maybeFileExec
 	, output_upsert = upsert
 	} defaultTableName primaryField = mkOutputStorages . map mkOutputStorage . concat <$> sequence
 	[ case maybeOutputAvroFile of
-		Just outputAvroFile -> initStorage (Proxy :: Proxy AvroFileExportStorage) storageOptions
-			{ eso_destination = outputAvroFile
-			}
+		Just outputAvroFile -> initStorage (Proxy :: Proxy AvroFileExportStorage) storageOptions (mkFileDestFunc outputAvroFile)
 		Nothing -> return []
 	, case maybeOutputPostgresFile of
 		Just outputPostgresFile -> initStorage (Proxy :: Proxy PostgresFileExportStorage) storageOptions
-			{ eso_destination = outputPostgresFile
-			, eso_table = postgresTableName
-			}
+			{ eso_table = postgresTableName
+			} (mkFileDestFunc outputPostgresFile)
 		Nothing -> return []
 	, case maybeOutputElasticFile of
 		Just outputElasticFile -> initStorage (Proxy :: Proxy ElasticFileExportStorage) storageOptions
-			{ eso_destination = outputElasticFile
-			, eso_table = elasticIndexName
-			}
+			{ eso_table = elasticIndexName
+			} (mkFileDestFunc outputElasticFile)
 		Nothing -> return []
 	, case maybeOutputPostgres of
 		Just outputPostgres -> initStorage (Proxy :: Proxy PostgresExportStorage) storageOptions
-			{ eso_destination = outputPostgres
-			, eso_table = postgresTableName
-			}
+			{ eso_table = postgresTableName
+			} (const outputPostgres)
 		Nothing -> return []
 	, case maybeOutputElastic of
 		Just outputElastic -> initStorage (Proxy :: Proxy ElasticExportStorage) storageOptions
-			{ eso_destination = outputElastic
-			, eso_table = elasticIndexName
-			}
+			{ eso_table = elasticIndexName
+			} (const outputElastic)
 		Nothing -> return []
 	]
 	where
 		storageOptions = ExportStorageOptions
 			{ eso_httpManager = httpManager
-			, eso_destination = ""
 			, eso_table = ""
 			, eso_primaryField = primaryField
 			, eso_upsert = upsert
 			}
 
-		initStorage :: ExportStorage s => Proxy s -> ExportStorageOptions -> IO [SomeExportStorage]
-		initStorage p o = let
+		initStorage :: ExportStorage s => Proxy s -> ExportStorageOptions -> (BlockHeight -> String) -> IO [(SomeExportStorage, BlockHeight -> String)]
+		initStorage p o destFunc = let
 			f :: ExportStorage s => Proxy s -> ExportStorageOptions -> IO s
 			f Proxy = initExportStorage
 			in do
 				storage <- f p o
-				return [SomeExportStorage storage]
+				return [(SomeExportStorage storage, destFunc)]
 
-		mkOutputStorage storage = OutputStorage
+		mkOutputStorage (storage, destFunc) = OutputStorage
 			{ os_storage = storage
 			, os_skipBlocks = 0
+			, os_destFunc = destFunc
+			, os_fileExec = case maybeFileExec of
+				Just fileExec -> \destination -> P.callCommand $ T.unpack $ T.replace "%F" (T.pack destination) (T.pack fileExec)
+				Nothing -> const $ return ()
 			}
 
 		mkOutputStorages storages = OutputStorages
 			{ oss_storages = storages
 			, oss_packSize = packSize
+			, oss_fileSize = fileSize
 			}
+
+		mkFileDestFunc template beginBlock = T.unpack $ T.replace "%N" (T.pack $ show beginBlock) (T.pack template)
 
 		postgresTableName = fromMaybe defaultTableName $ T.pack <$> maybePostgresTable
 		elasticIndexName = fromMaybe defaultTableName $ T.pack <$> maybeElasticIndex
@@ -641,8 +661,11 @@ initContinuingOutputStorages outputStorages@OutputStorages
 	} defaultBeginBlock = do
 	getBeginBlockFuncs <- forM storages $ \OutputStorage
 		{ os_storage = SomeExportStorage storage
+		, os_destFunc = destFunc
 		} -> do
-		getBeginBlockFunc <- maybe (fail "output storage does not support getting max block") return $ getExportStorageMaxBlock storage
+		getBeginBlockFunc <- maybe (fail "output storage does not support getting max block") return $ getExportStorageMaxBlock storage ExportStorageParams
+			{ esp_destination = destFunc defaultBeginBlock
+			}
 		return $ maybe defaultBeginBlock (max defaultBeginBlock . (+ 1)) <$> getBeginBlockFunc
 	beginBlocks <- sequence getBeginBlockFuncs
 	hPutStrLn stderr $ "continuing from blocks: " <> show beginBlocks
@@ -656,17 +679,17 @@ initContinuingOutputStorages outputStorages@OutputStorages
 		, beginBlock
 		)
 
-writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => OutputStorages -> [a] -> IO ()
+writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => OutputStorages -> BlockHeight -> [a] -> IO ()
 writeToOutputStorages OutputStorages
 	{ oss_storages = storages
 	, oss_packSize = packSize
-	} blocks = do
-	vars <- forM storages $ \OutputStorage
-		{ os_storage = SomeExportStorage storage
-		, os_skipBlocks = skipBlocks
+	, oss_fileSize = fileSize
+	} beginBlock blocks = do
+	vars <- forM storages $ \outputStorage@OutputStorage
+		{ os_skipBlocks = skipBlocks
 		} -> do
 		var <- newTVarIO Nothing
-		void $ forkFinally (writeExportStorage storage $ packSplit $ drop skipBlocks blocks) $ atomically . writeTVar var . Just
+		void $ forkFinally (writeToStorage outputStorage $ splitBlocks skipBlocks blocks) $ atomically . writeTVar var . Just
 		return var
 	results <- atomically $ do
 		results <- mapM readTVar vars
@@ -678,6 +701,22 @@ writeToOutputStorages OutputStorages
 		fail "output failed"
 
 	where
-		packSplit = \case
+		writeToStorage OutputStorage
+			{ os_storage = SomeExportStorage storage
+			, os_destFunc = destFunc
+			, os_fileExec = fileExec
+			} = mapM_ $ \(fileBeginBlock, packs) -> do
+			let destination = destFunc fileBeginBlock
+			writeExportStorage storage ExportStorageParams
+				{ esp_destination = destination
+				} packs
+			fileExec destination
+
+		splitWithSize n = \case
 			[] -> []
-			xs -> let (a, b) = splitAt packSize xs in a : packSplit b
+			xs -> let (a, b) = splitAt n xs in a : splitWithSize n b
+		splitBlocks skipBlocks
+			= map (\(fileBeginBlock, packs) -> (fileBeginBlock, splitWithSize packSize packs))
+			. zipWith (\fileBlockIndex file -> (fromIntegral $ fromIntegral beginBlock + skipBlocks + fileBlockIndex * fileSize, file)) [0..]
+			. (if fileSize > 0 then splitWithSize fileSize else pure)
+			. drop skipBlocks

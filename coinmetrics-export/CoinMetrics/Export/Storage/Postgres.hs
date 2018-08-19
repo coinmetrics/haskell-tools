@@ -20,10 +20,11 @@ instance ExportStorage PostgresExportStorage where
 	initExportStorage = return . PostgresExportStorage
 
 	getExportStorageMaxBlock (PostgresExportStorage ExportStorageOptions
-		{ eso_destination = destination
-		, eso_table = table
+		{ eso_table = table
 		, eso_primaryField = primaryField
-		}) = Just $ do
+		}) ExportStorageParams
+		{ esp_destination = destination
+		} = Just $ do
 		connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack destination
 		connectionStatus <- PQ.status connection
 		unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
@@ -37,9 +38,9 @@ instance ExportStorage PostgresExportStorage where
 		PQ.finish connection
 		return $ read . T.unpack . T.decodeUtf8 <$> maybeValue
 
-	writeExportStorage (PostgresExportStorage options@ExportStorageOptions
-		{ eso_destination = destination
-		}) = mapM_ $ \pack -> do
+	writeExportStorage (PostgresExportStorage options) ExportStorageParams
+		{ esp_destination = destination
+		} = mapM_ $ \pack -> do
 		connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack destination
 		connectionStatus <- PQ.status connection
 		unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus

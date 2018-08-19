@@ -24,9 +24,10 @@ instance ExportStorage ElasticExportStorage where
 
 	getExportStorageMaxBlock (ElasticExportStorage ExportStorageOptions
 		{ eso_httpManager = httpManager
-		, eso_destination = destination
 		, eso_table = table
-		}) = Just $ do
+		}) ExportStorageParams
+		{ esp_destination = destination
+		} = Just $ do
 		httpRequest <- H.parseRequest destination
 		response <- H.responseBody <$> H.httpLbs httpRequest
 			{ H.method = "GET"
@@ -48,8 +49,9 @@ instance ExportStorage ElasticExportStorage where
 
 	writeExportStorage (ElasticExportStorage options@ExportStorageOptions
 		{ eso_httpManager = httpManager
-		, eso_destination = destination
-		}) packs = do
+		}) ExportStorageParams
+		{ esp_destination = destination
+		} packs = do
 		httpRequest <- H.parseRequest destination
 		forM_ packs $ \pack -> do
 			response <- H.responseBody <$> H.httpLbs httpRequest
@@ -66,9 +68,9 @@ newtype ElasticFileExportStorage = ElasticFileExportStorage ExportStorageOptions
 instance ExportStorage ElasticFileExportStorage where
 	initExportStorage = return . ElasticFileExportStorage
 
-	writeExportStorage (ElasticFileExportStorage options@ExportStorageOptions
-		{ eso_destination = destination
-		}) = BL.writeFile destination . mconcat . map (elasticExportStoragePack options)
+	writeExportStorage (ElasticFileExportStorage options) ExportStorageParams
+		{ esp_destination = destination
+		} = BL.writeFile destination . mconcat . map (elasticExportStoragePack options)
 
 elasticExportStoragePack :: IsUnifiedBlock a => ExportStorageOptions -> [a] -> BL.ByteString
 elasticExportStoragePack ExportStorageOptions

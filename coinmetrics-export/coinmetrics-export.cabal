@@ -38,6 +38,7 @@ executable coinmetrics-export
     , memory
     , optparse-applicative
     , postgresql-libpq
+    , process
     , stm
     , text
     , unordered-containers

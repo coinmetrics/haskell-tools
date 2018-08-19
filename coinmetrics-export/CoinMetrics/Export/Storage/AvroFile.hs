@@ -13,6 +13,6 @@ newtype AvroFileExportStorage = AvroFileExportStorage ExportStorageOptions
 instance ExportStorage AvroFileExportStorage where
 	initExportStorage = return . AvroFileExportStorage
 
-	writeExportStorage (AvroFileExportStorage ExportStorageOptions
-		{ eso_destination = destination
-		}) = BL.writeFile destination <=< A.encodeContainer
+	writeExportStorage (AvroFileExportStorage {}) ExportStorageParams
+		{ esp_destination = destination
+		} = BL.writeFile destination <=< A.encodeContainer

@@ -16,9 +16,9 @@ newtype PostgresFileExportStorage = PostgresFileExportStorage ExportStorageOptio
 instance ExportStorage PostgresFileExportStorage where
 	initExportStorage = return . PostgresFileExportStorage
 
-	writeExportStorage (PostgresFileExportStorage options@ExportStorageOptions
-		{ eso_destination = destination
-		}) = BL.writeFile destination . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresExportStorageSql options)
+	writeExportStorage (PostgresFileExportStorage options) ExportStorageParams
+		{ esp_destination = destination
+		} = BL.writeFile destination . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresExportStorageSql options)
 
 postgresExportStorageSql :: (Schemable a, ToPostgresText a) => ExportStorageOptions -> [a] -> TL.Builder
 postgresExportStorageSql ExportStorageOptions
