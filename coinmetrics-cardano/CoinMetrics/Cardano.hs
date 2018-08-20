@@ -78,6 +78,7 @@ instance BlockChain Cardano where
 		let
 			pageIndex = (blockHeight + 8) `quot` 10
 			blockIndexOnPage = blockHeight - (pageIndex * 10 - 8)
+			reverseGet i v = v V.! (V.length v - 1 - i)
 		-- get page with blocks
 		pageObject <- either fail return =<< cardanoRequest cardano "/api/blocks/pages"
 			[ ("page", Just $ fromString $ show pageIndex)
@@ -85,7 +86,7 @@ instance BlockChain Cardano where
 			]
 		blockObject <- either fail return $ flip J.parseEither pageObject $ J.withArray "page" $
 			\((V.! 1) -> blocksObjectsObject) ->
-			J.withArray "blocks" (J.parseJSON . (V.! fromIntegral blockIndexOnPage)) blocksObjectsObject
+			J.withArray "blocks" (J.parseJSON . (reverseGet $ fromIntegral blockIndexOnPage)) blocksObjectsObject
 		blockHashText <- either fail return $ J.parseEither (J..: "cbeBlkHash") blockObject
 		blockTxsBriefObjects <- either fail return =<< cardanoRequest cardano ("/api/blocks/txs/" <> blockHashText) [("limit", Just "1000000000000000000")]
 		blockTxs <- forM blockTxsBriefObjects $ \txBriefObject -> do
