@@ -1,4 +1,4 @@
-[![Travis CI Build Status](https://travis-ci.org/coinmetrics-io/haskell-tools.svg?branch=master)](https://travis-ci.org/coinmetrics-io/haskell-tools) [![Docker Repository on Quay](https://quay.io/repository/quyse/coinmetrics-haskell-tools/status "Docker Repository on Quay")](https://quay.io/repository/quyse/coinmetrics-haskell-tools)
+[![Travis CI Build Status](https://travis-ci.org/coinmetrics-io/haskell-tools.svg?branch=master)](https://travis-ci.org/coinmetrics-io/haskell-tools) [![Docker Repository on Quay](https://quay.io/repository/coinmetrics/haskell-tools/status "Docker Repository on Quay")](https://quay.io/repository/coinmetrics/haskell-tools)
 
 # Haskell-based CoinMetrics.io tools
 
@@ -31,12 +31,12 @@ The easiest way to run the tools is to use docker.
 
 Pull the latest version:
 ```bash
-docker pull quay.io/quyse/coinmetrics-haskell-tools
+docker pull quay.io/coinmetrics/haskell-tools
 ```
 
 Run `coinmetrics-export` tool:
 ```bash
-docker run -it --rm --net host quay.io/quyse/coinmetrics-haskell-tools coinmetrics-export <arguments>
+docker run -it --rm --net host quay.io/coinmetrics/haskell-tools coinmetrics-export <arguments>
 ```
 
 Alternatively you can download binaries from Bintray:
