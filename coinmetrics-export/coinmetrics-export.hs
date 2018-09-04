@@ -721,5 +721,7 @@ writeToOutputStorages OutputStorages
 				( fromIntegral $ fromIntegral beginBlock + skipBlocks + fileIndex * fileSize
 				, splitWithSize packSize file
 				)) [0..]
+			-- next line when fileSize > 0 causes space leak :( fixed by -O0 in .cabal
+			-- TODO: figure out why
 			. (if fileSize > 0 then splitWithSize fileSize else pure)
 			. drop skipBlocks
