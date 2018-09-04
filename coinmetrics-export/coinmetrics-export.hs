@@ -714,9 +714,12 @@ writeToOutputStorages OutputStorages
 
 		splitWithSize n = \case
 			[] -> []
-			xs -> let (a, b) = splitAt n xs in a : splitWithSize n b
+			(splitAt n -> (a, b)) -> a : splitWithSize n b
+
 		splitBlocks skipBlocks
-			= map (\(fileBeginBlock, packs) -> (fileBeginBlock, splitWithSize packSize packs))
-			. zipWith (\fileBlockIndex file -> (fromIntegral $ fromIntegral beginBlock + skipBlocks + fileBlockIndex * fileSize, file)) [0..]
+			= zipWith (\fileIndex file ->
+				( fromIntegral $ fromIntegral beginBlock + skipBlocks + fileIndex * fileSize
+				, splitWithSize packSize file
+				)) [0..]
 			. (if fileSize > 0 then splitWithSize fileSize else pure)
 			. drop skipBlocks
