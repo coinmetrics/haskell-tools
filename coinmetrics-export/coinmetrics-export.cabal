@@ -43,5 +43,6 @@ executable coinmetrics-export
     , text
     , unordered-containers
     , vector
-  ghc-options:         -threaded -Wall -Wno-tabs
+  -- -O0 added temporarily to avoid space leak
+  ghc-options:         -threaded -Wall -Wno-tabs -O0
   default-language:    Haskell2010
