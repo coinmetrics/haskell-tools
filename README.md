@@ -48,12 +48,20 @@ Or packages:
 * [.deb packages](https://bintray.com/coinmetrics/haskell-tools-deb)
 * [.rpm packages](https://bintray.com/coinmetrics/haskell-tools-rpm)
 
-Or use PPA:
+Or setup package repository:
 
+For .deb:
 ```bash
 echo 'deb https://dl.bintray.com/coinmetrics/haskell-tools-deb unstable main' > /etc/apt/sources.list.d/coinmetrics-haskell-tools.list
 curl 'https://bintray.com/user/downloadSubjectPublicKey?username=bintray' | apt-key add -
 apt update
+apt install coinmetrics-export
+```
+
+For .rpm:
+```bash
+(cd /etc/yum.repos.d/ && curl -JOL https://bintray.com/coinmetrics/haskell-tools-rpm/rpm)
+yum install coinmetrics-export
 ```
 
 ## Haskell packages
