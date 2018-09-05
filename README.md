@@ -56,7 +56,7 @@ curl 'https://bintray.com/user/downloadSubjectPublicKey?username=bintray' | apt-
 apt update
 ```
 
-## Packages
+## Haskell packages
 
 * `coinmetrics` - library with some base primitives for exporting blockchain data into different formats.
 * `coinmetrics-bitcoin` - library specific to Bitcoin.
@@ -76,7 +76,7 @@ apt update
 
 Get [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
 
-Run `stack build --copy-bins --local-bin-path <path for executables>`. Executables will be placed by specified path.
+Run `stack build --install-ghc --copy-bins --local-bin-path <path for executables>`. Executables will be placed by specified path.
 
 The code is only tested on Linux (but maybe works on other OSes too).
 
