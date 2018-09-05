@@ -9,7 +9,7 @@ allowing to perform SQL queries, for instance, generating aggregated information
 
 The project is in early alpha deep development seems-like-its-working-oh-crap state. Command line interface is more or less stable but may change. Please use with caution.
 
-Supported cryptocurrencies:
+Supported blockchains:
 
 * [Bitcoin](https://bitcoin.org/) (WIP)
 * [Ethereum](https://www.ethereum.org/)
@@ -23,11 +23,11 @@ Supported cryptocurrencies:
 * [Stellar](https://www.stellar.org/)
 * [Waves](https://wavesplatform.com/) (WIP)
 
-## Prebuilt Binaries (experimental)
+## Binaries (experimental)
 
-There's no stable releases yet. All binaries are built on Travis CI.
+There're no stable releases yet. All binaries are "bleeding edge" ones built on Travis CI.
 
-The easiest way to run the tools is to use docker.
+One easy way to run the tools is to use docker.
 
 Pull the latest version:
 ```bash
@@ -39,7 +39,7 @@ Run `coinmetrics-export` tool:
 docker run -it --rm --net host quay.io/coinmetrics/haskell-tools coinmetrics-export <arguments>
 ```
 
-Alternatively you can download binaries:
+Alternatively you can download executables:
 
 * [generic Linux](https://bintray.com/coinmetrics/haskell-tools)
 
@@ -48,7 +48,7 @@ Or packages:
 * [.deb packages](https://bintray.com/coinmetrics/haskell-tools-deb)
 * [.rpm packages](https://bintray.com/coinmetrics/haskell-tools-rpm)
 
-Or setup package repository:
+Or setup package repository to receive updates:
 
 For .deb:
 ```bash
@@ -63,6 +63,14 @@ For .rpm:
 (cd /etc/yum.repos.d/ && curl -JOL https://bintray.com/coinmetrics/haskell-tools-rpm/rpm)
 yum install coinmetrics-export
 ```
+
+## Building from source
+
+Get [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
+
+Run `stack build --install-ghc --copy-bins --local-bin-path <path for executables>`. Executables will be built and placed by specified path.
+
+The code is only tested on Linux (but maybe works on other OSes too).
 
 ## Haskell packages
 
@@ -80,20 +88,12 @@ yum install coinmetrics-export
 * `coinmetrics-stellar` - library specific to Stellar.
 * `coinmetrics-waves` - library specific to Waves.
 
-## Building
-
-Get [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
-
-Run `stack build --install-ghc --copy-bins --local-bin-path <path for executables>`. Executables will be placed by specified path.
-
-The code is only tested on Linux (but maybe works on other OSes too).
-
 ## Using coinmetrics-export
 
 `coinmetrics-export` exports blockchain data into formats suitable for analysis by other tools (such as PostgreSQL and Google BigQuery).
 The intention is to support multitude of blockchains with a single command-line tool.
 
-Proper documentation is yet to be written. Please run `coinmetrics-export --help` for list of commands, and `coinmetrics-export <command> --help` for info on specific command.
+Proper documentation is yet to be written. Please run `coinmetrics-export --help` for list of commands, and `coinmetrics-export <command> --help` for info on specific command. Also bash completion support is available when installed from packages.
 
 ## Output
 
@@ -105,7 +105,7 @@ Note that PostgreSQL output is the most tested format and is considered primary.
 
 The smallest exportable unit is a blockchain's block. In case of SQL every source block is exported as a database row. Block's transactions are usually stored in `ARRAY`-typed field of block's row.
 
-For efficiency the tool combines multiple rows into a single SQL statement or Avro block. Number of rows can be adjusted with `--pack-size`.
+For efficiency the tool combines multiple rows into a single SQL statement or Avro block. Number of rows per statement can be adjusted with `--pack-size`.
 
 ## Tutorial
 
