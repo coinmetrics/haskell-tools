@@ -39,11 +39,22 @@ Run `coinmetrics-export` tool:
 docker run -it --rm --net host quay.io/coinmetrics/haskell-tools coinmetrics-export <arguments>
 ```
 
-Alternatively you can download binaries from Bintray:
+Alternatively you can download binaries:
 
 * [generic Linux](https://bintray.com/coinmetrics/haskell-tools)
+
+Or packages:
+
 * [.deb packages](https://bintray.com/coinmetrics/haskell-tools-deb)
 * [.rpm packages](https://bintray.com/coinmetrics/haskell-tools-rpm)
+
+Or use PPA:
+
+```bash
+echo 'deb https://dl.bintray.com/coinmetrics/haskell-tools-deb unstable main' > /etc/apt/sources.list.d/coinmetrics-haskell-tools.list
+curl 'https://bintray.com/user/downloadSubjectPublicKey?username=bintray' | apt-key add -
+apt update
+```
 
 ## Packages
 
