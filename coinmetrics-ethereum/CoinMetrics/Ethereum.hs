@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ethereum
 	( Ethereum(..)
@@ -29,6 +29,7 @@ import qualified Data.Vector.Mutable as VM
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Schema.Flatten
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
@@ -306,7 +307,7 @@ instance ToPostgresText EthereumLog
 data EthereumAction = EthereumAction
 	{
 	-- | Type of action: "call", "create", "reward" or "suicide"
-	  ea_type :: !Int64
+	  ea_type :: {-# UNPACK #-} !Int64
 	, ea_stack :: !(V.Vector Int64)
 	-- | Call is valid (not errored).
 	, ea_valid :: !Bool
@@ -371,6 +372,8 @@ instance A.ToAvro EthereumAction where
 	toAvro = genericToAvro
 instance ToPostgresText EthereumAction
 
+genFlattenedTypes "number" [| eb_number |] [("block", ''EthereumBlock), ("transaction", ''EthereumTransaction), ("log", ''EthereumLog), ("action", ''EthereumAction), ("uncle", ''EthereumUncleBlock)]
+
 instance BlockChain Ethereum where
 	type Block Ethereum = EthereumBlock
 
@@ -396,6 +399,16 @@ instance BlockChain Ethereum where
 			, schemaOf (Proxy :: Proxy EthereumUncleBlock)
 			]
 			"CREATE TABLE \"ethereum\" OF \"EthereumBlock\" (PRIMARY KEY (\"number\"));"
+		, bci_flattenSuffixes = ["blocks", "transactions", "logs", "actions", "uncles"]
+		, bci_flattenPack = let
+			f (blocks, (transactions, logs, actions), uncles) =
+				[ SomeBlocks (blocks :: [EthereumBlock_flattened])
+				, SomeBlocks (transactions :: [EthereumTransaction_flattened])
+				, SomeBlocks (logs :: [EthereumLog_flattened])
+				, SomeBlocks (actions :: [EthereumAction_flattened])
+				, SomeBlocks (uncles :: [EthereumUncleBlock_flattened])
+				]
+			in f . mconcat . map flatten
 		}
 
 	getCurrentBlockHeight Ethereum

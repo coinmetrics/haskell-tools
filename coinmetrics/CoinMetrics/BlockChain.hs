@@ -8,6 +8,7 @@ module CoinMetrics.BlockChain
 	, BlockHeight()
 	, SomeBlockChain(..)
 	, SomeBlockChainInfo(..)
+	, SomeBlocks(..)
 	) where
 
 import qualified Data.Avro as A
@@ -49,6 +50,10 @@ data BlockChainInfo a = BlockChainInfo
 	, bci_defaultEndBlock :: {-# UNPACK #-} !BlockHeight
 	-- | Schemas referenced by storage type.
 	, bci_schemas :: !(HM.HashMap T.Text T.Text)
+	-- | Table suffixes for flattened blocks.
+	, bci_flattenSuffixes :: [T.Text]
+	-- | Flatten block function.
+	, bci_flattenPack :: ([Block a] -> [SomeBlocks])
 	}
 
 type BlockHash = B.ByteString
@@ -59,3 +64,7 @@ data SomeBlockChain where
 
 data SomeBlockChainInfo where
 	SomeBlockChainInfo :: BlockChain a => BlockChainInfo a -> SomeBlockChainInfo
+
+-- | Helper data type to contain stripe of arbitrary blocks.
+data SomeBlocks where
+	SomeBlocks :: (Schemable b, A.ToAvro b, ToPostgresText b, IsUnifiedBlock b) => [b] -> SomeBlocks

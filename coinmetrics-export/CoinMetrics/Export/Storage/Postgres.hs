@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ViewPatterns #-}
 
 module CoinMetrics.Export.Storage.Postgres
 	( PostgresExportStorage()
@@ -20,7 +20,7 @@ instance ExportStorage PostgresExportStorage where
 	initExportStorage = return . PostgresExportStorage
 
 	getExportStorageMaxBlock (PostgresExportStorage ExportStorageOptions
-		{ eso_table = table
+		{ eso_tables = head -> table
 		, eso_primaryField = primaryField
 		}) ExportStorageParams
 		{ esp_destination = destination
@@ -38,7 +38,7 @@ instance ExportStorage PostgresExportStorage where
 		PQ.finish connection
 		return $ read . T.unpack . T.decodeUtf8 <$> maybeValue
 
-	writeExportStorage (PostgresExportStorage options) ExportStorageParams
+	writeExportStorageSomeBlocks (PostgresExportStorage options) ExportStorageParams
 		{ esp_destination = destination
 		} = mapM_ $ \pack -> do
 		connection <- PQ.connectdb $ T.encodeUtf8 $ T.pack destination

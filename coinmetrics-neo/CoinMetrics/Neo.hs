@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies #-}
 
 module CoinMetrics.Neo
 	( Neo(..)
@@ -20,6 +20,7 @@ import qualified Data.Vector as V
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Schema.Flatten
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
@@ -103,9 +104,9 @@ instance A.ToAvro NeoTransactionInput where
 instance ToPostgresText NeoTransactionInput
 
 data NeoTransactionOutput = NeoTransactionOutput
-	{ nti_asset :: !B.ByteString
-	, nti_value :: !Scientific
-	, nti_address :: !T.Text
+	{ nto_asset :: !B.ByteString
+	, nto_value :: !Scientific
+	, nto_address :: !T.Text
 	} deriving Generic
 
 instance Schemable NeoTransactionOutput
@@ -122,6 +123,8 @@ instance A.HasAvroSchema NeoTransactionOutput where
 instance A.ToAvro NeoTransactionOutput where
 	toAvro = genericToAvro
 instance ToPostgresText NeoTransactionOutput
+
+genFlattenedTypes "index" [| nb_index |] [("block", ''NeoBlock), ("transaction", ''NeoTransaction), ("input", ''NeoTransactionInput), ("output", ''NeoTransactionOutput)]
 
 instance BlockChain Neo where
 	type Block Neo = NeoBlock
@@ -141,6 +144,15 @@ instance BlockChain Neo where
 			, schemaOf (Proxy :: Proxy NeoTransaction)
 			]
 			"CREATE TABLE \"neo\" OF \"NeoBlock\" (PRIMARY KEY (\"index\"));"
+		, bci_flattenSuffixes = ["blocks", "transactions", "inputs", "outputs"]
+		, bci_flattenPack = let
+			f (blocks, (transactions, inputs, outputs)) =
+				[ SomeBlocks (blocks :: [NeoBlock_flattened])
+				, SomeBlocks (transactions :: [NeoTransaction_flattened])
+				, SomeBlocks (inputs :: [NeoTransactionInput_flattened])
+				, SomeBlocks (outputs :: [NeoTransactionOutput_flattened])
+				]
+			in f . mconcat . map flatten
 		}
 
 	getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)

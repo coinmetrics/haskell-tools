@@ -224,6 +224,10 @@ main = run =<< O.execParser parser where
 			(  O.long "upsert"
 			<> O.help "Perform UPSERT instead of INSERT"
 			)
+		<*> O.switch
+			(  O.long "flat"
+			<> O.help "Use flat schema"
+			)
 
 data Options = Options
 	{ options_command :: !OptionCommand
@@ -268,6 +272,7 @@ data Output = Output
 	, output_fileSize :: !Int
 	, output_fileExec :: !(Maybe String)
 	, output_upsert :: !Bool
+	, output_flat :: !Bool
 	}
 
 run :: Options -> IO ()
@@ -299,6 +304,8 @@ run Options
 			, bci_defaultApiUrl = defaultApiUrl
 			, bci_defaultBeginBlock = defaultBeginBlock
 			, bci_defaultEndBlock = defaultEndBlock
+			, bci_flattenSuffixes = flattenSuffixes
+			, bci_flattenPack = flattenPack
 			} <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
 
 		-- init blockchain
@@ -319,7 +326,7 @@ run Options
 
 		-- init output storages and begin block
 		(outputStorages, beginBlock) <- do
-			outputStorages <- initOutputStorages httpManager output blockchainType (blockHeightFieldName blockChain)
+			outputStorages <- initOutputStorages httpManager output blockchainType (blockHeightFieldName blockChain) flattenSuffixes
 			let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
 			if continue
 				then initContinuingOutputStorages outputStorages specifiedBeginBlock
@@ -401,7 +408,7 @@ run Options
 				when (blockIndex `rem` 100 == 0) $ hPutStrLn stderr $ "synced up to " ++ show blockIndex
 				(block :) <$> step (blockIndex + 1)
 			else return []
-		writeToOutputStorages outputStorages beginBlock =<< step beginBlock
+		writeToOutputStorages outputStorages flattenPack beginBlock =<< step beginBlock
 		hPutStrLn stderr $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
 
 	OptionExportIotaCommand
@@ -420,7 +427,7 @@ run Options
 		httpRequest <- H.parseRequest apiUrl
 		let iota = newIota httpManager httpRequest
 
-		outputStorages <- initOutputStorages httpManager output "iota" "hash"
+		outputStorages <- initOutputStorages httpManager output "iota" "hash" []
 
 		-- simple multithreaded pipeline
 		hashQueue <- newTQueueIO
@@ -545,7 +552,7 @@ run Options
 			transaction <- atomically $ readTBQueue transactionQueue
 			when (i `rem` 100 == 0) $ hPutStrLn stderr $ "synced transactions: " ++ show i
 			(transaction :) <$> step (i + 1)
-		writeToOutputStorages outputStorages 0 =<< step (0 :: Int)
+		writeToOutputStorages outputStorages (pure . SomeBlocks) 0 =<< step (0 :: Int)
 
 	OptionPrintSchemaCommand
 		{ options_schema = schemaTypeStr
@@ -577,9 +584,10 @@ data OutputStorages = OutputStorages
 	{ oss_storages :: ![OutputStorage]
 	, oss_packSize :: {-# UNPACK #-} !Int
 	, oss_fileSize :: {-# UNPACK #-} !Int
+	, oss_flat :: !Bool
 	}
 
-initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text -> IO OutputStorages
+initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text -> [T.Text] -> IO OutputStorages
 initOutputStorages httpManager Output
 	{ output_avroFile = maybeOutputAvroFile
 	, output_postgresFile = maybeOutputPostgresFile
@@ -592,45 +600,38 @@ initOutputStorages httpManager Output
 	, output_fileSize = fileSize
 	, output_fileExec = maybeFileExec
 	, output_upsert = upsert
-	} defaultTableName primaryField = mkOutputStorages . map mkOutputStorage . concat <$> sequence
+	, output_flat = flat
+	} defaultTableName primaryField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
 	[ case maybeOutputAvroFile of
-		Just outputAvroFile -> initStorage (Proxy :: Proxy AvroFileExportStorage) storageOptions (mkFileDestFunc outputAvroFile)
+		Just outputAvroFile -> initStorage (Proxy :: Proxy AvroFileExportStorage) mempty (mkFileDestFunc outputAvroFile)
 		Nothing -> return []
 	, case maybeOutputPostgresFile of
-		Just outputPostgresFile -> initStorage (Proxy :: Proxy PostgresFileExportStorage) storageOptions
-			{ eso_table = postgresTableName
-			} (mkFileDestFunc outputPostgresFile)
+		Just outputPostgresFile -> initStorage (Proxy :: Proxy PostgresFileExportStorage) postgresTableName (mkFileDestFunc outputPostgresFile)
 		Nothing -> return []
 	, case maybeOutputElasticFile of
-		Just outputElasticFile -> initStorage (Proxy :: Proxy ElasticFileExportStorage) storageOptions
-			{ eso_table = elasticIndexName
-			} (mkFileDestFunc outputElasticFile)
+		Just outputElasticFile -> initStorage (Proxy :: Proxy ElasticFileExportStorage) elasticIndexName (mkFileDestFunc outputElasticFile)
 		Nothing -> return []
 	, case maybeOutputPostgres of
-		Just outputPostgres -> initStorage (Proxy :: Proxy PostgresExportStorage) storageOptions
-			{ eso_table = postgresTableName
-			} (const outputPostgres)
+		Just outputPostgres -> initStorage (Proxy :: Proxy PostgresExportStorage) postgresTableName (const outputPostgres)
 		Nothing -> return []
 	, case maybeOutputElastic of
-		Just outputElastic -> initStorage (Proxy :: Proxy ElasticExportStorage) storageOptions
-			{ eso_table = elasticIndexName
-			} (const outputElastic)
+		Just outputElastic -> initStorage (Proxy :: Proxy ElasticExportStorage) elasticIndexName (const outputElastic)
 		Nothing -> return []
 	]
 	where
-		storageOptions = ExportStorageOptions
-			{ eso_httpManager = httpManager
-			, eso_table = ""
-			, eso_primaryField = primaryField
-			, eso_upsert = upsert
-			}
-
-		initStorage :: ExportStorage s => Proxy s -> ExportStorageOptions -> (BlockHeight -> String) -> IO [(SomeExportStorage, BlockHeight -> String)]
-		initStorage p o destFunc = let
+		initStorage :: ExportStorage s => Proxy s -> T.Text -> (BlockHeight -> String) -> IO [(SomeExportStorage, BlockHeight -> String)]
+		initStorage p table destFunc = let
 			f :: ExportStorage s => Proxy s -> ExportStorageOptions -> IO s
 			f Proxy = initExportStorage
 			in do
-				storage <- f p o
+				storage <- f p ExportStorageOptions
+					{ eso_httpManager = httpManager
+					, eso_tables = if flat
+						then map ((table <> "_") <>) flattenSuffixes
+						else [table]
+					, eso_primaryField = primaryField
+					, eso_upsert = upsert
+					}
 				return [(SomeExportStorage storage, destFunc)]
 
 		mkOutputStorage (storage, destFunc) = OutputStorage
@@ -646,6 +647,7 @@ initOutputStorages httpManager Output
 			{ oss_storages = storages
 			, oss_packSize = packSize
 			, oss_fileSize = fileSize
+			, oss_flat = flat
 			}
 
 		mkFileDestFunc template beginBlock = T.unpack $ T.replace "%N" (T.pack $ show beginBlock) (T.pack template)
@@ -679,12 +681,13 @@ initContinuingOutputStorages outputStorages@OutputStorages
 		, beginBlock
 		)
 
-writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => OutputStorages -> BlockHeight -> [a] -> IO ()
+writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => OutputStorages -> ([a] -> [SomeBlocks]) -> BlockHeight -> [a] -> IO ()
 writeToOutputStorages OutputStorages
 	{ oss_storages = storages
 	, oss_packSize = packSize
 	, oss_fileSize = fileSize
-	} beginBlock blocks = do
+	, oss_flat = flat
+	} flattenPack beginBlock blocks = do
 	vars <- forM storages $ \outputStorage@OutputStorage
 		{ os_skipBlocks = skipBlocks
 		} -> do
@@ -706,10 +709,14 @@ writeToOutputStorages OutputStorages
 			, os_destFunc = destFunc
 			, os_fileExec = fileExec
 			} = mapM_ $ \(fileBeginBlock, packs) -> do
-			let destination = destFunc fileBeginBlock
-			writeExportStorage storage ExportStorageParams
-				{ esp_destination = destination
-				} packs
+			let
+				destination = destFunc fileBeginBlock
+				storageParams = ExportStorageParams
+					{ esp_destination = destination
+					}
+			if flat
+				then writeExportStorageSomeBlocks storage storageParams $ map flattenPack packs
+				else writeExportStorage storage storageParams packs
 			fileExec destination
 
 		splitWithSize n = \case

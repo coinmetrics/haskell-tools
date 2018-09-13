@@ -12,6 +12,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.Encoding as T
 import qualified Network.HTTP.Client as H
 
+import CoinMetrics.BlockChain
 import CoinMetrics.Export.Storage
 import CoinMetrics.Unified
 
@@ -24,7 +25,7 @@ instance ExportStorage ElasticExportStorage where
 
 	getExportStorageMaxBlock (ElasticExportStorage ExportStorageOptions
 		{ eso_httpManager = httpManager
-		, eso_table = table
+		, eso_tables = head -> table
 		}) ExportStorageParams
 		{ esp_destination = destination
 		} = Just $ do
@@ -47,7 +48,7 @@ instance ExportStorage ElasticExportStorage where
 			} httpManager
 		either fail return . J.parseEither ((J..:? "value") <=< (J..: "max_height") <=< (J..: "aggregations")) =<< either fail return (J.eitherDecode response)
 
-	writeExportStorage (ElasticExportStorage options@ExportStorageOptions
+	writeExportStorageSomeBlocks (ElasticExportStorage options@ExportStorageOptions
 		{ eso_httpManager = httpManager
 		}) ExportStorageParams
 		{ esp_destination = destination
@@ -68,17 +69,18 @@ newtype ElasticFileExportStorage = ElasticFileExportStorage ExportStorageOptions
 instance ExportStorage ElasticFileExportStorage where
 	initExportStorage = return . ElasticFileExportStorage
 
-	writeExportStorage (ElasticFileExportStorage options) ExportStorageParams
+	writeExportStorageSomeBlocks (ElasticFileExportStorage options) ExportStorageParams
 		{ esp_destination = destination
 		} = BL.writeFile destination . mconcat . map (elasticExportStoragePack options)
 
-elasticExportStoragePack :: IsUnifiedBlock a => ExportStorageOptions -> [a] -> BL.ByteString
+elasticExportStoragePack :: ExportStorageOptions -> [SomeBlocks] -> BL.ByteString
 elasticExportStoragePack ExportStorageOptions
-	{ eso_table = table
+	{ eso_tables = tables
 	, eso_upsert = upsert
-	} = mconcat . map elasticLine
+	} = mconcat . zipWith elasticStrip tables
 	where
-		elasticLine block = let
+		elasticStrip table (SomeBlocks blocks) = mconcat $ map (elasticLine table) blocks
+		elasticLine table block = let
 			unifiedBlock@(ub_height -> height) = unifyBlock block
 			in J.encode (J.Object
 				[ (if upsert then "index" else "create", J.Object

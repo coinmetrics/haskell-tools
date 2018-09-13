@@ -15,6 +15,7 @@ library
   exposed-modules:
     CoinMetrics.BlockChain
     CoinMetrics.JsonRpc
+    CoinMetrics.Schema.Flatten
     CoinMetrics.Schema.Util
     CoinMetrics.Unified
     CoinMetrics.Util
@@ -31,6 +32,7 @@ library
     , memory
     , scientific
     , text
+    , template-haskell
     , time
     , unordered-containers
     , vector

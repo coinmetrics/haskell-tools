@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies #-}
 
 module CoinMetrics.Bitcoin
 	( Bitcoin(..)
@@ -20,6 +20,7 @@ import GHC.Generics(Generic)
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Schema.Flatten
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
@@ -27,34 +28,6 @@ import Hanalytics.Schema.Avro
 import Hanalytics.Schema.Postgres
 
 newtype Bitcoin = Bitcoin JsonRpc
-
-instance BlockChain Bitcoin where
-	type Block Bitcoin = BitcoinBlock
-
-	getBlockChainInfo _ = BlockChainInfo
-		{ bci_init = \BlockChainParams
-			{ bcp_httpManager = httpManager
-			, bcp_httpRequest = httpRequest
-			} -> return $ Bitcoin $ newJsonRpc httpManager httpRequest Nothing
-		, bci_defaultApiUrl = "http://127.0.0.1:8332/"
-		, bci_defaultBeginBlock = 0
-		, bci_defaultEndBlock = -1000 -- very conservative rewrite limit
-		, bci_schemas = standardBlockChainSchemas
-			(schemaOf (Proxy :: Proxy BitcoinBlock))
-			[ schemaOf (Proxy :: Proxy BitcoinVin)
-			, schemaOf (Proxy :: Proxy BitcoinVout)
-			, schemaOf (Proxy :: Proxy BitcoinTransaction)
-			]
-			"CREATE TABLE \"bitcoin\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
-		}
-
-	getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
-
-	getBlockByHeight (Bitcoin jsonRpc) blockHeight = do
-		blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
-		jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Number 2] :: V.Vector J.Value)
-
-	blockHeightFieldName _ = "height"
 
 data BitcoinBlock = BitcoinBlock
 	{ bb_hash :: !B.ByteString
@@ -160,3 +133,42 @@ instance A.HasAvroSchema BitcoinVout where
 instance A.ToAvro BitcoinVout where
 	toAvro = genericToAvro
 instance ToPostgresText BitcoinVout
+
+genFlattenedTypes "height" [| bb_height |] [("block", ''BitcoinBlock), ("transaction", ''BitcoinTransaction), ("vin", ''BitcoinVin), ("vout", ''BitcoinVout)]
+
+instance BlockChain Bitcoin where
+	type Block Bitcoin = BitcoinBlock
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return $ Bitcoin $ newJsonRpc httpManager httpRequest Nothing
+		, bci_defaultApiUrl = "http://127.0.0.1:8332/"
+		, bci_defaultBeginBlock = 0
+		, bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy BitcoinBlock))
+			[ schemaOf (Proxy :: Proxy BitcoinVin)
+			, schemaOf (Proxy :: Proxy BitcoinVout)
+			, schemaOf (Proxy :: Proxy BitcoinTransaction)
+			]
+			"CREATE TABLE \"bitcoin\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
+		, bci_flattenSuffixes = ["blocks", "transactions", "vins", "vouts"]
+		, bci_flattenPack = let
+			f (blocks, (transactions, vins, vouts)) =
+				[ SomeBlocks (blocks :: [BitcoinBlock_flattened])
+				, SomeBlocks (transactions :: [BitcoinTransaction_flattened])
+				, SomeBlocks (vins :: [BitcoinVin_flattened])
+				, SomeBlocks (vouts :: [BitcoinVout_flattened])
+				]
+			in f . mconcat . map flatten
+		}
+
+	getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
+
+	getBlockByHeight (Bitcoin jsonRpc) blockHeight = do
+		blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
+		jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Number 2] :: V.Vector J.Value)
+
+	blockHeightFieldName _ = "height"

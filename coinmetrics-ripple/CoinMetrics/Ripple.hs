@@ -52,54 +52,6 @@ rippleRequest Ripple
 			putStrLn $ "wrong ripple response for " <> T.unpack path <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
 			fail err
 
-instance BlockChain Ripple where
-	type Block Ripple = RippleLedger
-
-	getBlockChainInfo _ = BlockChainInfo
-		{ bci_init = \BlockChainParams
-			{ bcp_httpManager = httpManager
-			, bcp_httpRequest = httpRequest
-			} -> return Ripple
-				{ ripple_httpManager = httpManager
-				, ripple_httpRequest = httpRequest
-				}
-		, bci_defaultApiUrl = "https://data.ripple.com/"
-		, bci_defaultBeginBlock = 32570 -- genesis ledger
-		, bci_defaultEndBlock = 0 -- history data, no rewrites
-		, bci_schemas = standardBlockChainSchemas
-			(schemaOf (Proxy :: Proxy RippleLedger))
-			[ schemaOf (Proxy :: Proxy RippleTransaction)
-			]
-			"CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
-		}
-
-	getCurrentBlockHeight ripple = either fail return
-		. J.parseEither ((J..: "ledger_index") <=< (J..: "ledger"))
-		=<< rippleRequest ripple "/v2/ledgers" []
-
-	getBlockByHeight ripple blockHeight = do
-		eitherLedger <- J.parseEither (J..: "ledger")
-			<$> rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
-				[ ("transactions", Just "true")
-				, ("expand", Just "true")
-				]
-		case eitherLedger of
-			Right ledger -> return ledger
-			Left _ -> do
-				-- fallback to retrieving transactions individually
-				preLedger <- either fail return
-					. J.parseEither (J..: "ledger")
-					=<< rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
-						[ ("transactions", Just "true")
-						]
-				transactionsHashes <- either fail return $ J.parseEither (J..: "transactions") preLedger
-				transactions <- forM transactionsHashes $ \transactionHash ->
-					either (const J.Null) J.Object . J.parseEither (J..: "transaction")
-						<$> rippleRequest ripple ("/v2/transactions/" <> transactionHash) []
-				either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
-
-	blockHeightFieldName _ = "index"
-
 -- https://ripple.com/build/data-api-v2/#ledger-objects
 
 data RippleLedger = RippleLedger
@@ -189,3 +141,51 @@ decodeDate :: T.Text -> J.Parser Int64
 decodeDate (T.unpack -> t) = case Time.parseISO8601 t of
 	Just date -> return $ floor $ Time.utcTimeToPOSIXSeconds date
 	Nothing -> fail $ "wrong date: " <> t
+
+instance BlockChain Ripple where
+	type Block Ripple = RippleLedger
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			} -> return Ripple
+				{ ripple_httpManager = httpManager
+				, ripple_httpRequest = httpRequest
+				}
+		, bci_defaultApiUrl = "https://data.ripple.com/"
+		, bci_defaultBeginBlock = 32570 -- genesis ledger
+		, bci_defaultEndBlock = 0 -- history data, no rewrites
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy RippleLedger))
+			[ schemaOf (Proxy :: Proxy RippleTransaction)
+			]
+			"CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
+		}
+
+	getCurrentBlockHeight ripple = either fail return
+		. J.parseEither ((J..: "ledger_index") <=< (J..: "ledger"))
+		=<< rippleRequest ripple "/v2/ledgers" []
+
+	getBlockByHeight ripple blockHeight = do
+		eitherLedger <- J.parseEither (J..: "ledger")
+			<$> rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
+				[ ("transactions", Just "true")
+				, ("expand", Just "true")
+				]
+		case eitherLedger of
+			Right ledger -> return ledger
+			Left _ -> do
+				-- fallback to retrieving transactions individually
+				preLedger <- either fail return
+					. J.parseEither (J..: "ledger")
+					=<< rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
+						[ ("transactions", Just "true")
+						]
+				transactionsHashes <- either fail return $ J.parseEither (J..: "transactions") preLedger
+				transactions <- forM transactionsHashes $ \transactionHash ->
+					either (const J.Null) J.Object . J.parseEither (J..: "transaction")
+						<$> rippleRequest ripple ("/v2/transactions/" <> transactionHash) []
+				either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
+
+	blockHeightFieldName _ = "index"
