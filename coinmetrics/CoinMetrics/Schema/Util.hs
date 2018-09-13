@@ -15,18 +15,13 @@ import qualified Data.ByteString as B
 import Data.Hashable
 import qualified Data.Text.Encoding as T
 
+import Hanalytics.Schema
+
 schemaJsonOptions :: J.Options
 schemaJsonOptions = J.defaultOptions
 	{ J.fieldLabelModifier = stripBeforeUnderscore
 	, J.constructorTagModifier = stripBeforeUnderscore
 	}
-
-stripBeforeUnderscore :: String -> String
-stripBeforeUnderscore = \case
-	(x : xs) -> case x of
-		'_' -> xs
-		_ -> stripBeforeUnderscore xs
-	[] -> []
 
 -- | ByteString which serializes to JSON as base64 string.
 newtype Base64ByteString = Base64ByteString B.ByteString deriving (Eq, Ord, Semigroup, Monoid, Hashable, BA.ByteArray, BA.ByteArrayAccess)

@@ -20,6 +20,8 @@ import GHC.Generics(Generic)
 import Data.Scientific
 import Data.Time.Clock
 
+import Hanalytics.Schema
+
 -- | Block is a atomic piece of information generated in blockchain.
 data UnifiedBlock = UnifiedBlock
 	{ ub_time :: !(Maybe UTCTime)
@@ -124,17 +126,10 @@ jsonOptions = jsonOptionsWithTag "type"
 
 jsonOptionsWithTag :: String -> J.Options
 jsonOptionsWithTag tag = J.defaultOptions
-	{ J.fieldLabelModifier = dropBeforeUnderscore
-	, J.constructorTagModifier = dropBeforeUnderscore
+	{ J.fieldLabelModifier = stripBeforeUnderscore
+	, J.constructorTagModifier = stripBeforeUnderscore
 	, J.sumEncoding = J.TaggedObject
 		{ J.tagFieldName = tag
 		, J.contentsFieldName = "contents"
 		}
 	}
-
-dropBeforeUnderscore :: String -> String
-dropBeforeUnderscore = \case
-	x : xs -> case x of
-		'_' -> xs
-		_ -> dropBeforeUnderscore xs
-	[] -> []
