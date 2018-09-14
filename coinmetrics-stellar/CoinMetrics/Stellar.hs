@@ -26,7 +26,6 @@ import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
-import Data.Word
 import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 import Numeric
@@ -78,6 +77,7 @@ data StellarOperation = StellarOperation
 	, so_asset :: !(Maybe StellarAsset)
 	, so_assetCode :: !(Maybe T.Text)
 	, so_authorize :: !(Maybe Bool)
+	, so_bumpTo :: !(Maybe Int64)
 	, so_buying :: !(Maybe StellarAsset)
 	, so_clearFlags :: !(Maybe Int64)
 	, so_dataName :: !(Maybe T.Text)
@@ -117,6 +117,7 @@ pattern SOT_ALLOW_TRUST = 7
 pattern SOT_ACCOUNT_MERGE = 8
 pattern SOT_INFLATION = 9
 pattern SOT_MANAGE_DATA = 10
+pattern SOT_BUMP_SEQUENCE = 11
 
 pattern ASSET_TYPE_NATIVE = 0
 pattern ASSET_TYPE_CREDIT_ALPHANUM4 = 1
@@ -203,7 +204,7 @@ parseLedgers ledgersBytes transactionsBytes = do
 		getTransaction = do
 			sourceAccount <- getAccountID
 			fee <- fromIntegral <$> S.getWord32be
-			seqNum <- fromIntegral <$> getSequenceNumber
+			seqNum <- getSequenceNumber
 			timeBounds <- getMaybe getTimeBounds
 			_memo <- getMemo
 			operations <- getArray getOperation
@@ -237,6 +238,7 @@ parseLedgers ledgersBytes transactionsBytes = do
 						}
 				SOT_INFLATION -> return def
 				SOT_MANAGE_DATA -> getManageDataOp
+				SOT_BUMP_SEQUENCE -> getBumpSequenceOp
 				_ -> fail "wrong op type"
 			return op
 				{ so_type = opType
@@ -366,6 +368,13 @@ parseLedgers ledgersBytes transactionsBytes = do
 				, so_dataValue = dataValue
 				}
 
+		getBumpSequenceOp :: S.Get StellarOperation
+		getBumpSequenceOp = do
+			bumpTo <- getSequenceNumber
+			return def
+				{ so_bumpTo = Just bumpTo
+				}
+
 		getSigner :: S.Get ()
 		getSigner = do
 			_key <- getSignerKey
@@ -439,8 +448,8 @@ parseLedgers ledgersBytes transactionsBytes = do
 			_signature <- getOpaque
 			return ()
 
-		getSequenceNumber :: S.Get Word64
-		getSequenceNumber = S.getWord64be
+		getSequenceNumber :: S.Get Int64
+		getSequenceNumber = S.getInt64be
 
 		getExt :: S.Get ()
 		getExt = do
