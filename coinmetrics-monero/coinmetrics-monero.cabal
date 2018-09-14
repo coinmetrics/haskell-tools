@@ -16,13 +16,10 @@ library
     CoinMetrics.Monero
   build-depends:
     aeson
-    , avro
     , base
     , bytestring
     , coinmetrics
-    , hanalytics-avro
     , hanalytics-base
-    , hanalytics-postgres
     , text
     , unordered-containers
     , vector

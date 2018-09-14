@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Monero
 	( Monero(..)
@@ -8,12 +8,11 @@ module CoinMetrics.Monero
 	, MoneroTransactionOutput(..)
 	) where
 
-import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Short as BS
 import qualified Data.HashMap.Lazy as HML
 import Data.Maybe
 import GHC.Generics(Generic)
@@ -24,17 +23,17 @@ import qualified Data.Vector as V
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
+import CoinMetrics.Schema.Flatten
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 newtype Monero = Monero JsonRpc
 
 data MoneroBlock = MoneroBlock
 	{ mb_height :: {-# UNPACK #-} !Int64
-	, mb_hash :: !B.ByteString
+	, mb_hash :: {-# UNPACK #-} !HexString
 	, mb_major_version :: {-# UNPACK #-} !Int64
 	, mb_minor_version :: {-# UNPACK #-} !Int64
 	, mb_difficulty :: {-# UNPACK #-} !Int64
@@ -46,12 +45,14 @@ data MoneroBlock = MoneroBlock
 	, mb_transactions :: !(V.Vector MoneroTransaction)
 	} deriving Generic
 
-instance Schemable MoneroBlock
+newtype MoneroBlockWrapper = MoneroBlockWrapper
+	{ unwrapMoneroBlock :: MoneroBlock
+	}
 
-instance J.FromJSON MoneroBlock where
-	parseJSON = J.withObject "monero block" $ \fields -> MoneroBlock
+instance J.FromJSON MoneroBlockWrapper where
+	parseJSON = J.withObject "monero block" $ \fields -> fmap MoneroBlockWrapper $ MoneroBlock
 		<$> (fields J..: "height")
-		<*> (decodeHexBytes =<< fields J..: "hash")
+		<*> (fields J..: "hash")
 		<*> (fields J..: "major_version")
 		<*> (fields J..: "minor_version")
 		<*> (fields J..: "difficulty")
@@ -59,38 +60,33 @@ instance J.FromJSON MoneroBlock where
 		<*> (fields J..: "timestamp")
 		<*> (fields J..: "nonce")
 		<*> (fields J..: "size")
-		<*> (fields J..: "miner_tx")
-		<*> (fields J..: "transactions")
-
-instance A.HasAvroSchema MoneroBlock where
-	schema = genericAvroSchema
-instance A.ToAvro MoneroBlock where
-	toAvro = genericToAvro
-instance ToPostgresText MoneroBlock
+		<*> (unwrapMoneroTransaction <$> fields J..: "miner_tx")
+		<*> (V.map unwrapMoneroTransaction <$> fields J..: "transactions")
 
 instance IsUnifiedBlock MoneroBlock
 
 data MoneroTransaction = MoneroTransaction
-	{ mt_hash :: !(Maybe B.ByteString)
+	{ mt_hash :: !(Maybe HexString)
 	, mt_version :: {-# UNPACK #-} !Int64
 	, mt_unlock_time :: {-# UNPACK #-} !Int64
 	, mt_vin :: !(V.Vector MoneroTransactionInput)
 	, mt_vout :: !(V.Vector MoneroTransactionOutput)
-	, mt_extra :: !B.ByteString
+	, mt_extra :: {-# UNPACK #-} !HexString
 	, mt_fee :: !(Maybe Int64)
 	} deriving Generic
 
-instance Schemable MoneroTransaction
-instance SchemableField MoneroTransaction
+newtype MoneroTransactionWrapper = MoneroTransactionWrapper
+	{ unwrapMoneroTransaction :: MoneroTransaction
+	}
 
-instance J.FromJSON MoneroTransaction where
-	parseJSON = J.withObject "monero transaction" $ \fields -> MoneroTransaction
-		<$> (traverse decodeHexBytes =<< fields J..:? "hash")
+instance J.FromJSON MoneroTransactionWrapper where
+	parseJSON = J.withObject "monero transaction" $ \fields -> fmap MoneroTransactionWrapper $ MoneroTransaction
+		<$> (fields J..:? "hash")
 		<*> (fields J..: "version")
 		<*> (fields J..: "unlock_time")
-		<*> (fields J..: "vin")
-		<*> (fields J..: "vout")
-		<*> (B.pack <$> fields J..: "extra")
+		<*> (V.map unwrapMoneroTransactionInput <$> fields J..: "vin")
+		<*> (V.map unwrapMoneroTransactionOutput <$> fields J..: "vout")
+		<*> (HexString . BS.toShort . B.pack <$> fields J..: "extra")
 		<*> (parseFee fields)
 		where
 			parseFee fields = do
@@ -99,56 +95,43 @@ instance J.FromJSON MoneroTransaction where
 					Just rctSignatures -> rctSignatures J..:? "txnFee"
 					Nothing -> return Nothing
 
-instance A.HasAvroSchema MoneroTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro MoneroTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText MoneroTransaction
-
 data MoneroTransactionInput = MoneroTransactionInput
 	{ mti_amount :: !(Maybe Int64)
-	, mti_k_image :: !(Maybe B.ByteString)
+	, mti_k_image :: !(Maybe HexString)
 	, mti_key_offsets :: !(V.Vector Int64)
 	, mti_height :: !(Maybe Int64)
 	} deriving Generic
 
-instance Schemable MoneroTransactionInput
-instance SchemableField MoneroTransactionInput
+newtype MoneroTransactionInputWrapper = MoneroTransactionInputWrapper
+	{ unwrapMoneroTransactionInput :: MoneroTransactionInput
+	}
 
-instance J.FromJSON MoneroTransactionInput where
+instance J.FromJSON MoneroTransactionInputWrapper where
 	parseJSON = J.withObject "monero transaction input" $ \fields -> do
 		maybeKey <- fields J..:? "key"
 		maybeGen <- fields J..:? "gen"
-		MoneroTransactionInput
+		fmap MoneroTransactionInputWrapper $ MoneroTransactionInput
 			<$> (traverse (J..: "amount") maybeKey)
-			<*> (traverse (decodeHexBytes <=< (J..: "k_image")) maybeKey)
+			<*> (traverse (J..: "k_image") maybeKey)
 			<*> (fromMaybe V.empty <$> traverse (J..: "key_offsets") maybeKey)
 			<*> (traverse (J..: "height") maybeGen)
 
-instance A.HasAvroSchema MoneroTransactionInput where
-	schema = genericAvroSchema
-instance A.ToAvro MoneroTransactionInput where
-	toAvro = genericToAvro
-instance ToPostgresText MoneroTransactionInput
-
 data MoneroTransactionOutput = MoneroTransactionOutput
 	{ mto_amount :: !Int64
-	, mto_key :: !B.ByteString
+	, mto_key :: {-# UNPACK #-} !HexString
 	} deriving Generic
 
-instance Schemable MoneroTransactionOutput
-instance SchemableField MoneroTransactionOutput
+newtype MoneroTransactionOutputWrapper = MoneroTransactionOutputWrapper
+	{ unwrapMoneroTransactionOutput :: MoneroTransactionOutput
+	}
 
-instance J.FromJSON MoneroTransactionOutput where
-	parseJSON = J.withObject "monero transaction output" $ \fields -> MoneroTransactionOutput
+instance J.FromJSON MoneroTransactionOutputWrapper where
+	parseJSON = J.withObject "monero transaction output" $ \fields -> fmap MoneroTransactionOutputWrapper $ MoneroTransactionOutput
 		<$> (fields J..: "amount")
-		<*> (decodeHexBytes =<< (J..: "key") =<< fields J..: "target")
+		<*> ((J..: "key") =<< fields J..: "target")
 
-instance A.HasAvroSchema MoneroTransactionOutput where
-	schema = genericAvroSchema
-instance A.ToAvro MoneroTransactionOutput where
-	toAvro = genericToAvro
-instance ToPostgresText MoneroTransactionOutput
+genSchemaInstances [''MoneroBlock, ''MoneroTransaction, ''MoneroTransactionInput, ''MoneroTransactionOutput]
+genFlattenedTypes "height" [| mb_height |] [("block", ''MoneroBlock), ("transaction", ''MoneroTransaction), ("input", ''MoneroTransactionInput), ("output", ''MoneroTransactionOutput)]
 
 instance BlockChain Monero where
 	type Block Monero = MoneroBlock
@@ -168,6 +151,15 @@ instance BlockChain Monero where
 			, schemaOf (Proxy :: Proxy MoneroTransaction)
 			]
 			"CREATE TABLE \"monero\" OF \"MoneroBlock\" (PRIMARY KEY (\"height\"));"
+		, bci_flattenSuffixes = ["blocks", "transactions", "inputs", "outputs"]
+		, bci_flattenPack = let
+			f (blocks, (transactions, inputs, outputs)) =
+				[ SomeBlocks (blocks :: [MoneroBlock_flattened])
+				, SomeBlocks (transactions :: [MoneroTransaction_flattened])
+				, SomeBlocks (inputs :: [MoneroTransactionInput_flattened])
+				, SomeBlocks (outputs :: [MoneroTransactionOutput_flattened])
+				]
+			in f . mconcat . map flatten
 		}
 
 	getCurrentBlockHeight (Monero jsonRpc) =
@@ -199,7 +191,7 @@ instance BlockChain Monero where
 			$ HML.insert "transactions" (J.Array transactions)
 			blockJsonFields
 		case J.fromJSON jsonBlock of
-			J.Success block -> return block
+			J.Success block -> return $ unwrapMoneroBlock block
 			J.Error err -> fail err
 
 	blockHeightFieldName _ = "height"

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ripple
 	( Ripple(..)
@@ -9,7 +9,6 @@ module CoinMetrics.Ripple
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HM
@@ -26,11 +25,11 @@ import qualified Network.HTTP.Client as H
 import Text.ParserCombinators.ReadP
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Schema.Util
+-- import CoinMetrics.Schema.Flatten
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 -- | Ripple connector.
 data Ripple = Ripple
@@ -56,32 +55,28 @@ rippleRequest Ripple
 
 data RippleLedger = RippleLedger
 	{ rl_index :: {-# UNPACK #-} !Int64
-	, rl_hash :: !B.ByteString
+	, rl_hash :: {-# UNPACK #-} !HexString
 	, rl_totalCoins :: {-# UNPACK #-} !Scientific
 	, rl_closeTime :: {-# UNPACK #-} !Int64
 	, rl_transactions :: !(V.Vector (Maybe RippleTransaction))
 	} deriving Generic
 
-instance Schemable RippleLedger
+newtype RippleLedgerWrapper = RippleLedgerWrapper
+	{ unwrapRippleLedger :: RippleLedger
+	}
 
-instance J.FromJSON RippleLedger where
-	parseJSON = J.withObject "ripple ledger" $ \fields -> RippleLedger
+instance J.FromJSON RippleLedgerWrapper where
+	parseJSON = J.withObject "ripple ledger" $ \fields -> fmap RippleLedgerWrapper $ RippleLedger
 		<$> (fields J..: "ledger_index")
-		<*> (decodeHexBytes =<< fields J..: "ledger_hash")
+		<*> (fields J..: "ledger_hash")
 		<*> (decodeAmount =<< fields J..: "total_coins")
 		<*> (fields J..: "close_time")
-		<*> (fields J..: "transactions")
-
-instance A.HasAvroSchema RippleLedger where
-	schema = genericAvroSchema
-instance A.ToAvro RippleLedger where
-	toAvro = genericToAvro
-instance ToPostgresText RippleLedger
+		<*> (V.map (unwrapRippleTransaction <$>) <$> fields J..: "transactions")
 
 instance IsUnifiedBlock RippleLedger
 
 data RippleTransaction = RippleTransaction
-	{ rt_hash :: !B.ByteString
+	{ rt_hash :: {-# UNPACK #-} !HexString
 	, rt_date :: {-# UNPACK #-} !Int64
 	, rt_account :: !T.Text
 	, rt_fee :: {-# UNPACK #-} !Scientific
@@ -93,10 +88,11 @@ data RippleTransaction = RippleTransaction
 	, rt_result :: !T.Text
 	} deriving Generic
 
-instance Schemable RippleTransaction
-instance SchemableField RippleTransaction
+newtype RippleTransactionWrapper = RippleTransactionWrapper
+	{ unwrapRippleTransaction :: RippleTransaction
+	}
 
-instance J.FromJSON RippleTransaction where
+instance J.FromJSON RippleTransactionWrapper where
 	parseJSON = J.withObject "ripple transaction" $ \fields -> do
 		tx <- fields J..: "tx"
 		maybeAmountValue <- tx J..:? "Amount"
@@ -114,8 +110,8 @@ instance J.FromJSON RippleTransaction where
 					_ -> fail "wrong amount"
 				Nothing -> return (Nothing, Nothing, Nothing)
 		meta <- fields J..: "meta"
-		RippleTransaction
-			<$> (decodeHexBytes =<< fields J..: "hash")
+		fmap RippleTransactionWrapper $ RippleTransaction
+			<$> (fields J..: "hash")
 			<*> (decodeDate =<< fields J..: "date")
 			<*> (tx J..: "Account")
 			<*> (decodeAmount =<< tx J..: "Fee")
@@ -126,12 +122,6 @@ instance J.FromJSON RippleTransaction where
 			<*> (tx J..:? "Destination")
 			<*> (meta J..: "TransactionResult")
 
-instance A.HasAvroSchema RippleTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro RippleTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText RippleTransaction
-
 decodeAmount :: T.Text -> J.Parser Scientific
 decodeAmount (T.unpack -> t) = case readP_to_S scientificP t of
 	[(value, "")] -> return value
@@ -141,6 +131,11 @@ decodeDate :: T.Text -> J.Parser Int64
 decodeDate (T.unpack -> t) = case Time.parseISO8601 t of
 	Just date -> return $ floor $ Time.utcTimeToPOSIXSeconds date
 	Nothing -> fail $ "wrong date: " <> t
+
+
+genSchemaInstances [''RippleLedger, ''RippleTransaction]
+-- doesn't work because of Vector (Maybe RippleTransaction)
+-- genFlattenedTypes "index" [| rl_index |] [("ledger", ''RippleLedger), ("transaction", ''RippleTransaction)]
 
 instance BlockChain Ripple where
 	type Block Ripple = RippleLedger
@@ -161,6 +156,13 @@ instance BlockChain Ripple where
 			[ schemaOf (Proxy :: Proxy RippleTransaction)
 			]
 			"CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
+		-- , bci_flattenSuffixes = ["ledgers", "transactions"]
+		-- , bci_flattenPack = let
+		-- 	f (ledgers, transactions) =
+		-- 		[ SomeBlocks (ledgers :: [RippleLedger_flattened])
+		-- 		, SomeBlocks (transactions :: [RippleTransaction_flattened])
+		-- 		]
+		-- 	in f . mconcat . map flatten
 		}
 
 	getCurrentBlockHeight ripple = either fail return
@@ -186,6 +188,6 @@ instance BlockChain Ripple where
 				transactions <- forM transactionsHashes $ \transactionHash ->
 					either (const J.Null) J.Object . J.parseEither (J..: "transaction")
 						<$> rippleRequest ripple ("/v2/transactions/" <> transactionHash) []
-				either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
+				either fail (return . unwrapRippleLedger) $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
 
 	blockHeightFieldName _ = "index"

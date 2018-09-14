@@ -14,16 +14,12 @@ cabal-version:       >=1.10
 library
   exposed-modules:
     CoinMetrics.Ethereum
-    CoinMetrics.Ethereum.ERC20
   build-depends:
     aeson
-    , avro
     , base
     , bytestring
     , coinmetrics
-    , hanalytics-avro
     , hanalytics-base
-    , hanalytics-postgres
     , memory
     , text
     , time

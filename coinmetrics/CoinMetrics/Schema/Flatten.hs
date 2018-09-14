@@ -5,7 +5,6 @@ module CoinMetrics.Schema.Flatten
 	, genFlattenedTypes
 	) where
 
-import qualified Data.Avro as A
 import Data.Int
 import Data.List
 import qualified Data.Vector as V
@@ -13,9 +12,8 @@ import GHC.Generics(Generic)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
-import Hanalytics.Schema
-import Hanalytics.Schema.Postgres
 
 class Monoid (Flattened a) => Flattenable a where
 	type Flattened a :: *
@@ -118,6 +116,7 @@ genFlattenedTypes rootKeyName rootKeyExp types@(map snd -> typesNames) = do
 				(appT listT (conT flattenedTypeName) : childrenFlattenedTypes)
 
 			-- our declarations
+			instancesDecs <- schemaInstancesDecs flattenedTypeName
 			decs <- sequence $
 				[ dataD (pure []) flattenedTypeName [] Nothing
 					[ recC flattenedTypeName
@@ -130,15 +129,6 @@ genFlattenedTypes rootKeyName rootKeyExp types@(map snd -> typesNames) = do
 						)
 					]
 					[derivClause Nothing [ [t| Generic |] ]]
-				, instanceD (pure []) [t| Schemable $(conT flattenedTypeName) |] []
-				, instanceD (pure []) [t| SchemableField $(conT flattenedTypeName) |] []
-				, instanceD (pure []) [t| A.HasAvroSchema $(conT flattenedTypeName) |]
-					[ funD 'A.schema [clause [] (normalB [| genericAvroSchema |] ) []]
-					]
-				, instanceD (pure []) [t| A.ToAvro $(conT flattenedTypeName) |]
-					[ funD 'A.toAvro [clause [] (normalB [| genericToAvro |] ) []]
-					]
-				, instanceD (pure []) [t| ToPostgresText $(conT flattenedTypeName) |] []
 				, instanceD (pure []) [t| IsUnifiedBlock $(conT flattenedTypeName) |]
 					[ funD 'unifyBlock [clause [] (normalB [| const $ error "unified flattened schema is not implemented" |] ) []]
 					]
@@ -153,7 +143,7 @@ genFlattenedTypes rootKeyName rootKeyExp types@(map snd -> typesNames) = do
 					else []
 					)
 
-			return (decs <> childrenDecs, lambda, flattenedType)
+			return (decs <> instancesDecs <> childrenDecs, lambda, flattenedType)
 
 		rootType = head types
 

@@ -1,21 +1,17 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, OverloadedStrings, TemplateHaskell #-}
 
 module CoinMetrics.Schema.Util
-	( schemaJsonOptions
-	, stripBeforeUnderscore
-	, Base64ByteString(..)
-	, Base16ByteString(..)
+	( genSchemaInstances
+	, schemaInstancesDecs
 	) where
 
-import Control.Monad
 import qualified Data.Aeson as J
-import qualified Data.ByteArray as BA
-import qualified Data.ByteArray.Encoding as BA
-import qualified Data.ByteString as B
-import Data.Hashable
-import qualified Data.Text.Encoding as T
+import qualified Data.Avro as A
+import Language.Haskell.TH
 
 import Hanalytics.Schema
+import Hanalytics.Schema.Avro
+import Hanalytics.Schema.Postgres
 
 schemaJsonOptions :: J.Options
 schemaJsonOptions = J.defaultOptions
@@ -23,16 +19,25 @@ schemaJsonOptions = J.defaultOptions
 	, J.constructorTagModifier = stripBeforeUnderscore
 	}
 
--- | ByteString which serializes to JSON as base64 string.
-newtype Base64ByteString = Base64ByteString B.ByteString deriving (Eq, Ord, Semigroup, Monoid, Hashable, BA.ByteArray, BA.ByteArrayAccess)
-instance J.FromJSON Base64ByteString where
-	parseJSON = either fail return . BA.convertFromBase BA.Base64URLUnpadded . T.encodeUtf8 <=< J.parseJSON
-instance J.ToJSON Base64ByteString where
-	toJSON = J.toJSON . T.decodeUtf8 . BA.convertToBase BA.Base64URLUnpadded
+genSchemaInstances :: [Name] -> Q [Dec]
+genSchemaInstances = fmap mconcat . mapM schemaInstancesDecs
 
--- | ByteString which serializes to JSON as hex string.
-newtype Base16ByteString = Base16ByteString B.ByteString deriving (Eq, Ord, Semigroup, Monoid, Hashable, BA.ByteArray, BA.ByteArrayAccess)
-instance J.FromJSON Base16ByteString where
-	parseJSON = either fail return . BA.convertFromBase BA.Base16 . T.encodeUtf8 <=< J.parseJSON
-instance J.ToJSON Base16ByteString where
-	toJSON = J.toJSON . T.decodeUtf8 . BA.convertToBase BA.Base16
+schemaInstancesDecs :: Name -> Q [Dec]
+schemaInstancesDecs typeName = sequence
+	[ instanceD (pure []) [t| Schemable $(conT typeName) |] []
+	, instanceD (pure []) [t| SchemableField $(conT typeName) |] []
+	, instanceD (pure []) [t| J.FromJSON $(conT typeName) |]
+		[ funD 'J.parseJSON [clause [] (normalB [| J.genericParseJSON schemaJsonOptions |] ) []]
+		]
+	, instanceD (pure []) [t| J.ToJSON $(conT typeName) |]
+		[ funD 'J.toJSON [clause [] (normalB [| J.genericToJSON schemaJsonOptions |] ) []]
+		, funD 'J.toEncoding [clause [] (normalB [| J.genericToEncoding schemaJsonOptions |] ) []]
+		]
+	, instanceD (pure []) [t| A.HasAvroSchema $(conT typeName) |]
+		[ funD 'A.schema [clause [] (normalB [| genericAvroSchema |] ) []]
+		]
+	, instanceD (pure []) [t| A.ToAvro $(conT typeName) |]
+		[ funD 'A.toAvro [clause [] (normalB [| genericToAvro |] ) []]
+		]
+	, instanceD (pure []) [t| ToPostgresText $(conT typeName) |] []
+	]

@@ -9,8 +9,6 @@ module CoinMetrics.Neo
 	) where
 
 import qualified Data.Aeson as J
-import qualified Data.Avro as A
-import qualified Data.ByteString as B
 import GHC.Generics(Generic)
 import Data.Int
 import Data.Proxy
@@ -21,42 +19,37 @@ import qualified Data.Vector as V
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Flatten
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 newtype Neo = Neo JsonRpc
 
 data NeoBlock = NeoBlock
-	{ nb_hash :: !B.ByteString
+	{ nb_hash :: {-# UNPACK #-} !HexString
 	, nb_size :: {-# UNPACK #-} !Int64
 	, nb_time :: {-# UNPACK #-} !Int64
 	, nb_index :: {-# UNPACK #-} !Int64
 	, nb_tx :: !(V.Vector NeoTransaction)
 	} deriving Generic
 
-instance Schemable NeoBlock
+newtype NeoBlockWrapper = NeoBlockWrapper
+	{ unwrapNeoBlock :: NeoBlock
+	}
 
-instance J.FromJSON NeoBlock where
-	parseJSON = J.withObject "neo block" $ \fields -> NeoBlock
+instance J.FromJSON NeoBlockWrapper where
+	parseJSON = J.withObject "neo block" $ \fields -> fmap NeoBlockWrapper $ NeoBlock
 		<$> (decode0xHexBytes =<< fields J..: "hash")
 		<*> (fields J..: "size")
 		<*> (fields J..: "time")
 		<*> (fields J..: "index")
-		<*> (fields J..: "tx")
-
-instance A.HasAvroSchema NeoBlock where
-	schema = genericAvroSchema
-instance A.ToAvro NeoBlock where
-	toAvro = genericToAvro
-instance ToPostgresText NeoBlock
+		<*> (V.map unwrapNeoTransaction <$> fields J..: "tx")
 
 instance IsUnifiedBlock NeoBlock
 
 data NeoTransaction = NeoTransaction
-	{ et_txid :: !B.ByteString
+	{ et_txid :: {-# UNPACK #-} !HexString
 	, et_size :: {-# UNPACK #-} !Int64
 	, et_type :: !T.Text
 	, et_vin :: !(V.Vector NeoTransactionInput)
@@ -65,65 +58,52 @@ data NeoTransaction = NeoTransaction
 	, et_net_fee :: !Scientific
 	} deriving Generic
 
-instance Schemable NeoTransaction
-instance SchemableField NeoTransaction
+newtype NeoTransactionWrapper = NeoTransactionWrapper
+	{ unwrapNeoTransaction :: NeoTransaction
+	}
 
-instance J.FromJSON NeoTransaction where
-	parseJSON = J.withObject "neo transaction" $ \fields -> NeoTransaction
+instance J.FromJSON NeoTransactionWrapper where
+	parseJSON = J.withObject "neo transaction" $ \fields -> fmap NeoTransactionWrapper $ NeoTransaction
 		<$> (decode0xHexBytes =<< fields J..: "txid")
 		<*> (fields J..: "size")
 		<*> (fields J..: "type")
-		<*> (fields J..: "vin")
-		<*> (fields J..: "vout")
+		<*> (V.map unwrapNeoTransactionInput <$> fields J..: "vin")
+		<*> (V.map unwrapNeoTransactionOutput <$> fields J..: "vout")
 		<*> (decodeReadStr =<< fields J..: "sys_fee")
 		<*> (decodeReadStr =<< fields J..: "net_fee")
 
-instance A.HasAvroSchema NeoTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro NeoTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText NeoTransaction
-
 data NeoTransactionInput = NeoTransactionInput
-	{ nti_txid :: !B.ByteString
+	{ nti_txid :: {-# UNPACK #-} !HexString
 	, nti_vout :: {-# UNPACK #-} !Int64
 	} deriving Generic
 
-instance Schemable NeoTransactionInput
-instance SchemableField NeoTransactionInput
+newtype NeoTransactionInputWrapper = NeoTransactionInputWrapper
+	{ unwrapNeoTransactionInput :: NeoTransactionInput
+	}
 
-instance J.FromJSON NeoTransactionInput where
-	parseJSON = J.withObject "neo transaction input" $ \fields -> NeoTransactionInput
+instance J.FromJSON NeoTransactionInputWrapper where
+	parseJSON = J.withObject "neo transaction input" $ \fields -> fmap NeoTransactionInputWrapper $ NeoTransactionInput
 		<$> (decode0xHexBytes =<< fields J..: "txid")
 		<*> (fields J..: "vout")
 
-instance A.HasAvroSchema NeoTransactionInput where
-	schema = genericAvroSchema
-instance A.ToAvro NeoTransactionInput where
-	toAvro = genericToAvro
-instance ToPostgresText NeoTransactionInput
-
 data NeoTransactionOutput = NeoTransactionOutput
-	{ nto_asset :: !B.ByteString
+	{ nto_asset :: {-# UNPACK #-} !HexString
 	, nto_value :: !Scientific
 	, nto_address :: !T.Text
 	} deriving Generic
 
-instance Schemable NeoTransactionOutput
-instance SchemableField NeoTransactionOutput
+newtype NeoTransactionOutputWrapper = NeoTransactionOutputWrapper
+	{ unwrapNeoTransactionOutput :: NeoTransactionOutput
+	}
 
-instance J.FromJSON NeoTransactionOutput where
-	parseJSON = J.withObject "neo transaction output" $ \fields -> NeoTransactionOutput
+instance J.FromJSON NeoTransactionOutputWrapper where
+	parseJSON = J.withObject "neo transaction output" $ \fields -> fmap NeoTransactionOutputWrapper $ NeoTransactionOutput
 		<$> (decode0xHexBytes =<< fields J..: "asset")
 		<*> (decodeReadStr =<< fields J..: "value")
 		<*> (fields J..: "address")
 
-instance A.HasAvroSchema NeoTransactionOutput where
-	schema = genericAvroSchema
-instance A.ToAvro NeoTransactionOutput where
-	toAvro = genericToAvro
-instance ToPostgresText NeoTransactionOutput
 
+genSchemaInstances [''NeoBlock, ''NeoTransaction, ''NeoTransactionInput, ''NeoTransactionOutput]
 genFlattenedTypes "index" [| nb_index |] [("block", ''NeoBlock), ("transaction", ''NeoTransaction), ("input", ''NeoTransactionInput), ("output", ''NeoTransactionOutput)]
 
 instance BlockChain Neo where
@@ -157,6 +137,6 @@ instance BlockChain Neo where
 
 	getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 
-	getBlockByHeight (Neo jsonRpc) blockHeight = jsonRpcRequest jsonRpc "getblock" ([J.Number $ fromIntegral blockHeight, J.Number 1] :: V.Vector J.Value)
+	getBlockByHeight (Neo jsonRpc) blockHeight = unwrapNeoBlock <$> jsonRpcRequest jsonRpc "getblock" ([J.Number $ fromIntegral blockHeight, J.Number 1] :: V.Vector J.Value)
 
 	blockHeightFieldName _ = "index"

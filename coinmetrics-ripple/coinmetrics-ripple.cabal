@@ -16,13 +16,10 @@ library
     CoinMetrics.Ripple
   build-depends:
     aeson
-    , avro
     , base
     , bytestring
     , coinmetrics
-    , hanalytics-avro
     , hanalytics-base
-    , hanalytics-postgres
     , http-client
     , iso8601-time
     , memory

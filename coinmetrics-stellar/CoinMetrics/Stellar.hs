@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, TypeFamilies, PatternSynonyms, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, PatternSynonyms, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-missing-pattern-synonym-signatures #-}
 
@@ -15,10 +15,10 @@ import Control.Concurrent.STM
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Short as BS
 import Data.Default
 import Data.Int
 import Data.Proxy
@@ -33,11 +33,10 @@ import Numeric
 import System.IO.Unsafe(unsafeInterleaveIO)
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 -- | Stellar connector.
 data Stellar = Stellar
@@ -47,84 +46,9 @@ data Stellar = Stellar
 	, stellar_checkpointCacheSize :: {-# UNPACK #-} !Int
 	}
 
-stellarRequest :: Stellar -> T.Text -> IO BL.ByteString
-stellarRequest Stellar
-	{ stellar_httpManager = httpManager
-	, stellar_httpRequest = httpRequest
-	} path = tryWithRepeat $ H.responseBody <$> H.httpLbs httpRequest
-	{ H.path = H.path httpRequest <> T.encodeUtf8 path
-	} httpManager
-
-withCheckpointCache :: Stellar -> Int64 -> IO [StellarLedger]
-withCheckpointCache stellar@Stellar
-	{ stellar_checkpointCacheVar = cacheVar
-	, stellar_checkpointCacheSize = cacheSize
-	} checkpointSequence = do
-	lazyLedgers <- unsafeInterleaveIO io
-	atomically $ do
-		cache <- readTVar cacheVar
-		case filter ((== checkpointSequence) . fst) cache of
-			(_, cachedLedgers) : _ -> return cachedLedgers
-			[] -> do
-				writeTVar cacheVar $!
-					(if length cache >= cacheSize then init cache else cache)
-					++ [(checkpointSequence, lazyLedgers)]
-				return lazyLedgers
-	where
-		io = do
-			ledgersBytes <- GZip.decompress <$> stellarRequest stellar ledgerPath
-			transactionsBytes <- GZip.decompress <$> stellarRequest stellar transactionsPath
-			parseLedgers ledgersBytes transactionsBytes
-		sequenceHex = showHex checkpointSequence ""
-		sequenceHexPadded@[h0, h1, h2, h3, h4, h5, _h6, _h7]
-			= replicate (max 0 (8 - length sequenceHex)) '0' ++ sequenceHex
-		ledgerPath = "/ledger/" <> T.pack [h0, h1, '/', h2, h3, '/', h4, h5] <> "/ledger-" <> T.pack sequenceHexPadded <> ".xdr.gz"
-		transactionsPath = "/transactions/" <> T.pack [h0, h1, '/', h2, h3, '/', h4, h5] <> "/transactions-" <> T.pack sequenceHexPadded <> ".xdr.gz"
-
-instance BlockChain Stellar where
-	type Block Stellar = StellarLedger
-
-	getBlockChainInfo _ = BlockChainInfo
-		{ bci_init = \BlockChainParams
-			{ bcp_httpManager = httpManager
-			, bcp_httpRequest = httpRequest
-			, bcp_threadsCount = threadsCount
-			} -> do
-			checkpointCacheVar <- newTVarIO []
-			return Stellar
-				{ stellar_httpManager = httpManager
-				, stellar_httpRequest = httpRequest
-				, stellar_checkpointCacheVar = checkpointCacheVar
-				, stellar_checkpointCacheSize = 2 + threadsCount `quot` 64
-				}
-		, bci_defaultApiUrl = "http://history.stellar.org/prd/core-live/core_live_001"
-		, bci_defaultBeginBlock = 1
-		, bci_defaultEndBlock = 0 -- history data, no rewrites
-		, bci_schemas = standardBlockChainSchemas
-			(schemaOf (Proxy :: Proxy StellarLedger))
-			[ schemaOf (Proxy :: Proxy StellarAsset)
-			, schemaOf (Proxy :: Proxy StellarOperation)
-			, schemaOf (Proxy :: Proxy StellarTransaction)
-			]
-			"CREATE TABLE \"stellar\" OF \"StellarLedger\" (PRIMARY KEY (\"sequence\"));"
-		}
-
-	getCurrentBlockHeight stellar = either fail return
-		. (J.parseEither (J..: "currentLedger") <=< J.eitherDecode)
-		=<< stellarRequest stellar "/.well-known/stellar-history.json"
-
-	getBlockByHeight stellar blockHeight = do
-		ledgers <- filter ((== blockHeight) . sl_sequence) <$>
-			withCheckpointCache stellar (((blockHeight + 64) .&. complement 0x3f) - 1)
-		case ledgers of
-			[ledger] -> return ledger
-			_ -> fail "ledger cache error"
-
-	blockHeightFieldName _ = "sequence"
-
 data StellarLedger = StellarLedger
 	{ sl_sequence :: {-# UNPACK #-} !Int64
-	, sl_hash :: !B.ByteString
+	, sl_hash :: {-# UNPACK #-} !HexString
 	, sl_closeTime :: {-# UNPACK #-} !Int64
 	, sl_totalCoins :: {-# UNPACK #-} !Int64
 	, sl_feePool :: {-# UNPACK #-} !Int64
@@ -136,18 +60,10 @@ data StellarLedger = StellarLedger
 	, sl_transactions :: !(V.Vector StellarTransaction)
 	} deriving Generic
 
-instance Schemable StellarLedger
-
-instance A.HasAvroSchema StellarLedger where
-	schema = genericAvroSchema
-instance A.ToAvro StellarLedger where
-	toAvro = genericToAvro
-instance ToPostgresText StellarLedger
-
 instance IsUnifiedBlock StellarLedger
 
 data StellarTransaction = StellarTransaction
-	{ st_sourceAccount :: !B.ByteString
+	{ st_sourceAccount :: {-# UNPACK #-} !HexString
 	, st_fee :: {-# UNPACK #-} !Int64
 	, st_seqNum :: {-# UNPACK #-} !Int64
 	, st_timeBoundsMinTime :: !(Maybe Int64)
@@ -155,18 +71,9 @@ data StellarTransaction = StellarTransaction
 	, st_operations :: !(V.Vector StellarOperation)
 	} deriving Generic
 
-instance Schemable StellarTransaction
-instance SchemableField StellarTransaction
-
-instance A.HasAvroSchema StellarTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro StellarTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText StellarTransaction
-
 data StellarOperation = StellarOperation
 	{ so_type :: {-# UNPACK #-} !Int64
-	, so_sourceAccount :: !(Maybe B.ByteString)
+	, so_sourceAccount :: !(Maybe HexString)
 	, so_amount :: !(Maybe Int64)
 	, so_asset :: !(Maybe StellarAsset)
 	, so_assetCode :: !(Maybe T.Text)
@@ -174,13 +81,13 @@ data StellarOperation = StellarOperation
 	, so_buying :: !(Maybe StellarAsset)
 	, so_clearFlags :: !(Maybe Int64)
 	, so_dataName :: !(Maybe T.Text)
-	, so_dataValue :: !(Maybe B.ByteString)
+	, so_dataValue :: !(Maybe HexString)
 	, so_destAmount :: !(Maybe Int64)
 	, so_destAsset :: !(Maybe StellarAsset)
-	, so_destination :: !(Maybe B.ByteString)
+	, so_destination :: !(Maybe HexString)
 	, so_highThreshold :: !(Maybe Int64)
 	, so_homeDomain :: !(Maybe T.Text)
-	, so_inflationDest :: !(Maybe B.ByteString)
+	, so_inflationDest :: !(Maybe HexString)
 	, so_limit :: !(Maybe Int64)
 	, so_line :: !(Maybe StellarAsset)
 	, so_lowThreshold :: !(Maybe Int64)
@@ -194,19 +101,10 @@ data StellarOperation = StellarOperation
 	, so_sendMax :: !(Maybe Int64)
 	, so_setFlags :: !(Maybe Int64)
 	, so_startingBalance :: !(Maybe Int64)
-	, so_trustor :: !(Maybe B.ByteString)
+	, so_trustor :: !(Maybe HexString)
 	} deriving Generic
 
 instance Default StellarOperation
-
-instance Schemable StellarOperation
-instance SchemableField StellarOperation
-
-instance A.HasAvroSchema StellarOperation where
-	schema = genericAvroSchema
-instance A.ToAvro StellarOperation where
-	toAvro = genericToAvro
-instance ToPostgresText StellarOperation
 
 pattern SOT_CREATE_ACCOUNT = 0
 pattern SOT_PAYMENT = 1
@@ -226,17 +124,10 @@ pattern ASSET_TYPE_CREDIT_ALPHANUM12 = 2
 
 data StellarAsset = StellarAsset
 	{ sa_assetCode :: !(Maybe T.Text)
-	, sa_issuer :: !(Maybe B.ByteString)
+	, sa_issuer :: !(Maybe HexString)
 	} deriving Generic
 
-instance Schemable StellarAsset
-instance SchemableField StellarAsset
-
-instance A.HasAvroSchema StellarAsset where
-	schema = genericAvroSchema
-instance A.ToAvro StellarAsset where
-	toAvro = genericToAvro
-instance ToPostgresText StellarAsset
+genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarAsset]
 
 parseLedgers :: BL.ByteString -> BL.ByteString -> IO [StellarLedger]
 parseLedgers ledgersBytes transactionsBytes = do
@@ -277,7 +168,7 @@ parseLedgers ledgersBytes transactionsBytes = do
 			getExt
 			return StellarLedger
 				{ sl_sequence = ledgerSeq
-				, sl_hash = B.empty
+				, sl_hash = mempty
 				, sl_closeTime = scpValue
 				, sl_totalCoins = totalCoins
 				, sl_feePool = feePool
@@ -494,16 +385,16 @@ parseLedgers ledgersBytes transactionsBytes = do
 			getExt
 			return closeTime
 
-		getAccountID :: S.Get B.ByteString
+		getAccountID :: S.Get HexString
 		getAccountID = getPublicKey
 
-		getPublicKey :: S.Get B.ByteString
+		getPublicKey :: S.Get HexString
 		getPublicKey = do
 			_type <- S.getWord32be
-			S.getBytes 32
+			HexString . BS.toShort <$> S.getBytes 32
 
-		getHash :: S.Get B.ByteString
-		getHash = S.getBytes 32
+		getHash :: S.Get HexString
+		getHash = HexString . BS.toShort <$> S.getBytes 32
 
 		getAsset :: S.Get StellarAsset
 		getAsset = do
@@ -529,10 +420,10 @@ parseLedgers ledgersBytes transactionsBytes = do
 						}
 				_ -> fail "wrong asset type"
 
-		getOpaque :: S.Get B.ByteString
+		getOpaque :: S.Get HexString
 		getOpaque = do
 			size <- fromIntegral <$> S.getWord32be
-			bytes <- S.getBytes size
+			bytes <- HexString . BS.toShort <$> S.getBytes size
 			S.skip $ (4 - size `rem` 4) .&. 3
 			return bytes
 
@@ -608,3 +499,78 @@ parseLedgers ledgersBytes transactionsBytes = do
 
 instance Default (V.Vector a) where
 	def = V.empty
+
+stellarRequest :: Stellar -> T.Text -> IO BL.ByteString
+stellarRequest Stellar
+	{ stellar_httpManager = httpManager
+	, stellar_httpRequest = httpRequest
+	} path = tryWithRepeat $ H.responseBody <$> H.httpLbs httpRequest
+	{ H.path = H.path httpRequest <> T.encodeUtf8 path
+	} httpManager
+
+withCheckpointCache :: Stellar -> Int64 -> IO [StellarLedger]
+withCheckpointCache stellar@Stellar
+	{ stellar_checkpointCacheVar = cacheVar
+	, stellar_checkpointCacheSize = cacheSize
+	} checkpointSequence = do
+	lazyLedgers <- unsafeInterleaveIO io
+	atomically $ do
+		cache <- readTVar cacheVar
+		case filter ((== checkpointSequence) . fst) cache of
+			(_, cachedLedgers) : _ -> return cachedLedgers
+			[] -> do
+				writeTVar cacheVar $!
+					(if length cache >= cacheSize then init cache else cache)
+					++ [(checkpointSequence, lazyLedgers)]
+				return lazyLedgers
+	where
+		io = do
+			ledgersBytes <- GZip.decompress <$> stellarRequest stellar ledgerPath
+			transactionsBytes <- GZip.decompress <$> stellarRequest stellar transactionsPath
+			parseLedgers ledgersBytes transactionsBytes
+		sequenceHex = showHex checkpointSequence ""
+		sequenceHexPadded@[h0, h1, h2, h3, h4, h5, _h6, _h7]
+			= replicate (max 0 (8 - length sequenceHex)) '0' ++ sequenceHex
+		ledgerPath = "/ledger/" <> T.pack [h0, h1, '/', h2, h3, '/', h4, h5] <> "/ledger-" <> T.pack sequenceHexPadded <> ".xdr.gz"
+		transactionsPath = "/transactions/" <> T.pack [h0, h1, '/', h2, h3, '/', h4, h5] <> "/transactions-" <> T.pack sequenceHexPadded <> ".xdr.gz"
+
+instance BlockChain Stellar where
+	type Block Stellar = StellarLedger
+
+	getBlockChainInfo _ = BlockChainInfo
+		{ bci_init = \BlockChainParams
+			{ bcp_httpManager = httpManager
+			, bcp_httpRequest = httpRequest
+			, bcp_threadsCount = threadsCount
+			} -> do
+			checkpointCacheVar <- newTVarIO []
+			return Stellar
+				{ stellar_httpManager = httpManager
+				, stellar_httpRequest = httpRequest
+				, stellar_checkpointCacheVar = checkpointCacheVar
+				, stellar_checkpointCacheSize = 2 + threadsCount `quot` 64
+				}
+		, bci_defaultApiUrl = "http://history.stellar.org/prd/core-live/core_live_001"
+		, bci_defaultBeginBlock = 1
+		, bci_defaultEndBlock = 0 -- history data, no rewrites
+		, bci_schemas = standardBlockChainSchemas
+			(schemaOf (Proxy :: Proxy StellarLedger))
+			[ schemaOf (Proxy :: Proxy StellarAsset)
+			, schemaOf (Proxy :: Proxy StellarOperation)
+			, schemaOf (Proxy :: Proxy StellarTransaction)
+			]
+			"CREATE TABLE \"stellar\" OF \"StellarLedger\" (PRIMARY KEY (\"sequence\"));"
+		}
+
+	getCurrentBlockHeight stellar = either fail return
+		. (J.parseEither (J..: "currentLedger") <=< J.eitherDecode)
+		=<< stellarRequest stellar "/.well-known/stellar-history.json"
+
+	getBlockByHeight stellar blockHeight = do
+		ledgers <- filter ((== blockHeight) . sl_sequence) <$>
+			withCheckpointCache stellar (((blockHeight + 64) .&. complement 0x3f) - 1)
+		case ledgers of
+			[ledger] -> return ledger
+			_ -> fail "ledger cache error"
+
+	blockHeightFieldName _ = "sequence"

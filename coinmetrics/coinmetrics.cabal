@@ -24,6 +24,7 @@ library
     , avro
     , base
     , bytestring
+    , hanalytics-avro
     , hanalytics-base
     , hanalytics-bigquery
     , hanalytics-postgres
@@ -31,6 +32,7 @@ library
     , http-client
     , memory
     , scientific
+    , tagged
     , text
     , template-haskell
     , time

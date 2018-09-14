@@ -16,15 +16,12 @@ library
     CoinMetrics.Stellar
   build-depends:
     aeson
-    , avro
     , base
     , bytestring
     , cereal
     , coinmetrics
     , data-default
-    , hanalytics-avro
     , hanalytics-base
-    , hanalytics-postgres
     , http-client
     , stm
     , text

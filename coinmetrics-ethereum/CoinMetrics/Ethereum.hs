@@ -12,9 +12,8 @@ module CoinMetrics.Ethereum
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
 import qualified Data.ByteArray.Encoding as BA
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Short as BS
 import qualified Data.HashMap.Lazy as HML
 import GHC.Generics(Generic)
 import Data.Int
@@ -30,11 +29,10 @@ import qualified Data.Vector.Mutable as VM
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Flatten
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 data Ethereum = Ethereum
 	{ ethereum_jsonRpc :: !JsonRpc
@@ -44,18 +42,18 @@ data Ethereum = Ethereum
 
 data EthereumBlock = EthereumBlock
 	{ eb_number :: {-# UNPACK #-} !Int64
-	, eb_hash :: !B.ByteString
-	, eb_parentHash :: !B.ByteString
-	, eb_nonce :: !B.ByteString
-	, eb_sha3Uncles :: !B.ByteString
-	, eb_logsBloom :: !B.ByteString
-	, eb_transactionsRoot :: !B.ByteString
-	, eb_stateRoot :: !B.ByteString
-	, eb_receiptsRoot :: !B.ByteString
-	, eb_miner :: !B.ByteString
+	, eb_hash :: {-# UNPACK #-} !HexString
+	, eb_parentHash :: {-# UNPACK #-} !HexString
+	, eb_nonce :: {-# UNPACK #-} !HexString
+	, eb_sha3Uncles :: {-# UNPACK #-} !HexString
+	, eb_logsBloom :: {-# UNPACK #-} !HexString
+	, eb_transactionsRoot :: {-# UNPACK #-} !HexString
+	, eb_stateRoot :: {-# UNPACK #-} !HexString
+	, eb_receiptsRoot :: {-# UNPACK #-} !HexString
+	, eb_miner :: {-# UNPACK #-} !HexString
 	, eb_difficulty :: !Integer
 	, eb_totalDifficulty :: !Integer
-	, eb_extraData :: !B.ByteString
+	, eb_extraData :: {-# UNPACK #-} !HexString
 	, eb_size :: {-# UNPACK #-} !Int64
 	, eb_gasLimit :: {-# UNPACK #-} !Int64
 	, eb_gasUsed :: {-# UNPACK #-} !Int64
@@ -64,10 +62,12 @@ data EthereumBlock = EthereumBlock
 	, eb_uncles :: !(V.Vector EthereumUncleBlock)
 	} deriving Generic
 
-instance Schemable EthereumBlock
+newtype EthereumBlockWrapper = EthereumBlockWrapper
+	{ unwrapEthereumBlock :: EthereumBlock
+	}
 
-instance J.FromJSON EthereumBlock where
-	parseJSON = J.withObject "ethereum block" $ \fields -> EthereumBlock
+instance J.FromJSON EthereumBlockWrapper where
+	parseJSON = J.withObject "ethereum block" $ \fields -> fmap EthereumBlockWrapper $ EthereumBlock
 		<$> (decode0xHexNumber    =<< fields J..: "number")
 		<*> (decode0xHexBytes     =<< fields J..: "hash")
 		<*> (decode0xHexBytes     =<< fields J..: "parentHash")
@@ -85,19 +85,13 @@ instance J.FromJSON EthereumBlock where
 		<*> (decode0xHexNumber    =<< fields J..: "gasLimit")
 		<*> (decode0xHexNumber    =<< fields J..: "gasUsed")
 		<*> (decode0xHexNumber    =<< fields J..: "timestamp")
-		<*> (                       fields J..: "transactions")
-		<*> (                       fields J..: "uncles")
-
-instance A.HasAvroSchema EthereumBlock where
-	schema = genericAvroSchema
-instance A.ToAvro EthereumBlock where
-	toAvro = genericToAvro
-instance ToPostgresText EthereumBlock
+		<*> (V.map unwrapEthereumTransaction <$> fields J..: "transactions")
+		<*> (V.map unwrapEthereumUncleBlock <$> fields J..: "uncles")
 
 instance IsUnifiedBlock EthereumBlock where
 	unifyBlock EthereumBlock
 		{ eb_number = blNumber
-		, eb_hash = T.decodeUtf8 . BA.convertToBase BA.Base16 -> blHash
+		, eb_hash = T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString -> blHash
 		, eb_size = blSize
 		, eb_timestamp = posixSecondsToUTCTime . fromIntegral -> blTime
 		, eb_transactions = blTransactions
@@ -107,7 +101,7 @@ instance IsUnifiedBlock EthereumBlock where
 		, ub_hash = blHash
 		, ub_size = Just blSize
 		, ub_transactions = flip V.map blTransactions $ \EthereumTransaction
-			{ et_hash = T.decodeUtf8 . BA.convertToBase BA.Base16 -> txHash
+			{ et_hash = T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString -> txHash
 			, et_gasPrice = txGasPrice
 			, et_gasUsed = txGasUsed
 			, et_actions = txActions
@@ -186,7 +180,7 @@ instance IsUnifiedBlock EthereumBlock where
 			}
 		}
 		where
-			toAccount = UnifiedAccount . T.decodeUtf8 . BA.convertToBase BA.Base16
+			toAccount = UnifiedAccount . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
 			toValue value = UnifiedValue
 				{ uv_amount = fromIntegral value * 1e-18
 				, uv_asset = Nothing
@@ -194,28 +188,29 @@ instance IsUnifiedBlock EthereumBlock where
 
 data EthereumUncleBlock = EthereumUncleBlock
 	{ eub_number :: {-# UNPACK #-} !Int64
-	, eub_hash :: !B.ByteString
-	, eub_parentHash :: !B.ByteString
-	, eub_nonce :: !B.ByteString
-	, eub_sha3Uncles :: !B.ByteString
-	, eub_logsBloom :: !B.ByteString
-	, eub_transactionsRoot :: !B.ByteString
-	, eub_stateRoot :: !B.ByteString
-	, eub_receiptsRoot :: !B.ByteString
-	, eub_miner :: !B.ByteString
+	, eub_hash :: {-# UNPACK #-} !HexString
+	, eub_parentHash :: {-# UNPACK #-} !HexString
+	, eub_nonce :: {-# UNPACK #-} !HexString
+	, eub_sha3Uncles :: {-# UNPACK #-} !HexString
+	, eub_logsBloom :: {-# UNPACK #-} !HexString
+	, eub_transactionsRoot :: {-# UNPACK #-} !HexString
+	, eub_stateRoot :: {-# UNPACK #-} !HexString
+	, eub_receiptsRoot :: {-# UNPACK #-} !HexString
+	, eub_miner :: {-# UNPACK #-} !HexString
 	, eub_difficulty :: !Integer
 	, eub_totalDifficulty :: !(Maybe Integer)
-	, eub_extraData :: !B.ByteString
+	, eub_extraData :: {-# UNPACK #-} !HexString
 	, eub_gasLimit :: {-# UNPACK #-} !Int64
 	, eub_gasUsed :: {-# UNPACK #-} !Int64
 	, eub_timestamp :: {-# UNPACK #-} !Int64
 	} deriving Generic
 
-instance Schemable EthereumUncleBlock
-instance SchemableField EthereumUncleBlock
+newtype EthereumUncleBlockWrapper = EthereumUncleBlockWrapper
+	{ unwrapEthereumUncleBlock :: EthereumUncleBlock
+	}
 
-instance J.FromJSON EthereumUncleBlock where
-	parseJSON = J.withObject "ethereum uncle block" $ \fields -> EthereumUncleBlock
+instance J.FromJSON EthereumUncleBlockWrapper where
+	parseJSON = J.withObject "ethereum uncle block" $ \fields -> fmap EthereumUncleBlockWrapper $ EthereumUncleBlock
 		<$> (decode0xHexNumber    =<< fields J..: "number")
 		<*> (decode0xHexBytes     =<< fields J..: "hash")
 		<*> (decode0xHexBytes     =<< fields J..: "parentHash")
@@ -233,34 +228,29 @@ instance J.FromJSON EthereumUncleBlock where
 		<*> (decode0xHexNumber    =<< fields J..: "gasUsed")
 		<*> (decode0xHexNumber    =<< fields J..: "timestamp")
 
-instance A.HasAvroSchema EthereumUncleBlock where
-	schema = genericAvroSchema
-instance A.ToAvro EthereumUncleBlock where
-	toAvro = genericToAvro
-instance ToPostgresText EthereumUncleBlock
-
 data EthereumTransaction = EthereumTransaction
-	{ et_hash :: !B.ByteString
+	{ et_hash :: {-# UNPACK #-} !HexString
 	, et_nonce :: {-# UNPACK #-} !Int64
-	, et_from :: !B.ByteString
-	, et_to :: !(Maybe B.ByteString)
+	, et_from :: {-# UNPACK #-} !HexString
+	, et_to :: !(Maybe HexString)
 	, et_value :: !Integer
 	, et_gasPrice :: !Integer
 	, et_gas :: {-# UNPACK #-} !Int64
-	, et_input :: !B.ByteString
+	, et_input :: {-# UNPACK #-} !HexString
 	-- from eth_getTransactionReceipt
 	, et_gasUsed :: {-# UNPACK #-} !Int64
-	, et_contractAddress :: !(Maybe B.ByteString)
+	, et_contractAddress :: !(Maybe HexString)
 	, et_logs :: !(V.Vector EthereumLog)
-	, et_logsBloom :: !(Maybe B.ByteString)
+	, et_logsBloom :: !(Maybe HexString)
 	, et_actions :: !(V.Vector EthereumAction)
 	} deriving Generic
 
-instance Schemable EthereumTransaction
-instance SchemableField EthereumTransaction
+newtype EthereumTransactionWrapper = EthereumTransactionWrapper
+	{ unwrapEthereumTransaction :: EthereumTransaction
+	}
 
-instance J.FromJSON EthereumTransaction where
-	parseJSON = J.withObject "ethereum transaction" $ \fields -> EthereumTransaction
+instance J.FromJSON EthereumTransactionWrapper where
+	parseJSON = J.withObject "ethereum transaction" $ \fields -> fmap EthereumTransactionWrapper $ EthereumTransaction
 		<$> (decode0xHexBytes  =<< fields J..: "hash")
 		<*> (decode0xHexNumber =<< fields J..: "nonce")
 		<*> (decode0xHexBytes  =<< fields J..: "from")
@@ -271,38 +261,27 @@ instance J.FromJSON EthereumTransaction where
 		<*> (decode0xHexBytes  =<< fields J..: "input")
 		<*> (decode0xHexNumber =<< fields J..: "gasUsed")
 		<*> (traverse decode0xHexBytes =<< fields J..: "contractAddress")
-		<*> (                      fields J..: "logs")
+		<*> (V.map unwrapEthereumLog <$> fields J..: "logs")
 		<*> (traverse decode0xHexBytes =<< fields J..:? "logsBloom")
-		<*> (fmap (fromMaybe V.empty) $ fields J..:? "actions")
-
-instance A.HasAvroSchema EthereumTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro EthereumTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText EthereumTransaction
+		<*> (V.map unwrapEthereumAction . fromMaybe V.empty <$> fields J..:? "actions")
 
 data EthereumLog = EthereumLog
 	{ el_logIndex :: {-# UNPACK #-} !Int64
-	, el_address :: !B.ByteString
-	, el_data :: !B.ByteString
-	, el_topics :: !(V.Vector B.ByteString)
+	, el_address :: {-# UNPACK #-} !HexString
+	, el_data :: {-# UNPACK #-} !HexString
+	, el_topics :: !(V.Vector HexString)
 	} deriving Generic
 
-instance Schemable EthereumLog
-instance SchemableField EthereumLog
+newtype EthereumLogWrapper = EthereumLogWrapper
+	{ unwrapEthereumLog :: EthereumLog
+	}
 
-instance J.FromJSON EthereumLog where
-	parseJSON = J.withObject "ethereum log" $ \fields -> EthereumLog
+instance J.FromJSON EthereumLogWrapper where
+	parseJSON = J.withObject "ethereum log" $ \fields -> fmap EthereumLogWrapper $ EthereumLog
 		<$> (decode0xHexNumber =<< fields J..: "logIndex")
 		<*> (decode0xHexBytes  =<< fields J..: "address")
 		<*> (decode0xHexBytes  =<< fields J..: "data")
 		<*> (V.mapM decode0xHexBytes =<< fields J..: "topics")
-
-instance A.HasAvroSchema EthereumLog where
-	schema = genericAvroSchema
-instance A.ToAvro EthereumLog where
-	toAvro = genericToAvro
-instance ToPostgresText EthereumLog
 
 data EthereumAction = EthereumAction
 	{
@@ -316,9 +295,9 @@ data EthereumAction = EthereumAction
 	-- | Changes to the state made by this call are not reverted.
 	, ea_accounted :: !Bool
 	-- | "from" for "call" and "create", "address" for "suicide"
-	, ea_from :: !(Maybe B.ByteString)
+	, ea_from :: !(Maybe HexString)
 	-- | "to" for "call", "address" for "create", "author" for "reward", "refund_address" for "suicide"
-	, ea_to :: !(Maybe B.ByteString)
+	, ea_to :: !(Maybe HexString)
 	-- | "value" for "call", "create", and "reward" , "balance" for "suicide"
 	, ea_value :: !(Maybe Integer)
 	-- | "gas" for "call" and "create"
@@ -327,10 +306,11 @@ data EthereumAction = EthereumAction
 	, ea_gasUsed :: !(Maybe Int64)
 	} deriving Generic
 
-instance Schemable EthereumAction
-instance SchemableField EthereumAction
+newtype EthereumActionWrapper = EthereumActionWrapper
+	{ unwrapEthereumAction :: EthereumAction
+	}
 
-instance J.FromJSON EthereumAction where
+instance J.FromJSON EthereumActionWrapper where
 	parseJSON = J.withObject "ethereum action" $ \fields -> do
 		action <- fields J..: "action"
 		actionType <- fields J..: "type"
@@ -339,7 +319,7 @@ instance J.FromJSON EthereumAction where
 		valid <- fields J..: "valid"
 		succeeded <- fields J..: "succeeded"
 		accounted <- fields J..: "accounted"
-		case actionType :: T.Text of
+		fmap EthereumActionWrapper $ case actionType :: T.Text of
 			"call" -> EthereumAction 0 stack valid succeeded accounted
 				<$> (traverse decode0xHexBytes =<< action J..:? "from")
 				<*> (traverse decode0xHexBytes =<< action J..:? "to")
@@ -366,12 +346,7 @@ instance J.FromJSON EthereumAction where
 				<*> (return Nothing)
 			_ -> fail $ "unknown ethereum action: " <> T.unpack actionType
 
-instance A.HasAvroSchema EthereumAction where
-	schema = genericAvroSchema
-instance A.ToAvro EthereumAction where
-	toAvro = genericToAvro
-instance ToPostgresText EthereumAction
-
+genSchemaInstances [''EthereumBlock, ''EthereumTransaction, ''EthereumLog, ''EthereumAction, ''EthereumUncleBlock]
 genFlattenedTypes "number" [| eb_number |] [("block", ''EthereumBlock), ("transaction", ''EthereumTransaction), ("log", ''EthereumLog), ("action", ''EthereumAction), ("uncle", ''EthereumUncleBlock)]
 
 instance BlockChain Ethereum where
@@ -437,7 +412,7 @@ instance BlockChain Ethereum where
 							_ -> False
 						in isObject <$> actionFields J..:? "result"
 					txIndex <- fromMaybe (-1) <$> actionFields J..:? "transactionPosition"
-					action <- J.parseJSON $ J.Object
+					action <- fmap unwrapEthereumAction $ J.parseJSON $ J.Object
 						$ HML.insert "valid" (J.Bool valid)
 						$ HML.insert "succeeded" (J.Bool succeeded)
 						$ HML.insert "accounted" (J.Bool $ valid && succeeded)
@@ -474,7 +449,7 @@ instance BlockChain Ethereum where
 				contractAddress <- receiptFields' J..: "contractAddress"
 				logs <- receiptFields' J..: "logs"
 				logsBloom <- fromMaybe J.Null <$> receiptFields' J..:? "logsBloom"
-				transaction <- J.parseJSON $ J.Object
+				transaction <- fmap unwrapEthereumTransaction $ J.parseJSON $ J.Object
 					$ HML.insert "gasUsed" gasUsed
 					$ HML.insert "contractAddress" contractAddress
 					$ HML.insert "logs" logs
@@ -485,8 +460,8 @@ instance BlockChain Ethereum where
 					{ et_actions = V.map snd $ V.filter ((== i) . fst) blockActions
 					}
 		uncles <- flip V.imapM unclesHashes $ \i _uncleHash ->
-			jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" ([encode0xHexNumber blockHeight, encode0xHexNumber i] :: V.Vector J.Value)
-		block <- either fail return $ J.parseEither J.parseJSON $ J.Object
+			unwrapEthereumUncleBlock <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" ([encode0xHexNumber blockHeight, encode0xHexNumber i] :: V.Vector J.Value)
+		block <- either fail (return . unwrapEthereumBlock) $ J.parseEither J.parseJSON $ J.Object
 			$ HML.insert "transactions" (J.Array [])
 			$ HML.insert "uncles" (J.Array [])
 			blockFields

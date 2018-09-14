@@ -16,13 +16,9 @@ library
     CoinMetrics.Neo
   build-depends:
     aeson
-    , avro
     , base
-    , bytestring
     , coinmetrics
-    , hanalytics-avro
     , hanalytics-base
-    , hanalytics-postgres
     , scientific
     , text
     , vector

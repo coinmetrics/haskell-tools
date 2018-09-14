@@ -16,14 +16,10 @@ library
     CoinMetrics.Iota
   build-depends:
     aeson
-    , avro
     , base
     , bytestring
     , cereal
     , coinmetrics
-    , hanalytics-avro
-    , hanalytics-base
-    , hanalytics-postgres
     , http-client
     , memory
     , text

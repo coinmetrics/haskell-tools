@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Waves
 	( Waves(..)
@@ -10,7 +10,6 @@ module CoinMetrics.Waves
 
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
 import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
@@ -21,11 +20,10 @@ import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 data Waves = Waves
 	{ waves_httpManager :: !H.Manager
@@ -42,23 +40,19 @@ data WavesBlock = WavesBlock
 	, wb_transactions :: !(V.Vector WavesTransaction)
 	} deriving Generic
 
-instance Schemable WavesBlock
+newtype WavesBlockWrapper = WavesBlockWrapper
+	{ unwrapWavesBlock :: WavesBlock
+	}
 
-instance J.FromJSON WavesBlock where
-	parseJSON = J.withObject "waves block" $ \fields -> WavesBlock
+instance J.FromJSON WavesBlockWrapper where
+	parseJSON = J.withObject "waves block" $ \fields -> fmap WavesBlockWrapper $ WavesBlock
 		<$> (fields J..: "height")
 		<*> (fields J..: "version")
 		<*> (fields J..: "timestamp")
 		<*> ((J..: "base-target") =<< fields J..: "nxt-consensus")
 		<*> (fields J..: "generator")
 		<*> (fields J..: "blocksize")
-		<*> (fields J..: "transactions")
-
-instance A.HasAvroSchema WavesBlock where
-	schema = genericAvroSchema
-instance A.ToAvro WavesBlock where
-	toAvro = genericToAvro
-instance ToPostgresText WavesBlock
+		<*> (V.map unwrapWavesTransaction <$> fields J..: "transactions")
 
 instance IsUnifiedBlock WavesBlock
 
@@ -89,11 +83,12 @@ data WavesTransaction = WavesTransaction
 	, wt_transfers :: !(V.Vector WavesTransfer)
 	} deriving Generic
 
-instance Schemable WavesTransaction
-instance SchemableField WavesTransaction
+newtype WavesTransactionWrapper = WavesTransactionWrapper
+	{ unwrapWavesTransaction :: WavesTransaction
+	}
 
-instance J.FromJSON WavesTransaction where
-	parseJSON = J.withObject "waves transaction" $ \fields -> WavesTransaction
+instance J.FromJSON WavesTransactionWrapper where
+	parseJSON = J.withObject "waves transaction" $ \fields -> fmap WavesTransactionWrapper $ WavesTransaction
 		<$> (fields J..: "type")
 		<*> (fields J..: "id")
 		<*> (fields J..: "timestamp")
@@ -113,17 +108,11 @@ instance J.FromJSON WavesTransaction where
 		<*> (fields J..:? "price")
 		<*> (fields J..:? "buyMatcherFee")
 		<*> (fields J..:? "sellMatcherFee")
-		<*> (fields J..:? "order1")
-		<*> (fields J..:? "order2")
+		<*> (fmap unwrapWavesOrder <$> fields J..:? "order1")
+		<*> (fmap unwrapWavesOrder <$> fields J..:? "order2")
 		<*> (fields J..:? "leaseId")
 		<*> (fields J..:? "alias")
-		<*> (fromMaybe V.empty <$> fields J..:? "transfers")
-
-instance A.HasAvroSchema WavesTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro WavesTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText WavesTransaction
+		<*> (V.map unwrapWavesTransfer . fromMaybe V.empty <$> fields J..:? "transfers")
 
 data WavesOrder = WavesOrder
 	{ wo_id :: !T.Text
@@ -139,11 +128,12 @@ data WavesOrder = WavesOrder
 	, wo_matcherFee :: {-# UNPACK #-} !Int64
 	} deriving Generic
 
-instance Schemable WavesOrder
-instance SchemableField WavesOrder
+newtype WavesOrderWrapper = WavesOrderWrapper
+	{ unwrapWavesOrder :: WavesOrder
+	}
 
-instance J.FromJSON WavesOrder where
-	parseJSON = J.withObject "waves order" $ \fields -> WavesOrder
+instance J.FromJSON WavesOrderWrapper where
+	parseJSON = J.withObject "waves order" $ \fields -> fmap WavesOrderWrapper $ WavesOrder
 		<$> (fields J..: "id")
 		<*> (fields J..: "sender")
 		<*> (fields J..: "matcherPublicKey")
@@ -156,30 +146,23 @@ instance J.FromJSON WavesOrder where
 		<*> (fields J..: "expiration")
 		<*> (fields J..: "matcherFee")
 
-instance A.HasAvroSchema WavesOrder where
-	schema = genericAvroSchema
-instance A.ToAvro WavesOrder where
-	toAvro = genericToAvro
-instance ToPostgresText WavesOrder
-
 data WavesTransfer = WavesTransfer
 	{ wtf_recipient :: !T.Text
 	, wtf_amount :: {-# UNPACK #-} !Int64
 	} deriving Generic
 
-instance Schemable WavesTransfer
-instance SchemableField WavesTransfer
+newtype WavesTransferWrapper = WavesTransferWrapper
+	{ unwrapWavesTransfer :: WavesTransfer
+	}
 
-instance J.FromJSON WavesTransfer where
-	parseJSON = J.withObject "waves transfer" $ \fields -> WavesTransfer
+instance J.FromJSON WavesTransferWrapper where
+	parseJSON = J.withObject "waves transfer" $ \fields -> fmap WavesTransferWrapper $ WavesTransfer
 		<$> (fields J..: "recipient")
 		<*> (fields J..: "amount")
 
-instance A.HasAvroSchema WavesTransfer where
-	schema = genericAvroSchema
-instance A.ToAvro WavesTransfer where
-	toAvro = genericToAvro
-instance ToPostgresText WavesTransfer
+
+genSchemaInstances [''WavesBlock, ''WavesTransaction, ''WavesOrder, ''WavesTransfer]
+
 
 instance BlockChain Waves where
 	type Block Waves = WavesBlock
@@ -220,6 +203,6 @@ instance BlockChain Waves where
 		response <- tryWithRepeat $ H.httpLbs httpRequest
 			{ H.path = "/blocks/at/" <> fromString (show blockHeight)
 			} httpManager
-		either fail return $ J.eitherDecode' $ H.responseBody response
+		either fail (return . unwrapWavesBlock) $ J.eitherDecode' $ H.responseBody response
 
 	blockHeightFieldName _ = "height"

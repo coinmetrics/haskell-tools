@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.EOS
 	( Eos(..)
@@ -10,8 +10,6 @@ module CoinMetrics.EOS
 
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
-import qualified Data.ByteString as B
 import GHC.Generics(Generic)
 import Data.Int
 import Data.Proxy
@@ -21,11 +19,10 @@ import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 data Eos = Eos
 	{ eos_httpManager :: !H.Manager
@@ -33,7 +30,7 @@ data Eos = Eos
 	}
 
 data EosBlock = EosBlock
-	{ eb_id :: !B.ByteString
+	{ eb_id :: {-# UNPACK #-} !HexString
 	, eb_number :: {-# UNPACK #-} !Int64
 	, eb_timestamp :: {-# UNPACK #-} !Int64
 	, eb_producer :: !T.Text
@@ -41,27 +38,23 @@ data EosBlock = EosBlock
 	, eb_transactions :: !(V.Vector EosTransaction)
 	} deriving Generic
 
-instance Schemable EosBlock
+newtype EosBlockWrapper = EosBlockWrapper
+	{ unwrapEosBlock :: EosBlock
+	}
 
-instance J.FromJSON EosBlock where
-	parseJSON = J.withObject "eos block" $ \fields -> EosBlock
-		<$> (decodeHexBytes =<< fields J..: "id")
+instance J.FromJSON EosBlockWrapper where
+	parseJSON = J.withObject "eos block" $ \fields -> fmap EosBlockWrapper $ EosBlock
+		<$> (fields J..: "id")
 		<*> (fields J..: "block_num")
 		<*> (round . utcTimeToPOSIXSeconds . currentLocalTimeToUTC <$> fields J..: "timestamp")
 		<*> (fields J..: "producer")
 		<*> (fields J..: "ref_block_prefix")
-		<*> (fields J..: "transactions")
-
-instance A.HasAvroSchema EosBlock where
-	schema = genericAvroSchema
-instance A.ToAvro EosBlock where
-	toAvro = genericToAvro
-instance ToPostgresText EosBlock
+		<*> (V.map unwrapEosTransaction <$> fields J..: "transactions")
 
 instance IsUnifiedBlock EosBlock
 
 data EosTransaction = EosTransaction
-	{ et_id :: !B.ByteString
+	{ et_id :: {-# UNPACK #-} !HexString
 	, et_status :: !T.Text
 	, et_cpu_usage_us :: {-# UNPACK #-} !Int64
 	, et_net_usage_words :: {-# UNPACK #-} !Int64
@@ -75,17 +68,18 @@ data EosTransaction = EosTransaction
 	, et_actions :: !(V.Vector EosAction)
 	} deriving Generic
 
-instance Schemable EosTransaction
-instance SchemableField EosTransaction
+newtype EosTransactionWrapper = EosTransactionWrapper
+	{ unwrapEosTransaction :: EosTransaction
+	}
 
-instance J.FromJSON EosTransaction where
+instance J.FromJSON EosTransactionWrapper where
 	parseJSON = J.withObject "eos transaction" $ \fields -> do
 		trxVal <- fields J..: "trx"
-		case trxVal of
+		fmap EosTransactionWrapper $ case trxVal of
 			J.Object trx -> do
 				trxTrans <- trx J..: "transaction"
 				EosTransaction
-					<$> (decodeHexBytes =<< trx J..: "id")
+					<$> (trx J..: "id")
 					<*> (fields J..: "status")
 					<*> (fields J..: "cpu_usage_us")
 					<*> (fields J..: "net_usage_words")
@@ -96,9 +90,9 @@ instance J.FromJSON EosTransaction where
 					<*> (trxTrans J..: "max_cpu_usage_ms")
 					<*> (trxTrans J..: "delay_sec")
 					<*> (trxTrans J..: "context_free_actions")
-					<*> (trxTrans J..: "actions")
+					<*> (V.map unwrapEosAction <$> trxTrans J..: "actions")
 			_ -> EosTransaction
-				"" -- id
+				mempty -- id
 				<$> (fields J..: "status")
 				<*> (fields J..: "cpu_usage_us")
 				<*> (fields J..: "net_usage_words")
@@ -111,53 +105,31 @@ instance J.FromJSON EosTransaction where
 				<*> (return [])
 				<*> (return [])
 
-instance A.HasAvroSchema EosTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro EosTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText EosTransaction
-
 data EosAction = EosAction
 	{ ea_account :: !T.Text
 	, ea_name :: !T.Text
 	, ea_authorization :: !(V.Vector EosAuthorization)
-	, ea_data :: !B.ByteString
+	, ea_data :: {-# UNPACK #-} !HexString
 	} deriving Generic
 
-instance Schemable EosAction
-instance SchemableField EosAction
+newtype EosActionWrapper = EosActionWrapper
+	{ unwrapEosAction :: EosAction
+	}
 
-instance J.FromJSON EosAction where
-	parseJSON = J.withObject "eos action" $ \fields -> EosAction
+instance J.FromJSON EosActionWrapper where
+	parseJSON = J.withObject "eos action" $ \fields -> fmap EosActionWrapper $ EosAction
 		<$> (fields J..: "account")
 		<*> (fields J..: "name")
 		<*> (fields J..: "authorization")
-		<*> (decodeHexBytes =<< maybe (fields J..: "data") return =<< fields J..:? "hex_data")
-
-instance A.HasAvroSchema EosAction where
-	schema = genericAvroSchema
-instance A.ToAvro EosAction where
-	toAvro = genericToAvro
-instance ToPostgresText EosAction
+		<*> (maybe (fields J..: "data") return =<< fields J..:? "hex_data")
 
 data EosAuthorization = EosAuthorization
 	{ eau_actor :: !T.Text
 	, eau_permission :: !T.Text
 	} deriving Generic
 
-instance Schemable EosAuthorization
-instance SchemableField EosAuthorization
-
-instance J.FromJSON EosAuthorization where
-	parseJSON = J.withObject "eos authorization" $ \fields -> EosAuthorization
-			<$> (fields J..: "actor")
-			<*> (fields J..: "permission")
-
-instance A.HasAvroSchema EosAuthorization where
-	schema = genericAvroSchema
-instance A.ToAvro EosAuthorization where
-	toAvro = genericToAvro
-instance ToPostgresText EosAuthorization
+genSchemaInstances [''EosBlock, ''EosTransaction, ''EosAction, ''EosAuthorization]
+-- genFlattenedTypes "number" [| eb_number |] [("block", ''EthereumBlock), ("transaction", ''EthereumTransaction), ("log", ''EthereumLog), ("action", ''EthereumAction), ("uncle", ''EthereumUncleBlock)]
 
 instance BlockChain Eos where
 	type Block Eos = EosBlock
@@ -201,6 +173,6 @@ instance BlockChain Eos where
 				[ ("block_num_or_id", J.Number $ fromIntegral blockHeight)
 				]
 			} httpManager
-		either fail return $ J.eitherDecode' $ H.responseBody response
+		either fail (return . unwrapEosBlock) $ J.eitherDecode' $ H.responseBody response
 
 	blockHeightFieldName _ = "number"

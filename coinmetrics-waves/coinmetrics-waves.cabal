@@ -16,12 +16,9 @@ library
     CoinMetrics.Waves
   build-depends:
     aeson
-    , avro
     , base
     , coinmetrics
-    , hanalytics-avro
     , hanalytics-base
-    , hanalytics-postgres
     , http-client
     , text
     , vector

@@ -16,13 +16,9 @@ library
     CoinMetrics.EOS
   build-depends:
     aeson
-    , avro
     , base
-    , bytestring
     , coinmetrics
-    , hanalytics-avro
     , hanalytics-base
-    , hanalytics-postgres
     , http-client
     , text
     , time

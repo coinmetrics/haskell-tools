@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell #-}
 
 module CoinMetrics.Iota
 	( IotaTransaction(..)
@@ -13,7 +13,6 @@ module CoinMetrics.Iota
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
 import Data.Either
 import Data.Int
 import qualified Data.Serialize as S
@@ -23,11 +22,9 @@ import qualified Data.Vector as V
 import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
-import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 data IotaTransaction = IotaTransaction
 	{ it_hash :: !T.Text
@@ -48,14 +45,9 @@ data IotaTransaction = IotaTransaction
 	, it_nonce :: !T.Text
 	} deriving Generic
 
-instance Schemable IotaTransaction
-instance A.HasAvroSchema IotaTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro IotaTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText IotaTransaction
-
 instance IsUnifiedBlock IotaTransaction
+
+genSchemaInstances [''IotaTransaction]
 
 -- | Deserialize transaction.
 deserIotaTransaction :: T.Text -> S.Get IotaTransaction

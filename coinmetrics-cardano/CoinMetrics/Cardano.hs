@@ -11,7 +11,6 @@ module CoinMetrics.Cardano
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import qualified Data.HashMap.Strict as HM
 import Data.Int
@@ -25,11 +24,10 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Flatten
+import CoinMetrics.Schema.Util
 import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
-import Hanalytics.Schema.Avro
-import Hanalytics.Schema.Postgres
 
 -- | Cardano connector.
 data Cardano = Cardano
@@ -53,108 +51,90 @@ data CardanoBlock = CardanoBlock
 	{ cb_height :: {-# UNPACK #-} !Int64
 	, cb_epoch :: {-# UNPACK #-} !Int64
 	, cb_slot :: {-# UNPACK #-} !Int64
-	, cb_hash :: !B.ByteString
+	, cb_hash :: {-# UNPACK #-} !HexString
 	, cb_timeIssued :: {-# UNPACK #-} !Int64
 	, cb_totalSent :: !Integer
 	, cb_size :: {-# UNPACK #-} !Int64
-	, cb_blockLead :: !B.ByteString
+	, cb_blockLead :: {-# UNPACK #-} !HexString
 	, cb_fees :: !Integer
 	, cb_transactions :: !(V.Vector CardanoTransaction)
 	} deriving Generic
 
-instance Schemable CardanoBlock
+newtype CardanoBlockWrapper = CardanoBlockWrapper
+	{ unwrapCardanoBlock :: CardanoBlock
+	}
 
-instance J.FromJSON CardanoBlock where
-	parseJSON = J.withObject "cardano block" $ \fields -> CardanoBlock
+instance J.FromJSON CardanoBlockWrapper where
+	parseJSON = J.withObject "cardano block" $ \fields -> fmap CardanoBlockWrapper $ CardanoBlock
 		<$> (fields J..: "height")
 		<*> (fields J..: "cbeEpoch")
 		<*> (fields J..: "cbeSlot")
-		<*> (decodeHexBytes =<< fields J..: "cbeBlkHash")
+		<*> (fields J..: "cbeBlkHash")
 		<*> (fields J..: "cbeTimeIssued")
 		<*> (decodeValue =<< fields J..: "cbeTotalSent")
 		<*> (fields J..: "cbeSize")
-		<*> (decodeHexBytes =<< fields J..: "cbeBlockLead")
+		<*> (fields J..: "cbeBlockLead")
 		<*> (decodeValue =<< fields J..: "cbeFees")
-		<*> (fields J..: "transactions")
-
-instance A.HasAvroSchema CardanoBlock where
-	schema = genericAvroSchema
-instance A.ToAvro CardanoBlock where
-	toAvro = genericToAvro
-instance ToPostgresText CardanoBlock
+		<*> (V.map unwrapCardanoTransaction <$> fields J..: "transactions")
 
 instance IsUnifiedBlock CardanoBlock
 
 data CardanoTransaction = CardanoTransaction
-	{ ct_id :: !B.ByteString
+	{ ct_id :: {-# UNPACK #-} !HexString
 	, ct_timeIssued :: {-# UNPACK #-} !Int64
 	, ct_fees :: !Integer
 	, ct_inputs :: !(V.Vector CardanoInput)
 	, ct_outputs :: !(V.Vector CardanoOutput)
 	} deriving Generic
 
-instance Schemable CardanoTransaction
-instance SchemableField CardanoTransaction
+newtype CardanoTransactionWrapper = CardanoTransactionWrapper
+	{ unwrapCardanoTransaction :: CardanoTransaction
+	}
 
-instance J.FromJSON CardanoTransaction where
-	parseJSON = J.withObject "cardano transaction" $ \fields -> CardanoTransaction
-		<$> (decodeHexBytes =<< fields J..: "ctsId")
+instance J.FromJSON CardanoTransactionWrapper where
+	parseJSON = J.withObject "cardano transaction" $ \fields -> fmap CardanoTransactionWrapper $ CardanoTransaction
+		<$> (fields J..: "ctsId")
 		<*> (fields J..: "ctsTxTimeIssued")
 		<*> (decodeValue =<< fields J..: "ctsFees")
-		<*> (fields J..: "ctsInputs")
-		<*> (fields J..: "ctsOutputs")
-
-instance A.HasAvroSchema CardanoTransaction where
-	schema = genericAvroSchema
-instance A.ToAvro CardanoTransaction where
-	toAvro = genericToAvro
-instance ToPostgresText CardanoTransaction
+		<*> (V.map unwrapCardanoInput <$> fields J..: "ctsInputs")
+		<*> (V.map unwrapCardanoOutput <$> fields J..: "ctsOutputs")
 
 data CardanoInput = CardanoInput
 	{ ci_address :: !T.Text
 	, ci_value :: !Integer
 	} deriving Generic
 
-instance Schemable CardanoInput
-instance SchemableField CardanoInput
+newtype CardanoInputWrapper = CardanoInputWrapper
+	{ unwrapCardanoInput :: CardanoInput
+	}
 
-instance J.FromJSON CardanoInput where
+instance J.FromJSON CardanoInputWrapper where
 	parseJSON = J.withArray "cardano input" $ \fields -> do
 		unless (V.length fields == 2) $ fail "wrong cardano input array"
-		CardanoInput
+		fmap CardanoInputWrapper $ CardanoInput
 			<$> (J.parseJSON $ fields V.! 0)
 			<*> (decodeValue $ fields V.! 1)
-
-instance A.HasAvroSchema CardanoInput where
-	schema = genericAvroSchema
-instance A.ToAvro CardanoInput where
-	toAvro = genericToAvro
-instance ToPostgresText CardanoInput
 
 data CardanoOutput = CardanoOutput
 	{ co_address :: !T.Text
 	, co_value :: !Integer
 	} deriving Generic
 
-instance Schemable CardanoOutput
-instance SchemableField CardanoOutput
+newtype CardanoOutputWrapper = CardanoOutputWrapper
+	{ unwrapCardanoOutput :: CardanoOutput
+	}
 
-instance J.FromJSON CardanoOutput where
+instance J.FromJSON CardanoOutputWrapper where
 	parseJSON = J.withArray "cardano output" $ \fields -> do
 		unless (V.length fields == 2) $ fail "wrong cardano output array"
-		CardanoOutput
+		fmap CardanoOutputWrapper $ CardanoOutput
 			<$> (J.parseJSON $ fields V.! 0)
 			<*> (decodeValue $ fields V.! 1)
-
-instance A.HasAvroSchema CardanoOutput where
-	schema = genericAvroSchema
-instance A.ToAvro CardanoOutput where
-	toAvro = genericToAvro
-instance ToPostgresText CardanoOutput
 
 decodeValue :: J.Value -> J.Parser Integer
 decodeValue = J.withObject "cardano value" $ \fields -> (read . T.unpack) <$> fields J..: "getCoin"
 
+genSchemaInstances [''CardanoBlock, ''CardanoTransaction, ''CardanoInput, ''CardanoOutput]
 genFlattenedTypes "height" [| cb_height |] [("block", ''CardanoBlock), ("transaction", ''CardanoTransaction), ("input", ''CardanoInput), ("output", ''CardanoOutput)]
 
 instance BlockChain Cardano where
@@ -212,7 +192,7 @@ instance BlockChain Cardano where
 		blockTxs <- forM blockTxsBriefObjects $ \txBriefObject -> do
 			txIdText <- either fail return $ J.parseEither (J..: "ctbId") txBriefObject
 			either fail return =<< cardanoRequest cardano ("/api/txs/summary/" <> txIdText) []
-		either fail return $ J.parseEither (J.parseJSON . J.Object)
+		either fail (return . unwrapCardanoBlock) $ J.parseEither (J.parseJSON . J.Object)
 			$ HM.insert "height" (J.Number $ fromIntegral blockHeight)
 			$ HM.insert "transactions" (J.Array blockTxs)
 			blockObject

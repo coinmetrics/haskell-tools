@@ -1,9 +1,7 @@
-{-# LANGUAGE LambdaCase, OverloadedLists, OverloadedStrings, ViewPatterns #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, OverloadedLists, OverloadedStrings, ViewPatterns #-}
 
 module CoinMetrics.Util
-	( encodeHexBytes
-	, decodeHexBytes
-	, encode0xHexBytes
+	( HexString(..)
 	, decode0xHexBytes
 	, encode0xHexNumber
 	, decode0xHexNumber
@@ -15,12 +13,17 @@ module CoinMetrics.Util
 
 import Control.Concurrent
 import Control.Exception
+import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
+import qualified Data.Avro as A
+import qualified Data.Avro.Schema as A
 import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Short as BS
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Tagged as Tag
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
@@ -34,21 +37,28 @@ import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
 
-encodeHexBytes :: B.ByteString -> J.Value
-encodeHexBytes = J.String . T.decodeUtf8 . BA.convertToBase BA.Base16
+-- | ByteString which serializes to JSON as hex string.
+newtype HexString = HexString
+	{ unHexString :: BS.ShortByteString
+	} deriving (Semigroup, Monoid)
+instance SchemableField HexString where
+	schemaFieldTypeOf _ = SchemaFieldType_bytes
+instance A.HasAvroSchema HexString where
+	schema = Tag.Tagged $ Tag.unTagged (A.schema :: Tag.Tagged B.ByteString A.Type)
+instance A.ToAvro HexString where
+	toAvro = A.toAvro . BS.fromShort . unHexString
+instance ToPostgresText HexString where
+	toPostgresText inline = toPostgresText inline . BS.fromShort . unHexString
+instance J.FromJSON HexString where
+	parseJSON = either fail (return . HexString . BS.toShort) . BA.convertFromBase BA.Base16 . T.encodeUtf8 <=< J.parseJSON
+instance J.ToJSON HexString where
+	toJSON = J.toJSON . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
+	toEncoding = J.toEncoding . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
 
-decodeHexBytes :: T.Text -> J.Parser B.ByteString
-decodeHexBytes = \case
-	(BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s) -> return s
-	s -> fail $ "decodeHexBytes error for: " ++ show s
-
-encode0xHexBytes :: B.ByteString -> J.Value
-encode0xHexBytes = J.String . T.decodeUtf8 . ("0x" <>) . BA.convertToBase BA.Base16
-
-decode0xHexBytes :: T.Text -> J.Parser B.ByteString
+decode0xHexBytes :: T.Text -> J.Parser HexString
 decode0xHexBytes = \case
-	(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) -> return s
-	"" -> return B.empty
+	(T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) -> return $ HexString $ BS.toShort s
+	"" -> return mempty
 	s -> fail $ "decode0xHexBytes error for: " ++ show s
 
 encode0xHexNumber :: (Integral a, Show a) => a -> J.Value
