@@ -24,7 +24,6 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -61,8 +60,6 @@ instance J.FromJSON NemBlockWrapper where
 		<*> (fields J..: "height")
 		<*> (fields J..: "signer")
 		<*> (V.map unwrapNemTransaction <$> fields J..: "transactions")
-
-instance IsUnifiedBlock NemBlock
 
 data NemTransaction = NemTransaction
 	{ nt_timeStamp :: {-# UNPACK #-} !Int64

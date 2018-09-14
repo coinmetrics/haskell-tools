@@ -30,7 +30,6 @@ import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Flatten
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -87,104 +86,6 @@ instance J.FromJSON EthereumBlockWrapper where
 		<*> (decode0xHexNumber    =<< fields J..: "timestamp")
 		<*> (V.map unwrapEthereumTransaction <$> fields J..: "transactions")
 		<*> (V.map unwrapEthereumUncleBlock <$> fields J..: "uncles")
-
-instance IsUnifiedBlock EthereumBlock where
-	unifyBlock EthereumBlock
-		{ eb_number = blNumber
-		, eb_hash = T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString -> blHash
-		, eb_size = blSize
-		, eb_timestamp = posixSecondsToUTCTime . fromIntegral -> blTime
-		, eb_transactions = blTransactions
-		} = UnifiedBlock
-		{ ub_time = Just blTime
-		, ub_height = blNumber
-		, ub_hash = blHash
-		, ub_size = Just blSize
-		, ub_transactions = flip V.map blTransactions $ \EthereumTransaction
-			{ et_hash = T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString -> txHash
-			, et_gasPrice = txGasPrice
-			, et_gasUsed = txGasUsed
-			, et_actions = txActions
-			} -> UnifiedTransaction
-			{ ut_time = Just blTime
-			, ut_hash = txHash
-			, ut_fee = Just UnifiedValue
-				{ uv_amount = fromIntegral txGasUsed * fromIntegral txGasPrice * 1e-18
-				, uv_asset = Nothing
-				}
-			, ut_actions = case V.toList txActions of
-				(EthereumAction
-					{ ea_from = ac1From
-					, ea_to = ac1To
-					, ea_value = ac1Value
-					} : _) -> V.singleton $ UnifiedAction
-					{ ua_time = Just blTime
-					, ua_from = toAccount <$> ac1From
-					, ua_to = toAccount <$> ac1To
-					, ua_value = toValue <$> ac1Value
-					, ua_effects = V.concat $ flip map (V.toList txActions) $ \EthereumAction
-						{ ea_type = acType
-						, ea_accounted = acAccounted
-						, ea_from = toAccount . fromJust -> acFrom
-						, ea_to = toAccount . fromJust -> acTo
-						, ea_value = toValue . fromJust -> acValue
-						} -> if not acAccounted then [] else case acType of
-						0 ->
-							[ UnifiedEffect_balance
-								{ ue_account = acFrom
-								, ue_value = -acValue
-								}
-							, UnifiedEffect_balance
-								{ ue_account = acTo
-								, ue_value = acValue
-								}
-							, UnifiedEffect_callContract
-								{ ue_contract = acTo
-								}
-							]
-						1 ->
-							[ UnifiedEffect_balance
-								{ ue_account = acFrom
-								, ue_value = -acValue
-								}
-							, UnifiedEffect_createContract
-								{ ue_contract = acTo
-								}
-							, UnifiedEffect_balance
-								{ ue_account = acTo
-								, ue_value = acValue
-								}
-							]
-						2 ->
-							[ UnifiedEffect_balance
-								{ ue_account = acTo
-								, ue_value = acValue
-								}
-							]
-						3 ->
-							[ UnifiedEffect_balance
-								{ ue_account = acFrom
-								, ue_value = -acValue
-								}
-							, UnifiedEffect_balance
-								{ ue_account = acTo
-								, ue_value = acValue
-								}
-							, UnifiedEffect_destroyContract
-								{ ue_contract = acFrom
-								}
-							]
-						_ -> []
-					}
-				[] -> V.empty
-			}
-		}
-		where
-			toAccount = UnifiedAccount . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
-			toValue value = UnifiedValue
-				{ uv_amount = fromIntegral value * 1e-18
-				, uv_asset = Nothing
-				}
 
 data EthereumUncleBlock = EthereumUncleBlock
 	{ eub_number :: {-# UNPACK #-} !Int64

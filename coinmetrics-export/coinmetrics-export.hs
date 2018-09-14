@@ -39,7 +39,6 @@ import CoinMetrics.Export.Storage.Elastic
 import CoinMetrics.Export.Storage.Postgres
 import CoinMetrics.Export.Storage.PostgresFile
 import CoinMetrics.Iota
-import CoinMetrics.Unified
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
@@ -681,7 +680,7 @@ initContinuingOutputStorages outputStorages@OutputStorages
 		, beginBlock
 		)
 
-writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => OutputStorages -> ([a] -> [SomeBlocks]) -> BlockHeight -> [a] -> IO ()
+writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => OutputStorages -> ([a] -> [SomeBlocks]) -> BlockHeight -> [a] -> IO ()
 writeToOutputStorages OutputStorages
 	{ oss_storages = storages
 	, oss_packSize = packSize

@@ -20,7 +20,6 @@ import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Flatten
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -55,8 +54,6 @@ instance J.FromJSON BitcoinBlockWrapper where
 		<*> (fields J..: "time")
 		<*> (fields J..: "nonce")
 		<*> (fields J..: "difficulty")
-
-instance IsUnifiedBlock BitcoinBlock
 
 data BitcoinTransaction = BitcoinTransaction
 	{ bt_hash :: {-# UNPACK #-} !HexString

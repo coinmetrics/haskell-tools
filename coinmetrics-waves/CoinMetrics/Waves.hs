@@ -21,7 +21,6 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -53,8 +52,6 @@ instance J.FromJSON WavesBlockWrapper where
 		<*> (fields J..: "generator")
 		<*> (fields J..: "blocksize")
 		<*> (V.map unwrapWavesTransaction <$> fields J..: "transactions")
-
-instance IsUnifiedBlock WavesBlock
 
 data WavesTransaction = WavesTransaction
 	{ wt_type :: {-# UNPACK #-} !Int64

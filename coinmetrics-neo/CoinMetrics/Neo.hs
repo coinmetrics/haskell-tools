@@ -20,7 +20,6 @@ import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Flatten
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -45,8 +44,6 @@ instance J.FromJSON NeoBlockWrapper where
 		<*> (fields J..: "time")
 		<*> (fields J..: "index")
 		<*> (V.map unwrapNeoTransaction <$> fields J..: "tx")
-
-instance IsUnifiedBlock NeoBlock
 
 data NeoTransaction = NeoTransaction
 	{ et_txid :: {-# UNPACK #-} !HexString

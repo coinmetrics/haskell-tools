@@ -27,7 +27,6 @@ import Text.ParserCombinators.ReadP
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
 -- import CoinMetrics.Schema.Flatten
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -72,8 +71,6 @@ instance J.FromJSON RippleLedgerWrapper where
 		<*> (decodeAmount =<< fields J..: "total_coins")
 		<*> (fields J..: "close_time")
 		<*> (V.map (unwrapRippleTransaction <$>) <$> fields J..: "transactions")
-
-instance IsUnifiedBlock RippleLedger
 
 data RippleTransaction = RippleTransaction
 	{ rt_hash :: {-# UNPACK #-} !HexString

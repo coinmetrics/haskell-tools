@@ -17,7 +17,6 @@ library
     CoinMetrics.JsonRpc
     CoinMetrics.Schema.Flatten
     CoinMetrics.Schema.Util
-    CoinMetrics.Unified
     CoinMetrics.Util
   build-depends:
     aeson

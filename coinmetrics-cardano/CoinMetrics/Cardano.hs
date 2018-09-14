@@ -25,7 +25,6 @@ import qualified Network.HTTP.Client as H
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Flatten
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -76,8 +75,6 @@ instance J.FromJSON CardanoBlockWrapper where
 		<*> (fields J..: "cbeBlockLead")
 		<*> (decodeValue =<< fields J..: "cbeFees")
 		<*> (V.map unwrapCardanoTransaction <$> fields J..: "transactions")
-
-instance IsUnifiedBlock CardanoBlock
 
 data CardanoTransaction = CardanoTransaction
 	{ ct_id :: {-# UNPACK #-} !HexString

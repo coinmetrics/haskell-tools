@@ -23,7 +23,6 @@ import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 
 data IotaTransaction = IotaTransaction
@@ -44,8 +43,6 @@ data IotaTransaction = IotaTransaction
 	, it_attachmentTimestampUpperBound :: !Int64
 	, it_nonce :: !T.Text
 	} deriving Generic
-
-instance IsUnifiedBlock IotaTransaction
 
 genSchemaInstances [''IotaTransaction]
 

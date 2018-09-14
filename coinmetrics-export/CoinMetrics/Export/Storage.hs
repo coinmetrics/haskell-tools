@@ -7,12 +7,12 @@ module CoinMetrics.Export.Storage
 	, ExportStorageParams(..)
 	) where
 
+import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.Text as T
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
-import CoinMetrics.Unified
 import Hanalytics.Schema
 import Hanalytics.Schema.Postgres
 
@@ -23,7 +23,7 @@ class ExportStorage s where
 	getExportStorageMaxBlock :: s -> ExportStorageParams -> Maybe (IO (Maybe BlockHeight))
 	getExportStorageMaxBlock _ _ = Nothing
 
-	writeExportStorage :: (Schemable a, A.ToAvro a, ToPostgresText a, IsUnifiedBlock a) => s -> ExportStorageParams -> [[a]] -> IO ()
+	writeExportStorage :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => s -> ExportStorageParams -> [[a]] -> IO ()
 	writeExportStorage s params = writeExportStorageSomeBlocks s params . map (\pack -> [SomeBlocks pack])
 
 	writeExportStorageSomeBlocks :: s -> ExportStorageParams -> [[SomeBlocks]] -> IO ()

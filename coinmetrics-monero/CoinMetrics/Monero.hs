@@ -25,7 +25,6 @@ import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Flatten
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -62,8 +61,6 @@ instance J.FromJSON MoneroBlockWrapper where
 		<*> (fields J..: "size")
 		<*> (unwrapMoneroTransaction <$> fields J..: "miner_tx")
 		<*> (V.map unwrapMoneroTransaction <$> fields J..: "transactions")
-
-instance IsUnifiedBlock MoneroBlock
 
 data MoneroTransaction = MoneroTransaction
 	{ mt_hash :: !(Maybe HexString)

@@ -20,7 +20,6 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -50,8 +49,6 @@ instance J.FromJSON EosBlockWrapper where
 		<*> (fields J..: "producer")
 		<*> (fields J..: "ref_block_prefix")
 		<*> (V.map unwrapEosTransaction <$> fields J..: "transactions")
-
-instance IsUnifiedBlock EosBlock
 
 data EosTransaction = EosTransaction
 	{ et_id :: {-# UNPACK #-} !HexString

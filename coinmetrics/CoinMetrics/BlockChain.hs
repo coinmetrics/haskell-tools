@@ -11,6 +11,7 @@ module CoinMetrics.BlockChain
 	, SomeBlocks(..)
 	) where
 
+import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.ByteString as B
 import Data.Int
@@ -19,11 +20,10 @@ import Data.Proxy
 import qualified Data.Text as T
 import qualified Network.HTTP.Client as H
 
-import CoinMetrics.Unified
 import Hanalytics.Schema
 import Hanalytics.Schema.Postgres
 
-class (Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a), IsUnifiedBlock (Block a)) => BlockChain a where
+class (Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a), J.ToJSON (Block a)) => BlockChain a where
 	type Block a :: *
 	getBlockChainInfo :: Proxy a -> BlockChainInfo a
 	getCurrentBlockHeight :: a -> IO Int64
@@ -67,4 +67,4 @@ data SomeBlockChainInfo where
 
 -- | Helper data type to contain stripe of arbitrary blocks.
 data SomeBlocks where
-	SomeBlocks :: (Schemable b, A.ToAvro b, ToPostgresText b, IsUnifiedBlock b) => [b] -> SomeBlocks
+	SomeBlocks :: (Schemable b, A.ToAvro b, ToPostgresText b, J.ToJSON b) => [b] -> SomeBlocks

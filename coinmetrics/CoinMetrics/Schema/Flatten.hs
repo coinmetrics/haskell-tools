@@ -13,7 +13,6 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 
 class Monoid (Flattened a) => Flattenable a where
 	type Flattened a :: *
@@ -129,9 +128,6 @@ genFlattenedTypes rootKeyName rootKeyExp types@(map snd -> typesNames) = do
 						)
 					]
 					[derivClause Nothing [ [t| Generic |] ]]
-				, instanceD (pure []) [t| IsUnifiedBlock $(conT flattenedTypeName) |]
-					[ funD 'unifyBlock [clause [] (normalB [| const $ error "unified flattened schema is not implemented" |] ) []]
-					]
 				]
 				<> (if isRoot
 					then

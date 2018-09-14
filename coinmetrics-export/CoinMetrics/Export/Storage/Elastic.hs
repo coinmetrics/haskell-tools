@@ -12,11 +12,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.Encoding as T
 import qualified Network.HTTP.Client as H
 
-import CoinMetrics.BlockChain
 import CoinMetrics.Export.Storage
-import CoinMetrics.Unified
-
--- Elastic storage supports only unified export for now.
 
 newtype ElasticExportStorage = ElasticExportStorage ExportStorageOptions
 
@@ -26,6 +22,7 @@ instance ExportStorage ElasticExportStorage where
 	getExportStorageMaxBlock (ElasticExportStorage ExportStorageOptions
 		{ eso_httpManager = httpManager
 		, eso_tables = head -> table
+		, eso_primaryField = primaryField
 		}) ExportStorageParams
 		{ esp_destination = destination
 		} = Just $ do
@@ -38,17 +35,17 @@ instance ExportStorage ElasticExportStorage where
 				[ ("size", J.Number 0)
 				, ("track_total_hits", J.Bool False)
 				, ("aggs", J.Object
-					[ ("max_height", J.Object
+					[ ("max_key", J.Object
 						[ ("max", J.Object
-							[ ("field", J.String "height")
+							[ ("field", J.String primaryField)
 							])
 						])
 					])
 				]
 			} httpManager
-		either fail return . J.parseEither ((J..:? "value") <=< (J..: "max_height") <=< (J..: "aggregations")) =<< either fail return (J.eitherDecode response)
+		either fail return . J.parseEither ((J..:? "value") <=< (J..: "max_key") <=< (J..: "aggregations")) =<< either fail return (J.eitherDecode response)
 
-	writeExportStorageSomeBlocks (ElasticExportStorage options@ExportStorageOptions
+	writeExportStorage (ElasticExportStorage options@ExportStorageOptions
 		{ eso_httpManager = httpManager
 		}) ExportStorageParams
 		{ esp_destination = destination
@@ -69,23 +66,23 @@ newtype ElasticFileExportStorage = ElasticFileExportStorage ExportStorageOptions
 instance ExportStorage ElasticFileExportStorage where
 	initExportStorage = return . ElasticFileExportStorage
 
-	writeExportStorageSomeBlocks (ElasticFileExportStorage options) ExportStorageParams
+	writeExportStorage (ElasticFileExportStorage options) ExportStorageParams
 		{ esp_destination = destination
 		} = BL.writeFile destination . mconcat . map (elasticExportStoragePack options)
 
-elasticExportStoragePack :: ExportStorageOptions -> [SomeBlocks] -> BL.ByteString
+elasticExportStoragePack :: J.ToJSON a => ExportStorageOptions -> [a] -> BL.ByteString
 elasticExportStoragePack ExportStorageOptions
-	{ eso_tables = tables
+	{ eso_tables = head -> table
+	, eso_primaryField = primaryField
 	, eso_upsert = upsert
-	} = mconcat . zipWith elasticStrip tables
+	} = mconcat . map elasticLine
 	where
-		elasticStrip table (SomeBlocks blocks) = mconcat $ map (elasticLine table) blocks
-		elasticLine table block = let
-			unifiedBlock@(ub_height -> height) = unifyBlock block
+		elasticLine block = let
+			J.Object (J.parseEither (J..: primaryField) -> Right key) = J.toJSON block
 			in J.encode (J.Object
 				[ (if upsert then "index" else "create", J.Object
 					[ ("_index", J.toJSON table)
 					, ("_type", "block")
-					, ("_id", J.toJSON $ show height)
+					, ("_id", key)
 					])
-				]) <> "\n" <> J.encode unifiedBlock <> "\n"
+				]) <> "\n" <> J.encode block <> "\n"

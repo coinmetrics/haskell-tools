@@ -33,7 +33,6 @@ import System.IO.Unsafe(unsafeInterleaveIO)
 
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
-import CoinMetrics.Unified
 import CoinMetrics.Util
 import Hanalytics.Schema
 
@@ -58,8 +57,6 @@ data StellarLedger = StellarLedger
 	, sl_maxTxSetSize :: {-# UNPACK #-} !Int64
 	, sl_transactions :: !(V.Vector StellarTransaction)
 	} deriving Generic
-
-instance IsUnifiedBlock StellarLedger
 
 data StellarTransaction = StellarTransaction
 	{ st_sourceAccount :: {-# UNPACK #-} !HexString
