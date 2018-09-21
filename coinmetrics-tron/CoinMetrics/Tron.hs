@@ -46,16 +46,16 @@ instance J.FromJSON TronBlockWrapper where
 		headerData <- (J..: "raw_data") =<< fields J..: "block_header"
 		fmap TronBlockWrapper $ TronBlock
 			<$> (fields J..: "blockID")
-			<*> (headerData J..: "timestamp")
-			<*> (headerData J..: "number")
+			<*> (fromMaybe 0 <$> headerData J..:? "timestamp")
+			<*> (fromMaybe 0 <$> headerData J..:? "number")
 			<*> (V.map unwrapTronTransaction . fromMaybe mempty <$> fields J..:? "transactions")
 
 data TronTransaction = TronTransaction
 	{ tt_hash :: {-# UNPACK #-} !HexString
-	, tt_ref_block_bytes :: {-# UNPACK #-} !HexString
+	, tt_ref_block_bytes :: !(Maybe HexString)
 	, tt_ref_block_num :: !(Maybe Int64)
-	, tt_ref_block_hash :: {-# UNPACK #-} !HexString
-	, tt_expiration :: {-# UNPACK #-} !Int64
+	, tt_ref_block_hash :: !(Maybe HexString)
+	, tt_expiration :: !(Maybe Int64)
 	, tt_timestamp :: !(Maybe Int64)
 	, tt_contracts :: !(V.Vector TronContract)
 	} deriving Generic
@@ -69,10 +69,10 @@ instance J.FromJSON TronTransactionWrapper where
 		rawData <- fields J..: "raw_data"
 		fmap TronTransactionWrapper $ TronTransaction
 			<$> (fields J..: "txID")
-			<*> (rawData J..: "ref_block_bytes")
+			<*> (rawData J..:? "ref_block_bytes")
 			<*> (rawData J..:? "ref_block_num")
-			<*> (rawData J..: "ref_block_hash")
-			<*> (rawData J..: "expiration")
+			<*> (rawData J..:? "ref_block_hash")
+			<*> (rawData J..:? "expiration")
 			<*> (rawData J..:? "timestamp")
 			<*> (V.map unwrapTronContract <$> rawData J..: "contract")
 
@@ -179,7 +179,6 @@ instance BlockChain Tron where
 		{ tron_httpManager = httpManager
 		, tron_httpRequest = httpRequest
 		} blockHeight = do
-		print blockHeight
 		response <- tryWithRepeat $ H.httpLbs httpRequest
 			{ H.path = "/walletsolidity/getblockbynum"
 			, H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object
