@@ -56,6 +56,11 @@ flag stellar
   default:             True
   manual:              True
 
+flag tron
+  description:         Support Tron
+  default:             True
+  manual:              True
+
 flag waves
   description:         Support Waves
   default:             True
@@ -105,6 +110,10 @@ library
   if flag(stellar)
     build-depends:       coinmetrics-stellar
     cpp-options:         -DCM_SUPPORT_STELLAR
+
+  if flag(tron)
+    build-depends:       coinmetrics-tron
+    cpp-options:         -DCM_SUPPORT_TRON
 
   if flag(waves)
     build-depends:       coinmetrics-waves

@@ -14,6 +14,7 @@ packages:
 - coinmetrics-neo
 - coinmetrics-ripple
 - coinmetrics-stellar
+- coinmetrics-tron
 - coinmetrics-waves
 
 extra-deps:
