@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies #-}
 
 module CoinMetrics.Neo
 	( Neo(..)
@@ -9,7 +9,6 @@ module CoinMetrics.Neo
 	) where
 
 import qualified Data.Aeson as J
-import GHC.Generics(Generic)
 import Data.Int
 import Data.Proxy
 import Data.Scientific
@@ -31,7 +30,7 @@ data NeoBlock = NeoBlock
 	, nb_time :: {-# UNPACK #-} !Int64
 	, nb_index :: {-# UNPACK #-} !Int64
 	, nb_tx :: !(V.Vector NeoTransaction)
-	} deriving Generic
+	}
 
 newtype NeoBlockWrapper = NeoBlockWrapper
 	{ unwrapNeoBlock :: NeoBlock
@@ -53,7 +52,7 @@ data NeoTransaction = NeoTransaction
 	, et_vout :: !(V.Vector NeoTransactionOutput)
 	, et_sys_fee :: !Scientific
 	, et_net_fee :: !Scientific
-	} deriving Generic
+	}
 
 newtype NeoTransactionWrapper = NeoTransactionWrapper
 	{ unwrapNeoTransaction :: NeoTransaction
@@ -72,7 +71,7 @@ instance J.FromJSON NeoTransactionWrapper where
 data NeoTransactionInput = NeoTransactionInput
 	{ nti_txid :: {-# UNPACK #-} !HexString
 	, nti_vout :: {-# UNPACK #-} !Int64
-	} deriving Generic
+	}
 
 newtype NeoTransactionInputWrapper = NeoTransactionInputWrapper
 	{ unwrapNeoTransactionInput :: NeoTransactionInput
@@ -87,7 +86,7 @@ data NeoTransactionOutput = NeoTransactionOutput
 	{ nto_asset :: {-# UNPACK #-} !HexString
 	, nto_value :: !Scientific
 	, nto_address :: !T.Text
-	} deriving Generic
+	}
 
 newtype NeoTransactionOutputWrapper = NeoTransactionOutputWrapper
 	{ unwrapNeoTransactionOutput :: NeoTransactionOutput

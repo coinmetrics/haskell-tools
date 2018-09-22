@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ripple
 	( Ripple(..)
@@ -20,7 +20,6 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Time.Clock.POSIX as Time
 import qualified Data.Time.ISO8601 as Time
 import qualified Data.Vector as V
-import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 import Text.ParserCombinators.ReadP
 
@@ -58,7 +57,7 @@ data RippleLedger = RippleLedger
 	, rl_totalCoins :: {-# UNPACK #-} !Scientific
 	, rl_closeTime :: {-# UNPACK #-} !Int64
 	, rl_transactions :: !(V.Vector (Maybe RippleTransaction))
-	} deriving Generic
+	}
 
 newtype RippleLedgerWrapper = RippleLedgerWrapper
 	{ unwrapRippleLedger :: RippleLedger
@@ -83,7 +82,7 @@ data RippleTransaction = RippleTransaction
 	, rt_issuer :: !(Maybe T.Text)
 	, rt_destination :: !(Maybe T.Text)
 	, rt_result :: !T.Text
-	} deriving Generic
+	}
 
 newtype RippleTransactionWrapper = RippleTransactionWrapper
 	{ unwrapRippleTransaction :: RippleTransaction

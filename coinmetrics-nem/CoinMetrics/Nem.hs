@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies #-}
 
 module CoinMetrics.Nem
 	( Nem(..)
@@ -19,7 +19,6 @@ import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
-import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
@@ -48,7 +47,7 @@ data NemBlock = NemBlock
 	, nb_height :: {-# UNPACK #-} !Int64
 	, nb_signer :: {-# UNPACK #-} !HexString
 	, nb_transactions :: !(V.Vector NemTransaction)
-	} deriving Generic
+	}
 
 newtype NemBlockWrapper = NemBlockWrapper
 	{ unwrapNemBlock :: NemBlock
@@ -82,7 +81,7 @@ data NemTransaction = NemTransaction
 	, nt_amount :: !(Maybe Int64)
 	, nt_otherTrans :: !(Maybe NemNestedTransaction)
 	, nt_signatures :: !(V.Vector NemNestedTransaction)
-	} deriving Generic
+	}
 
 newtype NemTransactionWrapper = NemTransactionWrapper
 	{ unwrapNemTransaction :: NemTransaction
@@ -129,7 +128,7 @@ data NemNestedTransaction = NemNestedTransaction
 	, nnt_newPart :: !(Maybe T.Text)
 	, nnt_parent :: !(Maybe T.Text)
 	, nnt_amount :: !(Maybe Int64)
-	} deriving Generic
+	}
 
 genSchemaInstances [''NemBlock, ''NemTransaction, ''NemNestedTransaction]
 

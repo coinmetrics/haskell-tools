@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ethereum
 	( Ethereum(..)
@@ -12,16 +12,11 @@ module CoinMetrics.Ethereum
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.ByteArray.Encoding as BA
-import qualified Data.ByteString.Short as BS
 import qualified Data.HashMap.Lazy as HML
-import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import Data.Vector.Instances()
 import qualified Data.Vector.Mutable as VM
@@ -59,7 +54,7 @@ data EthereumBlock = EthereumBlock
 	, eb_timestamp :: {-# UNPACK #-} !Int64
 	, eb_transactions :: !(V.Vector EthereumTransaction)
 	, eb_uncles :: !(V.Vector EthereumUncleBlock)
-	} deriving Generic
+	}
 
 newtype EthereumBlockWrapper = EthereumBlockWrapper
 	{ unwrapEthereumBlock :: EthereumBlock
@@ -104,7 +99,7 @@ data EthereumUncleBlock = EthereumUncleBlock
 	, eub_gasLimit :: {-# UNPACK #-} !Int64
 	, eub_gasUsed :: {-# UNPACK #-} !Int64
 	, eub_timestamp :: {-# UNPACK #-} !Int64
-	} deriving Generic
+	}
 
 newtype EthereumUncleBlockWrapper = EthereumUncleBlockWrapper
 	{ unwrapEthereumUncleBlock :: EthereumUncleBlock
@@ -144,7 +139,7 @@ data EthereumTransaction = EthereumTransaction
 	, et_logs :: !(V.Vector EthereumLog)
 	, et_logsBloom :: !(Maybe HexString)
 	, et_actions :: !(V.Vector EthereumAction)
-	} deriving Generic
+	}
 
 newtype EthereumTransactionWrapper = EthereumTransactionWrapper
 	{ unwrapEthereumTransaction :: EthereumTransaction
@@ -171,7 +166,7 @@ data EthereumLog = EthereumLog
 	, el_address :: {-# UNPACK #-} !HexString
 	, el_data :: {-# UNPACK #-} !HexString
 	, el_topics :: !(V.Vector HexString)
-	} deriving Generic
+	}
 
 newtype EthereumLogWrapper = EthereumLogWrapper
 	{ unwrapEthereumLog :: EthereumLog
@@ -205,7 +200,7 @@ data EthereumAction = EthereumAction
 	, ea_gas :: !(Maybe Int64)
 	-- | "gas_used" for "call" and "create"
 	, ea_gasUsed :: !(Maybe Int64)
-	} deriving Generic
+	}
 
 newtype EthereumActionWrapper = EthereumActionWrapper
 	{ unwrapEthereumAction :: EthereumAction

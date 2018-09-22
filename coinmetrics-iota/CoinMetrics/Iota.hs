@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell #-}
 
 module CoinMetrics.Iota
 	( IotaTransaction(..)
@@ -19,7 +19,6 @@ import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
-import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.Schema.Util
@@ -42,7 +41,7 @@ data IotaTransaction = IotaTransaction
 	, it_attachmentTimestampLowerBound :: !Int64
 	, it_attachmentTimestampUpperBound :: !Int64
 	, it_nonce :: !T.Text
-	} deriving Generic
+	}
 
 genSchemaInstances [''IotaTransaction]
 

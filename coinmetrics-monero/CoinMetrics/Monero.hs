@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Monero
 	( Monero(..)
@@ -15,7 +15,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Short as BS
 import qualified Data.HashMap.Lazy as HML
 import Data.Maybe
-import GHC.Generics(Generic)
 import Data.Int
 import Data.Proxy
 import qualified Data.Text.Encoding as T
@@ -42,7 +41,7 @@ data MoneroBlock = MoneroBlock
 	, mb_size :: {-# UNPACK #-} !Int64
 	, mb_miner_tx :: !MoneroTransaction
 	, mb_transactions :: !(V.Vector MoneroTransaction)
-	} deriving Generic
+	}
 
 newtype MoneroBlockWrapper = MoneroBlockWrapper
 	{ unwrapMoneroBlock :: MoneroBlock
@@ -70,7 +69,7 @@ data MoneroTransaction = MoneroTransaction
 	, mt_vout :: !(V.Vector MoneroTransactionOutput)
 	, mt_extra :: {-# UNPACK #-} !HexString
 	, mt_fee :: !(Maybe Int64)
-	} deriving Generic
+	}
 
 newtype MoneroTransactionWrapper = MoneroTransactionWrapper
 	{ unwrapMoneroTransaction :: MoneroTransaction
@@ -97,7 +96,7 @@ data MoneroTransactionInput = MoneroTransactionInput
 	, mti_k_image :: !(Maybe HexString)
 	, mti_key_offsets :: !(V.Vector Int64)
 	, mti_height :: !(Maybe Int64)
-	} deriving Generic
+	}
 
 newtype MoneroTransactionInputWrapper = MoneroTransactionInputWrapper
 	{ unwrapMoneroTransactionInput :: MoneroTransactionInput
@@ -116,7 +115,7 @@ instance J.FromJSON MoneroTransactionInputWrapper where
 data MoneroTransactionOutput = MoneroTransactionOutput
 	{ mto_amount :: !Int64
 	, mto_key :: {-# UNPACK #-} !HexString
-	} deriving Generic
+	}
 
 newtype MoneroTransactionOutputWrapper = MoneroTransactionOutputWrapper
 	{ unwrapMoneroTransactionOutput :: MoneroTransactionOutput

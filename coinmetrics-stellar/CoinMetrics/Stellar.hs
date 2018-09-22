@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, PatternSynonyms, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, PatternSynonyms, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-missing-pattern-synonym-signatures #-}
 
@@ -26,7 +26,6 @@ import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
-import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 import Numeric
 import System.IO.Unsafe(unsafeInterleaveIO)
@@ -56,7 +55,7 @@ data StellarLedger = StellarLedger
 	, sl_baseReserve :: {-# UNPACK #-} !Int64
 	, sl_maxTxSetSize :: {-# UNPACK #-} !Int64
 	, sl_transactions :: !(V.Vector StellarTransaction)
-	} deriving Generic
+	}
 
 data StellarTransaction = StellarTransaction
 	{ st_sourceAccount :: {-# UNPACK #-} !HexString
@@ -65,7 +64,7 @@ data StellarTransaction = StellarTransaction
 	, st_timeBoundsMinTime :: !(Maybe Int64)
 	, st_timeBoundsMaxTime :: !(Maybe Int64)
 	, st_operations :: !(V.Vector StellarOperation)
-	} deriving Generic
+	}
 
 data StellarOperation = StellarOperation
 	{ so_type :: {-# UNPACK #-} !Int64
@@ -99,7 +98,7 @@ data StellarOperation = StellarOperation
 	, so_setFlags :: !(Maybe Int64)
 	, so_startingBalance :: !(Maybe Int64)
 	, so_trustor :: !(Maybe HexString)
-	} deriving Generic
+	}
 
 instance Default StellarOperation
 
@@ -123,7 +122,7 @@ pattern ASSET_TYPE_CREDIT_ALPHANUM12 = 2
 data StellarAsset = StellarAsset
 	{ sa_assetCode :: !(Maybe T.Text)
 	, sa_issuer :: !(Maybe HexString)
-	} deriving Generic
+	}
 
 genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarAsset]
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Tron
 	( Tron(..)
@@ -11,7 +11,6 @@ module CoinMetrics.Tron
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
 import Data.Proxy
@@ -35,7 +34,7 @@ data TronBlock = TronBlock
 	, tb_timestamp :: {-# UNPACK #-} !Int64
 	, tb_number :: {-# UNPACK #-} !Int64
 	, tb_transactions :: !(V.Vector TronTransaction)
-	} deriving Generic
+	}
 
 newtype TronBlockWrapper = TronBlockWrapper
 	{ unwrapTronBlock :: TronBlock
@@ -58,7 +57,7 @@ data TronTransaction = TronTransaction
 	, tt_expiration :: !(Maybe Int64)
 	, tt_timestamp :: !(Maybe Int64)
 	, tt_contracts :: !(V.Vector TronContract)
-	} deriving Generic
+	}
 
 newtype TronTransactionWrapper = TronTransactionWrapper
 	{ unwrapTronTransaction :: TronTransaction
@@ -97,7 +96,7 @@ data TronContract = TronContract
 	, tc_frozen_duration :: !(Maybe Int64)
 	, tc_frozen_balance :: !(Maybe Int64)
 	, tc_votes :: !(V.Vector TronVote)
-	} deriving Generic
+	}
 
 newtype TronContractWrapper = TronContractWrapper
 	{ unwrapTronContract :: TronContract
@@ -120,7 +119,7 @@ instance J.FromJSON TronContractWrapper where
 data TronVote = TronVote
 	{ tv_address :: {-# UNPACK #-} !HexString
 	, tv_count :: {-# UNPACK #-} !Int64
-	} deriving Generic
+	}
 
 newtype TronVoteWrapper = TronVoteWrapper
 	{ unwrapTronVote :: TronVote

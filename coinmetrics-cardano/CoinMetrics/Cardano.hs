@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Cardano
 	( Cardano(..)
@@ -19,7 +19,6 @@ import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
-import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
@@ -57,7 +56,7 @@ data CardanoBlock = CardanoBlock
 	, cb_blockLead :: {-# UNPACK #-} !HexString
 	, cb_fees :: !Integer
 	, cb_transactions :: !(V.Vector CardanoTransaction)
-	} deriving Generic
+	}
 
 newtype CardanoBlockWrapper = CardanoBlockWrapper
 	{ unwrapCardanoBlock :: CardanoBlock
@@ -82,7 +81,7 @@ data CardanoTransaction = CardanoTransaction
 	, ct_fees :: !Integer
 	, ct_inputs :: !(V.Vector CardanoInput)
 	, ct_outputs :: !(V.Vector CardanoOutput)
-	} deriving Generic
+	}
 
 newtype CardanoTransactionWrapper = CardanoTransactionWrapper
 	{ unwrapCardanoTransaction :: CardanoTransaction
@@ -99,7 +98,7 @@ instance J.FromJSON CardanoTransactionWrapper where
 data CardanoInput = CardanoInput
 	{ ci_address :: !T.Text
 	, ci_value :: !Integer
-	} deriving Generic
+	}
 
 newtype CardanoInputWrapper = CardanoInputWrapper
 	{ unwrapCardanoInput :: CardanoInput
@@ -115,7 +114,7 @@ instance J.FromJSON CardanoInputWrapper where
 data CardanoOutput = CardanoOutput
 	{ co_address :: !T.Text
 	, co_value :: !Integer
-	} deriving Generic
+	}
 
 newtype CardanoOutputWrapper = CardanoOutputWrapper
 	{ unwrapCardanoOutput :: CardanoOutput

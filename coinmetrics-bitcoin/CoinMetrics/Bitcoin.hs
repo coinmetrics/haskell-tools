@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies #-}
 
 module CoinMetrics.Bitcoin
 	( Bitcoin(..)
@@ -14,7 +14,6 @@ import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Vector as V
-import GHC.Generics(Generic)
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
@@ -36,7 +35,7 @@ data BitcoinBlock = BitcoinBlock
 	, bb_time :: {-# UNPACK #-} !Int64
 	, bb_nonce :: {-# UNPACK #-} !Int64
 	, bb_difficulty :: {-# UNPACK #-} !Double
-	} deriving Generic
+	}
 
 newtype BitcoinBlockWrapper = BitcoinBlockWrapper
 	{ unwrapBitcoinBlock :: BitcoinBlock
@@ -63,7 +62,7 @@ data BitcoinTransaction = BitcoinTransaction
 	, bt_locktime :: {-# UNPACK #-} !Int64
 	, bt_vin :: !(V.Vector BitcoinVin)
 	, bt_vout :: !(V.Vector BitcoinVout)
-	} deriving Generic
+	}
 
 newtype BitcoinTransactionWrapper = BitcoinTransactionWrapper
 	{ unwrapBitcoinTransaction :: BitcoinTransaction
@@ -83,12 +82,12 @@ data BitcoinVin = BitcoinVin
 	{ bvi_txid :: !(Maybe HexString)
 	, bvi_vout :: !(Maybe Int64)
 	, bvi_coinbase :: !(Maybe HexString)
-	} deriving Generic
+	}
 
 data BitcoinVout = BitcoinVout
 	{ bvo_value :: {-# UNPACK #-} !Double
 	, bvo_addresses :: !(V.Vector T.Text)
-	} deriving Generic
+	}
 
 newtype BitcoinVoutWrapper = BitcoinVoutWrapper
 	{ unwrapBitcoinVout :: BitcoinVout

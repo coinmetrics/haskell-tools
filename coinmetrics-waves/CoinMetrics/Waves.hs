@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Waves
 	( Waves(..)
@@ -10,7 +10,6 @@ module CoinMetrics.Waves
 
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import GHC.Generics(Generic)
 import Data.Int
 import Data.Maybe
 import Data.Proxy
@@ -37,7 +36,7 @@ data WavesBlock = WavesBlock
 	, wb_generator :: !T.Text
 	, wb_blocksize :: {-# UNPACK #-} !Int64
 	, wb_transactions :: !(V.Vector WavesTransaction)
-	} deriving Generic
+	}
 
 newtype WavesBlockWrapper = WavesBlockWrapper
 	{ unwrapWavesBlock :: WavesBlock
@@ -78,7 +77,7 @@ data WavesTransaction = WavesTransaction
 	, wt_leaseId :: !(Maybe T.Text)
 	, wt_alias :: !(Maybe T.Text)
 	, wt_transfers :: !(V.Vector WavesTransfer)
-	} deriving Generic
+	}
 
 newtype WavesTransactionWrapper = WavesTransactionWrapper
 	{ unwrapWavesTransaction :: WavesTransaction
@@ -123,7 +122,7 @@ data WavesOrder = WavesOrder
 	, wo_timestamp :: {-# UNPACK #-} !Int64
 	, wo_expiration :: {-# UNPACK #-} !Int64
 	, wo_matcherFee :: {-# UNPACK #-} !Int64
-	} deriving Generic
+	}
 
 newtype WavesOrderWrapper = WavesOrderWrapper
 	{ unwrapWavesOrder :: WavesOrder
@@ -146,7 +145,7 @@ instance J.FromJSON WavesOrderWrapper where
 data WavesTransfer = WavesTransfer
 	{ wtf_recipient :: !T.Text
 	, wtf_amount :: {-# UNPACK #-} !Int64
-	} deriving Generic
+	}
 
 newtype WavesTransferWrapper = WavesTransferWrapper
 	{ unwrapWavesTransfer :: WavesTransfer

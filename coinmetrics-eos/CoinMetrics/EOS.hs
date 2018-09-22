@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.EOS
 	( Eos(..)
@@ -10,7 +10,6 @@ module CoinMetrics.EOS
 
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import GHC.Generics(Generic)
 import Data.Int
 import Data.Proxy
 import qualified Data.Text as T
@@ -35,7 +34,7 @@ data EosBlock = EosBlock
 	, eb_producer :: !T.Text
 	, eb_ref_block_prefix :: {-# UNPACK #-} !Int64
 	, eb_transactions :: !(V.Vector EosTransaction)
-	} deriving Generic
+	}
 
 newtype EosBlockWrapper = EosBlockWrapper
 	{ unwrapEosBlock :: EosBlock
@@ -63,7 +62,7 @@ data EosTransaction = EosTransaction
 	, et_delay_sec :: {-# UNPACK #-} !Int64
 	, et_context_free_actions :: !(V.Vector EosAction)
 	, et_actions :: !(V.Vector EosAction)
-	} deriving Generic
+	}
 
 newtype EosTransactionWrapper = EosTransactionWrapper
 	{ unwrapEosTransaction :: EosTransaction
@@ -107,7 +106,7 @@ data EosAction = EosAction
 	, ea_name :: !T.Text
 	, ea_authorization :: !(V.Vector EosAuthorization)
 	, ea_data :: {-# UNPACK #-} !HexString
-	} deriving Generic
+	}
 
 newtype EosActionWrapper = EosActionWrapper
 	{ unwrapEosAction :: EosAction
@@ -123,7 +122,7 @@ instance J.FromJSON EosActionWrapper where
 data EosAuthorization = EosAuthorization
 	{ eau_actor :: !T.Text
 	, eau_permission :: !T.Text
-	} deriving Generic
+	}
 
 genSchemaInstances [''EosBlock, ''EosTransaction, ''EosAction, ''EosAuthorization]
 -- genFlattenedTypes "number" [| eb_number |] [("block", ''EthereumBlock), ("transaction", ''EthereumTransaction), ("log", ''EthereumLog), ("action", ''EthereumAction), ("uncle", ''EthereumUncleBlock)]

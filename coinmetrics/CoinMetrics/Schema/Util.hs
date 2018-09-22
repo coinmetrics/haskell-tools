@@ -7,6 +7,7 @@ module CoinMetrics.Schema.Util
 
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
+import GHC.Generics(Generic)
 import Language.Haskell.TH
 
 import Hanalytics.Schema
@@ -24,7 +25,8 @@ genSchemaInstances = fmap mconcat . mapM schemaInstancesDecs
 
 schemaInstancesDecs :: Name -> Q [Dec]
 schemaInstancesDecs typeName = sequence
-	[ instanceD (pure []) [t| Schemable $(conT typeName) |] []
+	[ standaloneDerivD (pure []) [t| Generic $(conT typeName) |]
+	, instanceD (pure []) [t| Schemable $(conT typeName) |] []
 	, instanceD (pure []) [t| SchemableField $(conT typeName) |] []
 	, instanceD (pure []) [t| J.FromJSON $(conT typeName) |]
 		[ funD 'J.parseJSON [clause [] (normalB [| J.genericParseJSON schemaJsonOptions |] ) []]

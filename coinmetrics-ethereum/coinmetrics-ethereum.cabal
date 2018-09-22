@@ -17,12 +17,9 @@ library
   build-depends:
     aeson
     , base
-    , bytestring
     , coinmetrics
     , hanalytics-base
-    , memory
     , text
-    , time
     , unordered-containers
     , vector
     , vector-instances

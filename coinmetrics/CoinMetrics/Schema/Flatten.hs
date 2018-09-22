@@ -8,7 +8,6 @@ module CoinMetrics.Schema.Flatten
 import Data.Int
 import Data.List
 import qualified Data.Vector as V
-import GHC.Generics(Generic)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
@@ -126,8 +125,7 @@ genFlattenedTypes rootKeyName rootKeyExp types@(map snd -> typesNames) = do
 							)
 						<> map (pure . prefixFlatField) fieldsToKeep
 						)
-					]
-					[derivClause Nothing [ [t| Generic |] ]]
+					] []
 				]
 				<> (if isRoot
 					then
