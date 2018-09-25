@@ -10,6 +10,7 @@ packages:
 - coinmetrics-export
 - coinmetrics-iota
 - coinmetrics-monero
+- coinmetrics-monitor
 - coinmetrics-nem
 - coinmetrics-neo
 - coinmetrics-ripple
@@ -19,6 +20,7 @@ packages:
 
 extra-deps:
 - diskhash-0.0.4.0
+- prometheus-client-1.0.0
 - git: https://github.com/quyse/hanalytics.git
   commit: b24c3baecab6fa733ff07d1799ff64013ecbe64c
   subdirs:
