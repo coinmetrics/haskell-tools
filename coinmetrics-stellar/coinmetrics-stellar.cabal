@@ -25,6 +25,7 @@ library
     , http-client
     , stm
     , text
+    , time
     , vector
     , zlib
   ghc-options:         -Wall -Wno-tabs

@@ -17,6 +17,7 @@ import Data.Int
 import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import Data.Vector.Instances()
 import qualified Data.Vector.Mutable as VM
@@ -55,6 +56,10 @@ data EthereumBlock = EthereumBlock
 	, eb_transactions :: !(V.Vector EthereumTransaction)
 	, eb_uncles :: !(V.Vector EthereumUncleBlock)
 	}
+
+instance IsBlock EthereumBlock where
+	getBlockHeight = eb_number
+	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . eb_timestamp
 
 newtype EthereumBlockWrapper = EthereumBlockWrapper
 	{ unwrapEthereumBlock :: EthereumBlock

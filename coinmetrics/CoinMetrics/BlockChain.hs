@@ -2,10 +2,12 @@
 
 module CoinMetrics.BlockChain
 	( BlockChain(..)
+	, IsBlock(..)
 	, BlockChainParams(..)
 	, BlockChainInfo(..)
 	, BlockHash()
 	, BlockHeight()
+	, BlockTimestamp()
 	, SomeBlockChain(..)
 	, SomeBlockChainInfo(..)
 	, SomeBlocks(..)
@@ -18,17 +20,22 @@ import Data.Int
 import qualified Data.HashMap.Strict as HM
 import Data.Proxy
 import qualified Data.Text as T
+import Data.Time.Clock
 import qualified Network.HTTP.Client as H
 
 import Hanalytics.Schema
 import Hanalytics.Schema.Postgres
 
-class (Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a), J.ToJSON (Block a)) => BlockChain a where
+class (IsBlock (Block a), Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a), J.ToJSON (Block a)) => BlockChain a where
 	type Block a :: *
 	getBlockChainInfo :: Proxy a -> BlockChainInfo a
 	getCurrentBlockHeight :: a -> IO Int64
 	getBlockByHeight :: a -> BlockHeight -> IO (Block a)
 	blockHeightFieldName :: a -> T.Text
+
+class IsBlock a where
+	getBlockHeight :: a -> BlockHeight
+	getBlockTimestamp :: a -> BlockTimestamp
 
 -- | Params for initializing blockchain.
 data BlockChainParams = BlockChainParams
@@ -58,6 +65,7 @@ data BlockChainInfo a = BlockChainInfo
 
 type BlockHash = B.ByteString
 type BlockHeight = Int64
+type BlockTimestamp = UTCTime
 
 data SomeBlockChain where
 	SomeBlockChain :: BlockChain a => a -> SomeBlockChain

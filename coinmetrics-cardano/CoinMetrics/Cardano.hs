@@ -18,6 +18,7 @@ import Data.Proxy
 import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
@@ -57,6 +58,10 @@ data CardanoBlock = CardanoBlock
 	, cb_fees :: !Integer
 	, cb_transactions :: !(V.Vector CardanoTransaction)
 	}
+
+instance IsBlock CardanoBlock where
+	getBlockHeight = cb_height
+	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . cb_timeIssued
 
 newtype CardanoBlockWrapper = CardanoBlockWrapper
 	{ unwrapCardanoBlock :: CardanoBlock

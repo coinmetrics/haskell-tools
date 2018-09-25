@@ -21,6 +21,7 @@ library
     , coinmetrics
     , hanalytics-base
     , text
+    , time
     , unordered-containers
     , vector
   ghc-options:         -Wall -Wno-tabs

@@ -36,6 +36,10 @@ data EosBlock = EosBlock
 	, eb_transactions :: !(V.Vector EosTransaction)
 	}
 
+instance IsBlock EosBlock where
+	getBlockHeight = eb_number
+	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . eb_timestamp
+
 newtype EosBlockWrapper = EosBlockWrapper
 	{ unwrapEosBlock :: EosBlock
 	}

@@ -13,6 +13,7 @@ import Data.Int
 import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 
 import CoinMetrics.BlockChain
@@ -36,6 +37,10 @@ data BitcoinBlock = BitcoinBlock
 	, bb_nonce :: {-# UNPACK #-} !Int64
 	, bb_difficulty :: {-# UNPACK #-} !Double
 	}
+
+instance IsBlock BitcoinBlock where
+	getBlockHeight = bb_height
+	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . bb_time
 
 newtype BitcoinBlockWrapper = BitcoinBlockWrapper
 	{ unwrapBitcoinBlock :: BitcoinBlock

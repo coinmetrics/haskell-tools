@@ -23,6 +23,7 @@ library
     , http-client
     , memory
     , text
+    , time
     , unordered-containers
     , vector
   ghc-options:         -Wall -Wno-tabs

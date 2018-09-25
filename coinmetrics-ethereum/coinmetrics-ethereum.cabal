@@ -20,6 +20,7 @@ library
     , coinmetrics
     , hanalytics-base
     , text
+    , time
     , unordered-containers
     , vector
     , vector-instances

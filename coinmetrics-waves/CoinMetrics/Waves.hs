@@ -15,6 +15,7 @@ import Data.Maybe
 import Data.Proxy
 import Data.String
 import qualified Data.Text as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
@@ -37,6 +38,10 @@ data WavesBlock = WavesBlock
 	, wb_blocksize :: {-# UNPACK #-} !Int64
 	, wb_transactions :: !(V.Vector WavesTransaction)
 	}
+
+instance IsBlock WavesBlock where
+	getBlockHeight = wb_height
+	getBlockTimestamp = posixSecondsToUTCTime . (* 0.001) . fromIntegral . wb_timestamp
 
 newtype WavesBlockWrapper = WavesBlockWrapper
 	{ unwrapWavesBlock :: WavesBlock

@@ -18,6 +18,7 @@ import Data.Maybe
 import Data.Int
 import Data.Proxy
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 
 import CoinMetrics.BlockChain
@@ -42,6 +43,10 @@ data MoneroBlock = MoneroBlock
 	, mb_miner_tx :: !MoneroTransaction
 	, mb_transactions :: !(V.Vector MoneroTransaction)
 	}
+
+instance IsBlock MoneroBlock where
+	getBlockHeight = mb_height
+	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . mb_timestamp
 
 newtype MoneroBlockWrapper = MoneroBlockWrapper
 	{ unwrapMoneroBlock :: MoneroBlock

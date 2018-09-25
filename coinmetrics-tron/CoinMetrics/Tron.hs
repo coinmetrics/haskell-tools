@@ -15,6 +15,7 @@ import Data.Int
 import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
@@ -35,6 +36,10 @@ data TronBlock = TronBlock
 	, tb_number :: {-# UNPACK #-} !Int64
 	, tb_transactions :: !(V.Vector TronTransaction)
 	}
+
+instance IsBlock TronBlock where
+	getBlockHeight = tb_number
+	getBlockTimestamp = posixSecondsToUTCTime . (* 0.001) . fromIntegral . tb_timestamp
 
 newtype TronBlockWrapper = TronBlockWrapper
 	{ unwrapTronBlock :: TronBlock

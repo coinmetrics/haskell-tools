@@ -13,6 +13,7 @@ import Data.Int
 import Data.Proxy
 import Data.Scientific
 import qualified Data.Text as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 
 import CoinMetrics.BlockChain
@@ -31,6 +32,10 @@ data NeoBlock = NeoBlock
 	, nb_index :: {-# UNPACK #-} !Int64
 	, nb_tx :: !(V.Vector NeoTransaction)
 	}
+
+instance IsBlock NeoBlock where
+	getBlockHeight = nb_index
+	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . nb_time
 
 newtype NeoBlockWrapper = NeoBlockWrapper
 	{ unwrapNeoBlock :: NeoBlock

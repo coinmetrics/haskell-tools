@@ -18,6 +18,8 @@ import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock
+import Data.Time.Format
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 
@@ -48,6 +50,13 @@ data NemBlock = NemBlock
 	, nb_signer :: {-# UNPACK #-} !HexString
 	, nb_transactions :: !(V.Vector NemTransaction)
 	}
+
+instance IsBlock NemBlock where
+	getBlockHeight = nb_height
+	getBlockTimestamp = (`addUTCTime` nemBlockGenesisTimestamp) . fromIntegral . nb_timeStamp
+
+nemBlockGenesisTimestamp :: UTCTime
+nemBlockGenesisTimestamp = parseTimeOrError False defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" "2015-03-29T00:06:25Z"
 
 newtype NemBlockWrapper = NemBlockWrapper
 	{ unwrapNemBlock :: NemBlock

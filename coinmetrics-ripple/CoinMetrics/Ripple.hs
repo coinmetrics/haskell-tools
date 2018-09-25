@@ -59,6 +59,10 @@ data RippleLedger = RippleLedger
 	, rl_transactions :: !(V.Vector (Maybe RippleTransaction))
 	}
 
+instance IsBlock RippleLedger where
+	getBlockHeight = rl_index
+	getBlockTimestamp = Time.posixSecondsToUTCTime . fromIntegral . rl_closeTime
+
 newtype RippleLedgerWrapper = RippleLedgerWrapper
 	{ unwrapRippleLedger :: RippleLedger
 	}

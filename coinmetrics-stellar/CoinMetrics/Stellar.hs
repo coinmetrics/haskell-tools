@@ -25,6 +25,7 @@ import Data.Proxy
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 import Numeric
@@ -56,6 +57,10 @@ data StellarLedger = StellarLedger
 	, sl_maxTxSetSize :: {-# UNPACK #-} !Int64
 	, sl_transactions :: !(V.Vector StellarTransaction)
 	}
+
+instance IsBlock StellarLedger where
+	getBlockHeight = sl_sequence
+	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . sl_closeTime
 
 data StellarTransaction = StellarTransaction
 	{ st_sourceAccount :: {-# UNPACK #-} !HexString
