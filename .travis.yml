@@ -71,3 +71,24 @@ deploy:
   on:
     branch: master
   skip_cleanup: true
+- provider: bintray
+  user: $BINTRAY_USER
+  key: $BINTRAY_KEY
+  file: coinmetrics-monitor/bintray.json
+  on:
+    branch: master
+  skip_cleanup: true
+- provider: bintray
+  user: $BINTRAY_USER
+  key: $BINTRAY_KEY
+  file: coinmetrics-monitor/bintray-deb.json
+  on:
+    branch: master
+  skip_cleanup: true
+- provider: bintray
+  user: $BINTRAY_USER
+  key: $BINTRAY_KEY
+  file: coinmetrics-monitor/bintray-rpm.json
+  on:
+    branch: master
+  skip_cleanup: true
