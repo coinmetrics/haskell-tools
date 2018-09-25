@@ -1,0 +1,31 @@
+{ "package":
+	{ "name": "coinmetrics-monitor"
+	, "repo": "haskell-tools-deb"
+	, "subject": "coinmetrics"
+	, "desc": "Utility monitoring blockchain nodes"
+	, "website_url": "https://coinmetrics.io/"
+	, "issue_tracker_url": "https://github.com/coinmetrics-io/haskell-tools/issues"
+	, "vcs_url": "https://github.com/coinmetrics-io/haskell-tools.git"
+	, "licenses": ["MIT"]
+	, "public_download_numbers": true
+	, "public_stats": true
+	, "attributes": []
+	}
+, "version":
+	{ "name": "0.0.0.${TRAVIS_BUILD_NUMBER}"
+	, "desc": "Bleeding edge version built from master branch"
+	, "vcs_tag": "${TRAVIS_TAG}"
+	, "gpgSign": false
+	}
+, "files":
+	[ { "includePattern": "pkg/(.*\\.deb)"
+		, "uploadPattern": "$1"
+		, "matrixParams":
+			{ "deb_distribution": "unstable"
+			, "deb_component": "main"
+			, "deb_architecture": "amd64"
+			}
+		}
+	]
+, "publish": true
+}

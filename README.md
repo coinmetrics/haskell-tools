@@ -2,8 +2,7 @@
 
 # Haskell-based CoinMetrics.io tools
 
-These tools are used by CoinMetrics.io team for exporting data from blockchains into analytical databases,
-allowing to perform SQL queries, for instance, generating aggregated information on Ethereum tokens.
+These tools are used by CoinMetrics.io team for exporting data from blockchains into analytical databases and monitoring full nodes synchronization state.
 
 ## Status
 
@@ -35,7 +34,7 @@ Pull the latest version:
 docker pull quay.io/coinmetrics/haskell-tools
 ```
 
-Run `coinmetrics-export` tool:
+Run e.g. `coinmetrics-export` tool:
 ```bash
 docker run -it --rm --net host quay.io/coinmetrics/haskell-tools coinmetrics-export <arguments>
 ```
@@ -83,6 +82,7 @@ The code is only tested on Linux (but maybe works on other OSes too).
 * `coinmetrics-export` - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
 * `coinmetrics-iota` - library specific to IOTA.
 * `coinmetrics-monero` - library specific to Monero.
+* `coinmetrics-monitor` - utility monitoring blockchain nodes.
 * `coinmetrics-nem` - library specific to NEM.
 * `coinmetrics-neo` - library specific to NEO.
 * `coinmetrics-ripple` - library specific to Ripple.

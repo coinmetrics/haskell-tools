@@ -12,7 +12,7 @@ RUN set -ex; \
 		rm -rf /var/lib/apt/lists/*; \
 	fi
 
-COPY coinmetrics-export /usr/bin/
+COPY coinmetrics-export coinmetrics-monitor /usr/bin/
 
 RUN useradd -m -u 1000 -s /bin/bash coinmetrics
 USER coinmetrics
