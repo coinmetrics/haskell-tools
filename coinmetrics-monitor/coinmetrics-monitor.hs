@@ -149,10 +149,10 @@ run Options
 
 		forever $ do
 			-- get height
-			maybeBlockHeight <- errorHandler <=< try $ getCurrentBlockHeight blockChain
+			maybeBlockHeight <- errorHandler <=< try $ evaluate =<< getCurrentBlockHeight blockChain
 			-- get timestamp
 			maybeBlockTimestamp <- errorHandler <=< try $ case maybeBlockHeight of
-				Just blockHeight -> utcTimeToPOSIXSeconds . getBlockTimestamp <$> getBlockByHeight blockChain blockHeight
+				Just blockHeight -> evaluate . utcTimeToPOSIXSeconds . getBlockTimestamp =<< getBlockByHeight blockChain blockHeight
 				Nothing -> fail "height is not known"
 
 			-- update metrics
