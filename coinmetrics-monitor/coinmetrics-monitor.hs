@@ -50,7 +50,7 @@ main = run =<< O.execParser parser where
 			<$> O.strOption
 				(  O.long "blockchain"
 				<> O.metavar "BLOCKCHAIN"
-				<> O.help "Type of blockchain" -- TODO: have a list of supported blockchain types
+				<> O.help ("Type of blockchain: " <> blockchainTypesStr)
 				)
 			<*> O.strOption
 				(  O.long "name"

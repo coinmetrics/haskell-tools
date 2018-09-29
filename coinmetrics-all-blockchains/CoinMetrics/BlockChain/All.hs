@@ -2,6 +2,8 @@
 
 module CoinMetrics.BlockChain.All
 	( getSomeBlockChainInfo
+	, allBlockChainTypes
+	, blockchainTypesStr
 	) where
 
 import qualified Data.HashMap.Strict as HM
@@ -95,3 +97,10 @@ allBlockChainInfos = HM.fromList $
 -- | Get blockchain info by name.
 getSomeBlockChainInfo :: T.Text -> Maybe SomeBlockChainInfo
 getSomeBlockChainInfo = flip HM.lookup allBlockChainInfos
+
+-- | Get supported blockchain types.
+allBlockChainTypes :: [T.Text]
+allBlockChainTypes = HM.keys allBlockChainInfos
+
+blockchainTypesStr :: String
+blockchainTypesStr = T.unpack $ T.intercalate ", " allBlockChainTypes

@@ -76,7 +76,7 @@ main = run =<< O.execParser parser where
 						<*> O.strOption
 							(  O.long "blockchain"
 							<> O.metavar "BLOCKCHAIN"
-							<> O.help "Type of blockchain" -- TODO: have a list of supported blockchain types
+							<> O.help ("Type of blockchain: " <> blockchainTypesStr)
 							)
 						<*> O.option O.auto
 							(  O.long "begin-block"
@@ -148,7 +148,7 @@ main = run =<< O.execParser parser where
 						<$> O.strOption
 							(  O.long "schema"
 							<> O.metavar "SCHEMA"
-							<> O.help "Type of schema" -- TODO: have a list of supported schemas
+							<> O.help ("Type of schema: " <> blockchainTypesStr)
 							)
 						<*> O.strOption
 							(  O.long "storage"
