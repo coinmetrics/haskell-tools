@@ -26,5 +26,5 @@ library
     , time
     , unordered-containers
     , vector
-  ghc-options:         -Wall -Wno-tabs
+  ghc-options:         -Wall
   default-language:    Haskell2010

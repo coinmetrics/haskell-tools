@@ -1,12 +1,12 @@
 {-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.EOS
-	( Eos(..)
-	, EosBlock(..)
-	, EosTransaction(..)
-	, EosAction(..)
-	, EosAuthorization(..)
-	) where
+  ( Eos(..)
+  , EosBlock(..)
+  , EosTransaction(..)
+  , EosAction(..)
+  , EosAuthorization(..)
+  ) where
 
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
@@ -23,156 +23,156 @@ import CoinMetrics.Util
 import Hanalytics.Schema
 
 data Eos = Eos
-	{ eos_httpManager :: !H.Manager
-	, eos_httpRequest :: !H.Request
-	}
+  { eos_httpManager :: !H.Manager
+  , eos_httpRequest :: !H.Request
+  }
 
 data EosBlock = EosBlock
-	{ eb_id :: {-# UNPACK #-} !HexString
-	, eb_number :: {-# UNPACK #-} !Int64
-	, eb_timestamp :: {-# UNPACK #-} !Int64
-	, eb_producer :: !T.Text
-	, eb_ref_block_prefix :: {-# UNPACK #-} !Int64
-	, eb_transactions :: !(V.Vector EosTransaction)
-	}
+  { eb_id :: {-# UNPACK #-} !HexString
+  , eb_number :: {-# UNPACK #-} !Int64
+  , eb_timestamp :: {-# UNPACK #-} !Int64
+  , eb_producer :: !T.Text
+  , eb_ref_block_prefix :: {-# UNPACK #-} !Int64
+  , eb_transactions :: !(V.Vector EosTransaction)
+  }
 
 instance IsBlock EosBlock where
-	getBlockHeight = eb_number
-	getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . eb_timestamp
+  getBlockHeight = eb_number
+  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . eb_timestamp
 
 newtype EosBlockWrapper = EosBlockWrapper
-	{ unwrapEosBlock :: EosBlock
-	}
+  { unwrapEosBlock :: EosBlock
+  }
 
 instance J.FromJSON EosBlockWrapper where
-	parseJSON = J.withObject "eos block" $ \fields -> fmap EosBlockWrapper $ EosBlock
-		<$> (fields J..: "id")
-		<*> (fields J..: "block_num")
-		<*> (round . utcTimeToPOSIXSeconds . currentLocalTimeToUTC <$> fields J..: "timestamp")
-		<*> (fields J..: "producer")
-		<*> (fields J..: "ref_block_prefix")
-		<*> (V.map unwrapEosTransaction <$> fields J..: "transactions")
+  parseJSON = J.withObject "eos block" $ \fields -> fmap EosBlockWrapper $ EosBlock
+    <$> (fields J..: "id")
+    <*> (fields J..: "block_num")
+    <*> (round . utcTimeToPOSIXSeconds . currentLocalTimeToUTC <$> fields J..: "timestamp")
+    <*> (fields J..: "producer")
+    <*> (fields J..: "ref_block_prefix")
+    <*> (V.map unwrapEosTransaction <$> fields J..: "transactions")
 
 data EosTransaction = EosTransaction
-	{ et_id :: {-# UNPACK #-} !HexString
-	, et_status :: !T.Text
-	, et_cpu_usage_us :: {-# UNPACK #-} !Int64
-	, et_net_usage_words :: {-# UNPACK #-} !Int64
-	, et_expiration :: {-# UNPACK #-} !Int64
-	, et_ref_block_num :: {-# UNPACK #-} !Int64
-	, et_ref_block_prefix :: {-# UNPACK #-} !Int64
-	, et_max_net_usage_words :: {-# UNPACK #-} !Int64
-	, et_max_cpu_usage_ms :: {-# UNPACK #-} !Int64
-	, et_delay_sec :: {-# UNPACK #-} !Int64
-	, et_context_free_actions :: !(V.Vector EosAction)
-	, et_actions :: !(V.Vector EosAction)
-	}
+  { et_id :: {-# UNPACK #-} !HexString
+  , et_status :: !T.Text
+  , et_cpu_usage_us :: {-# UNPACK #-} !Int64
+  , et_net_usage_words :: {-# UNPACK #-} !Int64
+  , et_expiration :: {-# UNPACK #-} !Int64
+  , et_ref_block_num :: {-# UNPACK #-} !Int64
+  , et_ref_block_prefix :: {-# UNPACK #-} !Int64
+  , et_max_net_usage_words :: {-# UNPACK #-} !Int64
+  , et_max_cpu_usage_ms :: {-# UNPACK #-} !Int64
+  , et_delay_sec :: {-# UNPACK #-} !Int64
+  , et_context_free_actions :: !(V.Vector EosAction)
+  , et_actions :: !(V.Vector EosAction)
+  }
 
 newtype EosTransactionWrapper = EosTransactionWrapper
-	{ unwrapEosTransaction :: EosTransaction
-	}
+  { unwrapEosTransaction :: EosTransaction
+  }
 
 instance J.FromJSON EosTransactionWrapper where
-	parseJSON = J.withObject "eos transaction" $ \fields -> do
-		trxVal <- fields J..: "trx"
-		fmap EosTransactionWrapper $ case trxVal of
-			J.Object trx -> do
-				trxTrans <- trx J..: "transaction"
-				EosTransaction
-					<$> (trx J..: "id")
-					<*> (fields J..: "status")
-					<*> (fields J..: "cpu_usage_us")
-					<*> (fields J..: "net_usage_words")
-					<*> (round . utcTimeToPOSIXSeconds . currentLocalTimeToUTC <$> trxTrans J..: "expiration")
-					<*> (trxTrans J..: "ref_block_num")
-					<*> (trxTrans J..: "ref_block_prefix")
-					<*> (trxTrans J..: "max_net_usage_words")
-					<*> (trxTrans J..: "max_cpu_usage_ms")
-					<*> (trxTrans J..: "delay_sec")
-					<*> (trxTrans J..: "context_free_actions")
-					<*> (V.map unwrapEosAction <$> trxTrans J..: "actions")
-			_ -> EosTransaction
-				mempty -- id
-				<$> (fields J..: "status")
-				<*> (fields J..: "cpu_usage_us")
-				<*> (fields J..: "net_usage_words")
-				<*> (return 0)
-				<*> (return 0)
-				<*> (return 0)
-				<*> (return 0)
-				<*> (return 0)
-				<*> (return 0)
-				<*> (return [])
-				<*> (return [])
+  parseJSON = J.withObject "eos transaction" $ \fields -> do
+    trxVal <- fields J..: "trx"
+    fmap EosTransactionWrapper $ case trxVal of
+      J.Object trx -> do
+        trxTrans <- trx J..: "transaction"
+        EosTransaction
+          <$> (trx J..: "id")
+          <*> (fields J..: "status")
+          <*> (fields J..: "cpu_usage_us")
+          <*> (fields J..: "net_usage_words")
+          <*> (round . utcTimeToPOSIXSeconds . currentLocalTimeToUTC <$> trxTrans J..: "expiration")
+          <*> (trxTrans J..: "ref_block_num")
+          <*> (trxTrans J..: "ref_block_prefix")
+          <*> (trxTrans J..: "max_net_usage_words")
+          <*> (trxTrans J..: "max_cpu_usage_ms")
+          <*> (trxTrans J..: "delay_sec")
+          <*> (trxTrans J..: "context_free_actions")
+          <*> (V.map unwrapEosAction <$> trxTrans J..: "actions")
+      _ -> EosTransaction
+        mempty -- id
+        <$> (fields J..: "status")
+        <*> (fields J..: "cpu_usage_us")
+        <*> (fields J..: "net_usage_words")
+        <*> return 0
+        <*> return 0
+        <*> return 0
+        <*> return 0
+        <*> return 0
+        <*> return 0
+        <*> return []
+        <*> return []
 
 data EosAction = EosAction
-	{ ea_account :: !T.Text
-	, ea_name :: !T.Text
-	, ea_authorization :: !(V.Vector EosAuthorization)
-	, ea_data :: {-# UNPACK #-} !HexString
-	}
+  { ea_account :: !T.Text
+  , ea_name :: !T.Text
+  , ea_authorization :: !(V.Vector EosAuthorization)
+  , ea_data :: {-# UNPACK #-} !HexString
+  }
 
 newtype EosActionWrapper = EosActionWrapper
-	{ unwrapEosAction :: EosAction
-	}
+  { unwrapEosAction :: EosAction
+  }
 
 instance J.FromJSON EosActionWrapper where
-	parseJSON = J.withObject "eos action" $ \fields -> fmap EosActionWrapper $ EosAction
-		<$> (fields J..: "account")
-		<*> (fields J..: "name")
-		<*> (fields J..: "authorization")
-		<*> (maybe (fields J..: "data") return =<< fields J..:? "hex_data")
+  parseJSON = J.withObject "eos action" $ \fields -> fmap EosActionWrapper $ EosAction
+    <$> (fields J..: "account")
+    <*> (fields J..: "name")
+    <*> (fields J..: "authorization")
+    <*> (maybe (fields J..: "data") return =<< fields J..:? "hex_data")
 
 data EosAuthorization = EosAuthorization
-	{ eau_actor :: !T.Text
-	, eau_permission :: !T.Text
-	}
+  { eau_actor :: !T.Text
+  , eau_permission :: !T.Text
+  }
 
 genSchemaInstances [''EosBlock, ''EosTransaction, ''EosAction, ''EosAuthorization]
 -- genFlattenedTypes "number" [| eb_number |] [("block", ''EthereumBlock), ("transaction", ''EthereumTransaction), ("log", ''EthereumLog), ("action", ''EthereumAction), ("uncle", ''EthereumUncleBlock)]
 
 instance BlockChain Eos where
-	type Block Eos = EosBlock
+  type Block Eos = EosBlock
 
-	getBlockChainInfo _ = BlockChainInfo
-		{ bci_init = \BlockChainParams
-			{ bcp_httpManager = httpManager
-			, bcp_httpRequest = httpRequest
-			} -> return Eos
-				{ eos_httpManager = httpManager
-				, eos_httpRequest = httpRequest
-				}
-		, bci_defaultApiUrl = "http://127.0.0.1:8888/"
-		, bci_defaultBeginBlock = 1
-		, bci_defaultEndBlock = -1 -- no need in a gap, as it uses irreversible block number
-		, bci_schemas = standardBlockChainSchemas
-			(schemaOf (Proxy :: Proxy EosBlock))
-			[ schemaOf (Proxy :: Proxy EosAuthorization)
-			, schemaOf (Proxy :: Proxy EosAction)
-			, schemaOf (Proxy :: Proxy EosTransaction)
-			]
-			"CREATE TABLE \"eos\" OF \"EosBlock\" (PRIMARY KEY (\"number\"));"
-		}
+  getBlockChainInfo _ = BlockChainInfo
+    { bci_init = \BlockChainParams
+      { bcp_httpManager = httpManager
+      , bcp_httpRequest = httpRequest
+      } -> return Eos
+        { eos_httpManager = httpManager
+        , eos_httpRequest = httpRequest
+        }
+    , bci_defaultApiUrl = "http://127.0.0.1:8888/"
+    , bci_defaultBeginBlock = 1
+    , bci_defaultEndBlock = -1 -- no need in a gap, as it uses irreversible block number
+    , bci_schemas = standardBlockChainSchemas
+      (schemaOf (Proxy :: Proxy EosBlock))
+      [ schemaOf (Proxy :: Proxy EosAuthorization)
+      , schemaOf (Proxy :: Proxy EosAction)
+      , schemaOf (Proxy :: Proxy EosTransaction)
+      ]
+      "CREATE TABLE \"eos\" OF \"EosBlock\" (PRIMARY KEY (\"number\"));"
+    }
 
-	getCurrentBlockHeight Eos
-		{ eos_httpManager = httpManager
-		, eos_httpRequest = httpRequest
-		} = do
-		response <- tryWithRepeat $ H.httpLbs httpRequest
-			{ H.path = "/v1/chain/get_info"
-			} httpManager
-		either fail return $ J.parseEither (J..: "last_irreversible_block_num") =<< J.eitherDecode' (H.responseBody response)
+  getCurrentBlockHeight Eos
+    { eos_httpManager = httpManager
+    , eos_httpRequest = httpRequest
+    } = do
+    response <- tryWithRepeat $ H.httpLbs httpRequest
+      { H.path = "/v1/chain/get_info"
+      } httpManager
+    either fail return $ J.parseEither (J..: "last_irreversible_block_num") =<< J.eitherDecode' (H.responseBody response)
 
-	getBlockByHeight Eos
-		{ eos_httpManager = httpManager
-		, eos_httpRequest = httpRequest
-		} blockHeight = do
-		response <- tryWithRepeat $ H.httpLbs httpRequest
-			{ H.path = "/v1/chain/get_block"
-			, H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object
-				[ ("block_num_or_id", J.Number $ fromIntegral blockHeight)
-				]
-			} httpManager
-		either fail (return . unwrapEosBlock) $ J.eitherDecode' $ H.responseBody response
+  getBlockByHeight Eos
+    { eos_httpManager = httpManager
+    , eos_httpRequest = httpRequest
+    } blockHeight = do
+    response <- tryWithRepeat $ H.httpLbs httpRequest
+      { H.path = "/v1/chain/get_block"
+      , H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object
+        [ ("block_num_or_id", J.Number $ fromIntegral blockHeight)
+        ]
+      } httpManager
+    either fail (return . unwrapEosBlock) $ J.eitherDecode' $ H.responseBody response
 
-	blockHeightFieldName _ = "number"
+  blockHeightFieldName _ = "number"

@@ -1,10 +1,10 @@
-{-# LANGUAGE CPP, LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE CPP, OverloadedStrings #-}
 
 module CoinMetrics.BlockChain.All
-	( getSomeBlockChainInfo
-	, allBlockChainTypes
-	, blockchainTypesStr
-	) where
+  ( getSomeBlockChainInfo
+  , allBlockChainTypes
+  , blockchainTypesStr
+  ) where
 
 import qualified Data.HashMap.Strict as HM
 import Data.Proxy
@@ -47,52 +47,54 @@ import CoinMetrics.Waves
 #endif
 
 allBlockChainInfos :: HM.HashMap T.Text SomeBlockChainInfo
-allBlockChainInfos = HM.fromList $
+allBlockChainInfos = HM.fromList infos
+  where
+    infos =
 #if defined(CM_SUPPORT_BITCOIN)
-	("bitcoin",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Bitcoin)) :
+      ("bitcoin",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Bitcoin)) :
 #endif
 
 #if defined(CM_SUPPORT_CARDANO)
-	("cardano",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Cardano)) :
+      ("cardano",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Cardano)) :
 #endif
 
 #if defined(CM_SUPPORT_EOS)
-	("eos",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Eos)) :
+      ("eos",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Eos)) :
 #endif
 
 #if defined(CM_SUPPORT_ETHEREUM)
-	("ethereum", SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Ethereum)) :
+      ("ethereum", SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Ethereum)) :
 #endif
 
 #if defined(CM_SUPPORT_MONERO)
-	("monero",   SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Monero)) :
+      ("monero",   SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Monero)) :
 #endif
 
 #if defined(CM_SUPPORT_NEM)
-	("nem",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Nem)) :
+      ("nem",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Nem)) :
 #endif
 
 #if defined(CM_SUPPORT_NEO)
-	("neo",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Neo)) :
+      ("neo",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Neo)) :
 #endif
 
 #if defined(CM_SUPPORT_RIPPLE)
-	("ripple",   SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Ripple)) :
+      ("ripple",   SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Ripple)) :
 #endif
 
 #if defined(CM_SUPPORT_STELLAR)
-	("stellar",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Stellar)) :
+      ("stellar",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Stellar)) :
 #endif
 
 #if defined(CM_SUPPORT_TRON)
-	("tron",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Tron)) :
+      ("tron",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Tron)) :
 #endif
 
 #if defined(CM_SUPPORT_WAVES)
-	("waves",    SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Waves)) :
+      ("waves",    SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Waves)) :
 #endif
-	
-	[]
+  
+      []
 
 -- | Get blockchain info by name.
 getSomeBlockChainInfo :: T.Text -> Maybe SomeBlockChainInfo

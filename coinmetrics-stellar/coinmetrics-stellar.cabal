@@ -28,5 +28,5 @@ library
     , time
     , vector
     , zlib
-  ghc-options:         -Wall -Wno-tabs
+  ghc-options:         -Wall
   default-language:    Haskell2010
