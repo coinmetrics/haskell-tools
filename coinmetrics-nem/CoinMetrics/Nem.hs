@@ -38,7 +38,7 @@ nemRequest :: J.FromJSON r => Nem -> T.Text -> Maybe J.Value -> [(B.ByteString, 
 nemRequest Nem
   { nem_httpManager = httpManager
   , nem_httpRequest = httpRequest
-  } path maybeBody params = tryWithRepeat $ either fail return . J.eitherDecode' . H.responseBody =<< H.httpLbs (H.setQueryString params httpRequest
+  } path maybeBody params = either fail return . J.eitherDecode' . H.responseBody =<< H.httpLbs (H.setQueryString params httpRequest
   { H.path = H.path httpRequest <> T.encodeUtf8 path
   , H.method = if isJust maybeBody then "POST" else "GET"
   , H.requestBody = maybe (H.requestBody httpRequest) (H.RequestBodyLBS . J.encode) maybeBody
@@ -165,19 +165,19 @@ instance BlockChain Nem where
       "CREATE TABLE \"nem\" OF \"NemBlock\" (PRIMARY KEY (\"height\"));"
     }
 
-  getCurrentBlockHeight nem = either fail return
+  getCurrentBlockHeight nem = tryWithRepeat $ either fail return
     . J.parseEither (J..: "height")
     =<< nemRequest nem "/chain/height" Nothing []
 
   getBlockByHeight nem blockHeight = do
     block@NemBlock
       { nb_transactions = transactions
-      } <- either fail (return . unwrapNemBlock) . J.parseEither J.parseJSON =<< nemRequest nem "/block/at/public" (Just $ J.Object [("height", J.Number $ fromIntegral blockHeight)]) []
+      } <- tryWithRepeat $ either fail (return . unwrapNemBlock) . J.parseEither J.parseJSON =<< nemRequest nem "/block/at/public" (Just $ J.Object [("height", J.Number $ fromIntegral blockHeight)]) []
     signersAddresses <- V.forM transactions $ \NemTransaction
       { nt_signer = signer
-      } -> do
-      signerInfo <- nemRequest nem "/account/get/from-public-key" Nothing [("publicKey", Just $ BA.convertToBase BA.Base16 $ BS.fromShort $ unHexString signer)]
-      either fail return $ J.parseEither ((J..: "address") <=< (J..: "account")) signerInfo
+      } -> tryWithRepeat $ either fail return
+      . J.parseEither ((J..: "address") <=< (J..: "account"))
+      =<< nemRequest nem "/account/get/from-public-key" Nothing [("publicKey", Just $ BA.convertToBase BA.Base16 $ BS.fromShort $ unHexString signer)]
     return block
       { nb_transactions = V.zipWith (\transaction signerAddress -> transaction
         { nt_signerAddress = signerAddress
