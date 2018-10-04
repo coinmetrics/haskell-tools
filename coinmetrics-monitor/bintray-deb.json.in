@@ -18,7 +18,7 @@
 	, "gpgSign": false
 	}
 , "files":
-	[ { "includePattern": "pkg/(coinmetrics-monitor-.*\\.deb)"
+	[ { "includePattern": "pkg/(coinmetrics-monitor_.*\\.deb)"
 		, "uploadPattern": "$1"
 		, "matrixParams":
 			{ "deb_distribution": "unstable"
