@@ -18,7 +18,7 @@
 	, "gpgSign": false
 	}
 , "files":
-	[ { "includePattern": "pkg/(.*\\.rpm)"
+	[ { "includePattern": "pkg/(coinmetrics-monitor-.*\\.rpm)"
 		, "uploadPattern": "$1"
 		}
 	]

@@ -18,7 +18,7 @@
 	, "gpgSign": false
 	}
 , "files":
-	[ { "includePattern": "pkg/(.*\\.rpm)"
+	[ { "includePattern": "pkg/(coinmetrics-export-.*\\.rpm)"
 		, "uploadPattern": "$1"
 		}
 	]
