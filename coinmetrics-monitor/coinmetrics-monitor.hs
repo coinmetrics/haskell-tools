@@ -31,19 +31,19 @@ main = run =<< O.execParser parser where
     <$> O.strOption
       (  O.long "host"
       <> O.metavar "HOST"
-      <> O.value "127.0.0.1"
+      <> O.value "127.0.0.1" <> O.showDefault
       <> O.help "Host to listen on"
       )
     <*> O.option O.auto
       (  O.long "port"
       <> O.metavar "PORT"
-      <> O.value 8080
+      <> O.value 8080 <> O.showDefault
       <> O.help "Port to listen on"
       )
     <*> O.option O.auto
       (  O.long "interval"
       <> O.metavar "INTERVAL"
-      <> O.value 10
+      <> O.value 10 <> O.showDefault
       <> O.help "Blockchain polling interval"
       )
     <*> O.some (OptionBlockchain
