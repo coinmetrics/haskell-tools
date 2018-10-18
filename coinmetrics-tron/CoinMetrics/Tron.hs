@@ -109,17 +109,20 @@ newtype TronContractWrapper = TronContractWrapper
 
 instance J.FromJSON TronContractWrapper where
   parseJSON = J.withObject "tron contract" $ \fields -> do
-    value <- (J..: "value") =<< fields J..: "parameter"
+    maybeValue <- (J..:? "value") =<< fields J..: "parameter"
+    let
+      getValue :: J.FromJSON a => T.Text -> J.Parser (Maybe a)
+      getValue = maybe (const (return Nothing)) (J..:?) maybeValue
     fmap TronContractWrapper $ TronContract
       <$> (fields J..: "type")
-      <*> (value J..:? "amount")
-      <*> (value J..:? "account_name")
-      <*> (value J..:? "asset_name")
-      <*> (value J..:? "owner_address")
-      <*> (value J..:? "to_address")
-      <*> (value J..:? "frozen_duration")
-      <*> (value J..:? "frozen_balance")
-      <*> (V.map unwrapTronVote . fromMaybe mempty <$> value J..:? "votes")
+      <*> (getValue "amount")
+      <*> (getValue "account_name")
+      <*> (getValue "asset_name")
+      <*> (getValue "owner_address")
+      <*> (getValue "to_address")
+      <*> (getValue "frozen_duration")
+      <*> (getValue "frozen_balance")
+      <*> (V.map unwrapTronVote . fromMaybe mempty <$> getValue "votes")
 
 data TronVote = TronVote
   { tv_address :: {-# UNPACK #-} !HexString
