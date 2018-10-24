@@ -24,32 +24,15 @@ install:
 - stack --no-terminal --install-ghc test --only-dependencies
 - gem install --no-ri --no-rdoc fpm
 
-env:
-- FPM_PACKAGE_INFO="--license MIT --vendor CoinMetrics.io --url https://github.com/coinmetrics-io/haskell-tools"
-
 script:
-- mkdir bin completions pkg
-- stack --no-terminal test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
-# coinmetrics-export package
-- ./bin/coinmetrics-export --bash-completion-script /usr/bin/coinmetrics-export > completions/coinmetrics-export
-- fpm -s dir -t deb -n coinmetrics-export -p pkg $FPM_PACKAGE_INFO -d libpq5          -v 0.0.0.${TRAVIS_BUILD_NUMBER} bin/coinmetrics-export=/usr/bin/ completions/coinmetrics-export=/usr/share/bash-completion/completions/
-- fpm -s dir -t rpm -n coinmetrics-export -p pkg $FPM_PACKAGE_INFO -d postgresql-libs -v 0.0.0.${TRAVIS_BUILD_NUMBER} bin/coinmetrics-export=/usr/bin/ completions/coinmetrics-export=/usr/share/bash-completion/completions/
-- envsubst < coinmetrics-export/bintray.json.in > coinmetrics-export/bintray.json
-- envsubst < coinmetrics-export/bintray-deb.json.in > coinmetrics-export/bintray-deb.json
-- envsubst < coinmetrics-export/bintray-rpm.json.in > coinmetrics-export/bintray-rpm.json
-# coinmetrics-monitor package
-- ./bin/coinmetrics-monitor --bash-completion-script /usr/bin/coinmetrics-monitor > completions/coinmetrics-monitor
-- fpm -s dir -t deb -n coinmetrics-monitor -p pkg $FPM_PACKAGE_INFO -v 0.0.0.${TRAVIS_BUILD_NUMBER} bin/coinmetrics-monitor=/usr/bin/ completions/coinmetrics-monitor=/usr/share/bash-completion/completions/
-- fpm -s dir -t rpm -n coinmetrics-monitor -p pkg $FPM_PACKAGE_INFO -v 0.0.0.${TRAVIS_BUILD_NUMBER} bin/coinmetrics-monitor=/usr/bin/ completions/coinmetrics-monitor=/usr/share/bash-completion/completions/
-- envsubst < coinmetrics-monitor/bintray.json.in > coinmetrics-monitor/bintray.json
-- envsubst < coinmetrics-monitor/bintray-deb.json.in > coinmetrics-monitor/bintray-deb.json
-- envsubst < coinmetrics-monitor/bintray-rpm.json.in > coinmetrics-monitor/bintray-rpm.json
-# docker image
-- cp Dockerfile bin/ && docker build -t ${DOCKER_REPO}:latest bin
-- docker login -u="${DOCKER_USER}" -p="${DOCKER_PASSWORD}" ${DOCKER_REGISTRY}
-- docker push ${DOCKER_REPO}:latest
+- "./.travis-build.sh"
 
 deploy:
+- provider: script
+  script: "./.travis-deploy.sh"
+  on:
+    branch: master
+  skip_cleanup: true
 - provider: bintray
   user: $BINTRAY_USER
   key: $BINTRAY_KEY
