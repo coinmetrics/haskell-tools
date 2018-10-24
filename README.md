@@ -16,6 +16,7 @@ The project is in early alpha deep development seems-like-its-working-oh-crap st
 Supported blockchains:
 
 * [Bitcoin](https://bitcoin.org/) (WIP)
+* [Bytecoin](https://bytecoin.org/)
 * [Ethereum](https://www.ethereum.org/)
 * [Cardano](https://www.cardanohub.org/)
 * [EOS](https://eos.io/) (WIP)

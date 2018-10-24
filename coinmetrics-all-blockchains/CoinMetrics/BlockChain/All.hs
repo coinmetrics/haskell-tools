@@ -15,6 +15,9 @@ import CoinMetrics.BlockChain
 #if defined(CM_SUPPORT_BITCOIN)
 import CoinMetrics.Bitcoin
 #endif
+#if defined(CM_SUPPORT_BYTECOIN)
+import CoinMetrics.Bytecoin
+#endif
 #if defined(CM_SUPPORT_CARDANO)
 import CoinMetrics.Cardano
 #endif
@@ -52,6 +55,10 @@ allBlockChainInfos = HM.fromList infos
     infos =
 #if defined(CM_SUPPORT_BITCOIN)
       ("bitcoin",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Bitcoin)) :
+#endif
+
+#if defined(CM_SUPPORT_BYTECOIN)
+      ("bytecoin",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Bytecoin)) :
 #endif
 
 #if defined(CM_SUPPORT_CARDANO)

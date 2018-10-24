@@ -16,6 +16,11 @@ flag bitcoin
   default:             True
   manual:              True
 
+flag waves
+  description:         Support Bytecoin
+  default:             True
+  manual:              True
+
 flag cardano
   description:         Support Cardano
   default:             True
@@ -78,6 +83,10 @@ library
   if flag(bitcoin)
     build-depends:       coinmetrics-bitcoin
     cpp-options:         -DCM_SUPPORT_BITCOIN
+
+  if flag(bytecoin)
+    build-depends:       coinmetrics-bytecoin
+    cpp-options:         -DCM_SUPPORT_BYTECOIN
 
   if flag(cardano)
     build-depends:       coinmetrics-cardano
