@@ -31,22 +31,22 @@ import CoinMetrics.Util
 newtype Bytecoin = Bytecoin JsonRpc
 
 data BytecoinBlock = BytecoinBlock
-  { bc_difficulty :: {-# UNPACK #-} !Int64
-  , bc_hash :: {-# UNPACK #-} !HexString
-  , bc_height :: {-# UNPACK #-} !Int64
-  , bc_major_version :: {-# UNPACK #-} !Int64
-  , bc_minor_version :: {-# UNPACK #-} !Int64
-  , bc_nonce :: {-# UNPACK #-} !Int64
-  , bc_reward :: {-# UNPACK #-} !Int64
-  , bc_size :: {-# UNPACK #-} !Int64
-  , bc_timestamp :: {-# UNPACK #-} !Int64
-  , bc_coinbase_transaction :: !BytecoinTransaction
-  , bc_transactions :: !(V.Vector BytecoinTransaction)
+  { bb_difficulty :: {-# UNPACK #-} !Int64
+  , bb_hash :: {-# UNPACK #-} !HexString
+  , bb_height :: {-# UNPACK #-} !Int64
+  , bb_major_version :: {-# UNPACK #-} !Int64
+  , bb_minor_version :: {-# UNPACK #-} !Int64
+  , bb_nonce :: {-# UNPACK #-} !Int64
+  , bb_reward :: {-# UNPACK #-} !Int64
+  , bb_size :: {-# UNPACK #-} !Int64
+  , bb_timestamp :: {-# UNPACK #-} !Int64
+  , bb_coinbase_transaction :: !BytecoinTransaction
+  , bb_transactions :: !(V.Vector BytecoinTransaction)
   }
 
 instance IsBlock BytecoinBlock where
-  getBlockHeight = bc_height
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . bc_timestamp
+  getBlockHeight = bb_height
+  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . bb_timestamp
 
 newtype BytecoinBlockWrapper = BytecoinBlockWrapper
   { unwrapBytecoinBlock :: BytecoinBlock
@@ -67,13 +67,13 @@ instance J.FromJSON BytecoinBlockWrapper where
     <*> (V.map unwrapBytecoinTransaction <$> fields J..: "transactions")
 
 data BytecoinTransaction = BytecoinTransaction
-  { mt_extra :: {-# UNPACK #-} !HexString
-  , mt_fee :: !(Maybe Int64)
-  , mt_hash :: !(Maybe HexString)
-  , mt_inputs :: !(V.Vector BytecoinTransactionInput)
-  , mt_outputs :: !(V.Vector BytecoinTransactionOutput)
-  , mt_unlock_block_or_timestamp :: {-# UNPACK #-} !Int64
-  , mt_version :: {-# UNPACK #-} !Int64
+  { bt_extra :: {-# UNPACK #-} !HexString
+  , bt_fee :: !(Maybe Int64)
+  , bt_hash :: !(Maybe HexString)
+  , bt_inputs :: !(V.Vector BytecoinTransactionInput)
+  , bt_outputs :: !(V.Vector BytecoinTransactionOutput)
+  , bt_unlock_block_or_timestamp :: {-# UNPACK #-} !Int64
+  , bt_version :: {-# UNPACK #-} !Int64
   }
 
 newtype BytecoinTransactionWrapper = BytecoinTransactionWrapper
@@ -91,10 +91,10 @@ instance J.FromJSON BytecoinTransactionWrapper where
     <*> (fields J..: "version")
 
 data BytecoinTransactionInput = BytecoinTransactionInput
-  { mti_amount :: !(Maybe Int64)
-  , mti_height :: !(Maybe Int64)
-  , mti_key_image :: !(Maybe HexString)
-  , mti_output_indexes :: !(V.Vector Int64)
+  { bti_amount :: !(Maybe Int64)
+  , bti_height :: !(Maybe Int64)
+  , bti_key_image :: !(Maybe HexString)
+  , bti_output_indexes :: !(V.Vector Int64)
   }
 
 newtype BytecoinTransactionInputWrapper = BytecoinTransactionInputWrapper
@@ -112,8 +112,8 @@ instance J.FromJSON BytecoinTransactionInputWrapper where
       <*> (fromMaybe V.empty <$> traverse (J..: "output_indexes") maybeKey)
 
 data BytecoinTransactionOutput = BytecoinTransactionOutput
-  { mto_amount :: !Int64
-  , mto_key :: {-# UNPACK #-} !HexString
+  { bto_amount :: !Int64
+  , bto_key :: {-# UNPACK #-} !HexString
   }
 
 newtype BytecoinTransactionOutputWrapper = BytecoinTransactionOutputWrapper
@@ -126,7 +126,7 @@ instance J.FromJSON BytecoinTransactionOutputWrapper where
     <*> ((J..: "key") =<< fields J..: "target")
 
 genSchemaInstances [''BytecoinBlock, ''BytecoinTransaction, ''BytecoinTransactionInput, ''BytecoinTransactionOutput]
-genFlattenedTypes "height" [| bc_height |] [("block", ''BytecoinBlock), ("transaction", ''BytecoinTransaction), ("input", ''BytecoinTransactionInput), ("output", ''BytecoinTransactionOutput)]
+genFlattenedTypes "height" [| bb_height |] [("block", ''BytecoinBlock), ("transaction", ''BytecoinTransaction), ("input", ''BytecoinTransactionInput), ("output", ''BytecoinTransactionOutput)]
 
 instance BlockChain Bytecoin where
   type Block Bytecoin = BytecoinBlock

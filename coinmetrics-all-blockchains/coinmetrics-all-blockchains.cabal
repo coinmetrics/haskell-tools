@@ -16,7 +16,7 @@ flag bitcoin
   default:             True
   manual:              True
 
-flag waves
+flag bytecoin
   description:         Support Bytecoin
   default:             True
   manual:              True
