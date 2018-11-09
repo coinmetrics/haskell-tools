@@ -19,6 +19,7 @@ library
     , base
     , coinmetrics
     , hanalytics-base
+    , scientific
     , text
     , time
     , vector

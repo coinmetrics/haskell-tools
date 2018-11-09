@@ -12,6 +12,7 @@ import qualified Data.Aeson as J
 import Data.Int
 import Data.Maybe
 import Data.Proxy
+import Data.Scientific
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
@@ -60,7 +61,8 @@ instance J.FromJSON BitcoinBlockWrapper where
     <*> (fields J..: "difficulty")
 
 data BitcoinTransaction = BitcoinTransaction
-  { bt_hash :: {-# UNPACK #-} !HexString
+  { bt_txid :: {-# UNPACK #-} !HexString
+  , bt_hash :: {-# UNPACK #-} !HexString
   , bt_size :: {-# UNPACK #-} !Int64
   , bt_vsize :: {-# UNPACK #-} !Int64
   , bt_version :: {-# UNPACK #-} !Int64
@@ -75,7 +77,8 @@ newtype BitcoinTransactionWrapper = BitcoinTransactionWrapper
 
 instance J.FromJSON BitcoinTransactionWrapper where
   parseJSON = J.withObject "bitcoin transaction" $ \fields -> fmap BitcoinTransactionWrapper $ BitcoinTransaction
-    <$> (fields J..: "hash")
+    <$> (fields J..: "txid")
+    <*> (fields J..: "hash")
     <*> (fields J..: "size")
     <*> (fields J..: "vsize")
     <*> (fields J..: "version")
@@ -90,7 +93,8 @@ data BitcoinVin = BitcoinVin
   }
 
 data BitcoinVout = BitcoinVout
-  { bvo_value :: {-# UNPACK #-} !Double
+  { bvo_type :: !T.Text
+  , bvo_value :: {-# UNPACK #-} !Scientific
   , bvo_addresses :: !(V.Vector T.Text)
   }
 
@@ -99,9 +103,12 @@ newtype BitcoinVoutWrapper = BitcoinVoutWrapper
   }
 
 instance J.FromJSON BitcoinVoutWrapper where
-  parseJSON = J.withObject "bitcoin vout" $ \fields -> fmap BitcoinVoutWrapper $ BitcoinVout
-    <$> (fields J..: "value")
-    <*> fmap (fromMaybe V.empty) ((J..:? "addresses") =<< fields J..: "scriptPubKey")
+  parseJSON = J.withObject "bitcoin vout" $ \fields -> do
+    scriptPubKey <- fields J..: "scriptPubKey"
+    fmap BitcoinVoutWrapper $ BitcoinVout
+      <$> (scriptPubKey J..: "type")
+      <*> (fields J..: "value")
+      <*> fmap (fromMaybe V.empty) (scriptPubKey J..:? "addresses")
 
 
 genSchemaInstances [''BitcoinBlock, ''BitcoinTransaction, ''BitcoinVin, ''BitcoinVout]
