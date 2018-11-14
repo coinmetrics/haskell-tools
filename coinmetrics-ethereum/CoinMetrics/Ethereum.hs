@@ -241,8 +241,8 @@ instance J.FromJSON EthereumActionWrapper where
         <*> return Nothing
       "suicide" -> EthereumAction 3 stack valid succeeded accounted
         <$> (traverse decode0xHexBytes =<< action J..:? "address")
-        <*> (traverse decode0xHexBytes =<< action J..:? "refund_address")
-        <*> maybe (return Nothing) (traverse decode0xHexNumber <=< (J..:? "balance")) maybeResult
+        <*> (traverse decode0xHexBytes =<< action J..:? "refundAddress")
+        <*> (traverse decode0xHexNumber =<< action J..:? "balance")
         <*> return Nothing
         <*> return Nothing
       _ -> fail $ "unknown ethereum action: " <> T.unpack actionType
@@ -311,7 +311,10 @@ instance BlockChain Ethereum where
             isObject = \case
               Just (J.Object _) -> True
               _ -> False
-            in isObject <$> actionFields J..:? "result"
+            in do
+              hasResult <- isObject <$> actionFields J..:? "result"
+              isSuicide <- (== J.String "suicide") <$> actionFields J..: "type"
+              return $ hasResult || isSuicide -- suicide actions always succeed and don't have result
           txIndex <- fromMaybe (-1) <$> actionFields J..:? "transactionPosition"
           action <- fmap unwrapEthereumAction $ J.parseJSON $ J.Object
             $ HML.insert "valid" (J.Bool valid)
