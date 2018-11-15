@@ -29,8 +29,8 @@ newtype Bitcoin = Bitcoin JsonRpc
 data BitcoinBlock = BitcoinBlock
   { bb_hash :: {-# UNPACK #-} !HexString
   , bb_size :: {-# UNPACK #-} !Int64
-  , bb_strippedsize :: {-# UNPACK #-} !Int64
-  , bb_weight :: {-# UNPACK #-} !Int64
+  , bb_strippedsize :: !(Maybe Int64)
+  , bb_weight :: !(Maybe Int64)
   , bb_height :: {-# UNPACK #-} !Int64
   , bb_version :: {-# UNPACK #-} !Int64
   , bb_tx :: !(V.Vector BitcoinTransaction)
@@ -51,8 +51,8 @@ instance J.FromJSON BitcoinBlockWrapper where
   parseJSON = J.withObject "bitcoin block" $ \fields -> fmap BitcoinBlockWrapper $ BitcoinBlock
     <$> (fields J..: "hash")
     <*> (fields J..: "size")
-    <*> (fields J..: "strippedsize")
-    <*> (fields J..: "weight")
+    <*> (fields J..:? "strippedsize")
+    <*> (fields J..:? "weight")
     <*> (fields J..: "height")
     <*> (fields J..: "version")
     <*> (V.map unwrapBitcoinTransaction <$> fields J..: "tx")
@@ -64,7 +64,7 @@ data BitcoinTransaction = BitcoinTransaction
   { bt_txid :: {-# UNPACK #-} !HexString
   , bt_hash :: {-# UNPACK #-} !HexString
   , bt_size :: {-# UNPACK #-} !Int64
-  , bt_vsize :: {-# UNPACK #-} !Int64
+  , bt_vsize :: !(Maybe Int64)
   , bt_version :: {-# UNPACK #-} !Int64
   , bt_locktime :: {-# UNPACK #-} !Int64
   , bt_vin :: !(V.Vector BitcoinVin)
@@ -80,7 +80,7 @@ instance J.FromJSON BitcoinTransactionWrapper where
     <$> (fields J..: "txid")
     <*> (fields J..: "hash")
     <*> (fields J..: "size")
-    <*> (fields J..: "vsize")
+    <*> (fields J..:? "vsize")
     <*> (fields J..: "version")
     <*> (fields J..: "locktime")
     <*> (fields J..: "vin")
