@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Bitcoin
   ( Bitcoin(..)
@@ -9,6 +9,7 @@ module CoinMetrics.Bitcoin
   ) where
 
 import qualified Data.Aeson as J
+import qualified Data.Aeson.Types as J
 import Data.Int
 import Data.Maybe
 import Data.Proxy
@@ -16,6 +17,7 @@ import Data.Scientific
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
+import Numeric
 
 import CoinMetrics.BlockChain
 import CoinMetrics.JsonRpc
@@ -57,7 +59,7 @@ instance J.FromJSON BitcoinBlockWrapper where
     <*> (fields J..: "version")
     <*> (V.map unwrapBitcoinTransaction <$> fields J..: "tx")
     <*> (fields J..: "time")
-    <*> (fields J..: "nonce")
+    <*> (parseNonce =<< fields J..: "nonce")
     <*> (fields J..: "difficulty")
 
 data BitcoinTransaction = BitcoinTransaction
@@ -109,6 +111,12 @@ instance J.FromJSON BitcoinVoutWrapper where
       <$> (scriptPubKey J..: "type")
       <*> (fields J..: "value")
       <*> fmap (fromMaybe V.empty) (scriptPubKey J..:? "addresses")
+
+parseNonce :: J.Value -> J.Parser Int64
+parseNonce = \case
+  -- Bitcoin Gold returns nonce in form of hex string
+  J.String (readHex . T.unpack -> [(n, "")]) -> return n
+  n -> J.parseJSON n
 
 
 genSchemaInstances [''BitcoinBlock, ''BitcoinTransaction, ''BitcoinVin, ''BitcoinVout]
