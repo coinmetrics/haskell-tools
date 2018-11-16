@@ -202,7 +202,7 @@ instance BlockChain Ripple where
         , ("expand", J.toJSON True)
         ]
     case eitherLedger of
-      Right ledger -> return $ unwrapRippleLedger ledger
+      Right ledger -> return $ unwrapRippleLedgerWithCorrection ripple ledger
       Left e -> do
         print e
         -- fallback to retrieving transactions individually
@@ -226,6 +226,15 @@ instance BlockChain Ripple where
               ("/v2/transactions/" <> transactionHash) []
               -- JSON RPC API path and params
               "tx" [("transaction", J.toJSON transactionHash)]
-        either fail (return . unwrapRippleLedger) $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
+        either fail (return . unwrapRippleLedgerWithCorrection ripple) $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
 
   blockHeightFieldName _ = "index"
+
+unwrapRippleLedgerWithCorrection :: Ripple -> RippleLedgerWrapper -> RippleLedger
+unwrapRippleLedgerWithCorrection ripple RippleLedgerWrapper
+  { unwrapRippleLedger = ledger
+  } = case ripple of
+  RippleDataApi {} -> ledger
+  RippleJsonRpcApi {} -> ledger
+    { rl_closeTime = rl_closeTime ledger + 946684800 -- https://developers.ripple.com/basic-data-types.html#specifying-time
+    }
