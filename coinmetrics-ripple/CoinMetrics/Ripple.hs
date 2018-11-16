@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ripple
   ( Ripple(..)
@@ -6,6 +6,7 @@ module CoinMetrics.Ripple
   , RippleTransaction(..)
   ) where
 
+import Control.Exception
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
@@ -13,6 +14,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HM
 import Data.Int
+import Data.Maybe
 import Data.Proxy
 import Data.Scientific
 import qualified Data.Text as T
@@ -24,30 +26,41 @@ import qualified Network.HTTP.Client as H
 import Text.ParserCombinators.ReadP
 
 import CoinMetrics.BlockChain
+import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Util
 -- import CoinMetrics.Schema.Flatten
 import CoinMetrics.Util
 import Hanalytics.Schema
 
 -- | Ripple connector.
-data Ripple = Ripple
-  { ripple_httpManager :: !H.Manager
-  , ripple_httpRequest :: !H.Request
-  }
+data Ripple
+  -- | Ripple Data API.
+  = RippleDataApi
+    { ripple_httpManager :: !H.Manager
+    , ripple_httpRequest :: !H.Request
+    }
+  -- | Ripple JSON RPC API.
+  | RippleJsonRpcApi
+    { ripple_jsonRpc :: !JsonRpc
+    }
 
-rippleRequest :: J.FromJSON r => Ripple -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> IO r
-rippleRequest Ripple
-  { ripple_httpManager = httpManager
-  , ripple_httpRequest = httpRequest
-  } path params = tryWithRepeat $ do
-  body <- H.responseBody <$> H.httpLbs (H.setQueryString params httpRequest
-    { H.path = T.encodeUtf8 path
-    }) httpManager
-  case J.eitherDecode body of
-    Right decodedBody -> return decodedBody
-    Left err -> do
-      putStrLn $ "wrong ripple response for " <> T.unpack path <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
-      fail err
+rippleRequest :: J.FromJSON r => Ripple -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> T.Text -> J.Object -> IO r
+rippleRequest ripple dataPath dataParams rpcMethod rpcParams = case ripple of
+  RippleDataApi
+    { ripple_httpManager = httpManager
+    , ripple_httpRequest = httpRequest
+    } -> tryWithRepeat $ do
+    body <- H.responseBody <$> H.httpLbs (H.setQueryString dataParams httpRequest
+      { H.path = T.encodeUtf8 dataPath
+      }) httpManager
+    case J.eitherDecode body of
+      Right decodedBody -> return decodedBody
+      Left err -> do
+        putStrLn $ "wrong ripple response for " <> T.unpack dataPath <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
+        fail err
+  RippleJsonRpcApi
+    { ripple_jsonRpc = jsonRpc
+    } -> jsonRpcRequest jsonRpc rpcMethod (J.Array [J.Object rpcParams])
 
 -- https://ripple.com/build/data-api-v2/#ledger-objects
 
@@ -69,7 +82,7 @@ newtype RippleLedgerWrapper = RippleLedgerWrapper
 
 instance J.FromJSON RippleLedgerWrapper where
   parseJSON = J.withObject "ripple ledger" $ \fields -> fmap RippleLedgerWrapper $ RippleLedger
-    <$> (fields J..: "ledger_index")
+    <$> (decodeMaybeFromText =<< fields J..: "ledger_index")
     <*> (fields J..: "ledger_hash")
     <*> (decodeAmount =<< fields J..: "total_coins")
     <*> (fields J..: "close_time")
@@ -77,7 +90,7 @@ instance J.FromJSON RippleLedgerWrapper where
 
 data RippleTransaction = RippleTransaction
   { rt_hash :: {-# UNPACK #-} !HexString
-  , rt_date :: {-# UNPACK #-} !Int64
+  , rt_date :: !(Maybe Int64)
   , rt_account :: !T.Text
   , rt_fee :: {-# UNPACK #-} !Scientific
   , rt_type :: !T.Text
@@ -94,7 +107,7 @@ newtype RippleTransactionWrapper = RippleTransactionWrapper
 
 instance J.FromJSON RippleTransactionWrapper where
   parseJSON = J.withObject "ripple transaction" $ \fields -> do
-    tx <- fields J..: "tx"
+    tx <- fromMaybe fields <$> fields J..:? "tx"
     maybeAmountValue <- tx J..:? "Amount"
     (maybeAmount, maybeCurrency, maybeIssuer) <-
       case maybeAmountValue of
@@ -109,10 +122,10 @@ instance J.FromJSON RippleTransactionWrapper where
             return (Just amount, Just currency, Just issuer)
           _ -> fail "wrong amount"
         Nothing -> return (Nothing, Nothing, Nothing)
-    meta <- fields J..: "meta"
+    meta <- maybe (fields J..: "metaData") return =<< fields J..:? "meta"
     fmap RippleTransactionWrapper $ RippleTransaction
       <$> (fields J..: "hash")
-      <*> (decodeDate =<< fields J..: "date")
+      <*> (traverse decodeDate =<< fields J..:? "date")
       <*> (tx J..: "Account")
       <*> (decodeAmount =<< tx J..: "Fee")
       <*> (tx J..: "TransactionType")
@@ -144,10 +157,15 @@ instance BlockChain Ripple where
     { bci_init = \BlockChainParams
       { bcp_httpManager = httpManager
       , bcp_httpRequest = httpRequest
-      } -> return Ripple
-        { ripple_httpManager = httpManager
-        , ripple_httpRequest = httpRequest
-        }
+      } -> do
+      let jsonRpc = newJsonRpc httpManager httpRequest Nothing
+      r <- try $ jsonRpcRequest jsonRpc "server_info" (J.Array [])
+      case r :: Either SomeException J.Object of
+        Right (J.parseEither (J..: "status") -> Right (J.String "success")) -> return $ RippleJsonRpcApi jsonRpc
+        _ -> return RippleDataApi
+          { ripple_httpManager = httpManager
+          , ripple_httpRequest = httpRequest
+          }
     , bci_defaultApiUrl = "https://data.ripple.com/"
     , bci_defaultBeginBlock = 32570 -- genesis ledger
     , bci_defaultEndBlock = 0 -- history data, no rewrites
@@ -166,28 +184,48 @@ instance BlockChain Ripple where
     }
 
   getCurrentBlockHeight ripple = either fail return
-    . J.parseEither ((J..: "ledger_index") <=< (J..: "ledger"))
-    =<< rippleRequest ripple "/v2/ledgers" []
+    . J.parseEither (decodeMaybeFromText <=< (J..: "ledger_index") <=< (J..: "ledger"))
+    =<< rippleRequest ripple "/v2/ledgers" [] "ledger" [("ledger_index", J.String "validated")]
 
   getBlockByHeight ripple blockHeight = do
     eitherLedger <- J.parseEither (J..: "ledger")
-      <$> rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
+      <$> rippleRequest ripple
+        -- Data API path and params
+        ("/v2/ledgers/" <> T.pack (show blockHeight))
         [ ("transactions", Just "true")
         , ("expand", Just "true")
         ]
+        -- JSON RPC API path and params
+        "ledger"
+        [ ("ledger_index", J.toJSON blockHeight)
+        , ("transactions", J.toJSON True)
+        , ("expand", J.toJSON True)
+        ]
     case eitherLedger of
-      Right ledger -> return ledger
-      Left _ -> do
+      Right ledger -> return $ unwrapRippleLedger ledger
+      Left e -> do
+        print e
         -- fallback to retrieving transactions individually
         preLedger <- either fail return
           . J.parseEither (J..: "ledger")
-          =<< rippleRequest ripple ("/v2/ledgers/" <> T.pack (show blockHeight))
+          =<< rippleRequest ripple
+            -- Data API path and params
+            ("/v2/ledgers/" <> T.pack (show blockHeight))
             [ ("transactions", Just "true")
+            ]
+            -- JSON RPC API path and params
+            "ledger"
+            [ ("ledger_index", J.toJSON blockHeight)
+            , ("transactions", J.toJSON True)
             ]
         transactionsHashes <- either fail return $ J.parseEither (J..: "transactions") preLedger
         transactions <- forM transactionsHashes $ \transactionHash ->
           either (const J.Null) J.Object . J.parseEither (J..: "transaction")
-            <$> rippleRequest ripple ("/v2/transactions/" <> transactionHash) []
+            <$> rippleRequest ripple
+              -- Data API path and params
+              ("/v2/transactions/" <> transactionHash) []
+              -- JSON RPC API path and params
+              "tx" [("transaction", J.toJSON transactionHash)]
         either fail (return . unwrapRippleLedger) $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
 
   blockHeightFieldName _ = "index"
