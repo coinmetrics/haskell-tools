@@ -6,6 +6,7 @@ module CoinMetrics.Util
   , encode0xHexNumber
   , decode0xHexNumber
   , decodeReadStr
+  , decodeMaybeFromText
   , tryWithRepeat
   , currentLocalTimeToUTC
   , standardBlockChainSchemas
@@ -73,6 +74,11 @@ decodeReadStr :: Read a => T.Text -> J.Parser a
 decodeReadStr s = case reads (T.unpack s) of
   [(r, "")] -> return r
   _ -> fail $ "decodeReadStr error for: " ++ T.unpack s
+
+decodeMaybeFromText :: (J.FromJSON a, Read a) => J.Value -> J.Parser a
+decodeMaybeFromText = \case
+  J.String s -> decodeReadStr s
+  v -> J.parseJSON v
 
 tryWithRepeat :: IO a -> IO a
 tryWithRepeat io = let
