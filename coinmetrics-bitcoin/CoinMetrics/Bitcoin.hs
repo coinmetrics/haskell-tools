@@ -64,8 +64,8 @@ instance J.FromJSON BitcoinBlockWrapper where
 
 data BitcoinTransaction = BitcoinTransaction
   { bt_txid :: {-# UNPACK #-} !HexString
-  , bt_hash :: {-# UNPACK #-} !HexString
-  , bt_size :: {-# UNPACK #-} !Int64
+  , bt_hash :: !(Maybe HexString)
+  , bt_size :: !(Maybe Int64)
   , bt_vsize :: !(Maybe Int64)
   , bt_version :: {-# UNPACK #-} !Int64
   , bt_locktime :: {-# UNPACK #-} !Int64
@@ -80,8 +80,8 @@ newtype BitcoinTransactionWrapper = BitcoinTransactionWrapper
 instance J.FromJSON BitcoinTransactionWrapper where
   parseJSON = J.withObject "bitcoin transaction" $ \fields -> fmap BitcoinTransactionWrapper $ BitcoinTransaction
     <$> (fields J..: "txid")
-    <*> (fields J..: "hash")
-    <*> (fields J..: "size")
+    <*> (fields J..:? "hash")
+    <*> (fields J..:? "size")
     <*> (fields J..:? "vsize")
     <*> (fields J..: "version")
     <*> (fields J..: "locktime")
