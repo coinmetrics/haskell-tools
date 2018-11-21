@@ -18,6 +18,8 @@ executable coinmetrics-monitor
     base
     , coinmetrics
     , coinmetrics-all-blockchains
+    , connection
+    , data-default
     , http-client
     , http-client-tls
     , http-types

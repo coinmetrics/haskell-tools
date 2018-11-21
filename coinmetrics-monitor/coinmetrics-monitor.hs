@@ -5,9 +5,11 @@ module Main(main) where
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import Data.Default
 import Data.String
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX
+import qualified Network.Connection as NC
 import qualified Network.HTTP.Client as H
 import qualified Network.HTTP.Client.TLS as H
 import qualified Network.HTTP.Types as H
@@ -76,6 +78,10 @@ main = run =<< O.execParser parser where
         <> O.value ""
         <> O.help "Blockchain API url password for authentication"
         )
+      <*> O.switch
+        (  O.long "api-url-insecure"
+        <> O.help "Do not validate HTTPS certificate"
+        )
       )
 
 data Options = Options
@@ -91,6 +97,7 @@ data OptionBlockchain = OptionBlockchain
   , optionBlockchain_apiUrl :: !String
   , optionBlockchain_apiUrlUserName :: !String
   , optionBlockchain_apiUrlPassword :: !String
+  , optionBlockchain_apiUrlInsecure :: !Bool
   } deriving Show
 
 run :: Options -> IO ()
@@ -111,8 +118,15 @@ run Options
     , P.metricHelp = "Blockchain node's sync time"
     }
 
-  -- init http manager
-  httpManager <- H.newTlsManager
+  -- init http managers
+  httpManager <- H.newTlsManagerWith H.tlsManagerSettings
+    { H.managerConnCount = length blockchains + 2
+    }
+  httpInsecureManager <- H.newTlsManagerWith (H.mkManagerSettings def
+    { NC.settingDisableCertificateValidation = True
+    } Nothing)
+    { H.managerConnCount = length blockchains + 2
+    }
 
   -- run continuous updates of metrics
   forM_ blockchains $ \OptionBlockchain
@@ -121,6 +135,7 @@ run Options
     , optionBlockchain_apiUrl = apiUrl
     , optionBlockchain_apiUrlUserName = apiUrlUserName
     , optionBlockchain_apiUrlPassword = apiUrlPassword
+    , optionBlockchain_apiUrlInsecure = apiUrlInsecure
     } -> void $ forkIO $ do
 
     let name = if T.null redefinedName then blockchainType else redefinedName
@@ -140,7 +155,7 @@ run Options
           then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
           else httpRequest
       initBlockChain BlockChainParams
-        { bcp_httpManager = httpManager
+        { bcp_httpManager = if apiUrlInsecure then httpInsecureManager else httpManager
         , bcp_httpRequest = httpRequest
         , bcp_trace = False
         , bcp_excludeUnaccountedActions = False

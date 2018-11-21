@@ -9,6 +9,7 @@ import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.ByteString.Lazy as BL
+import Data.Default
 import qualified Data.DiskHash as DH
 import Data.Either
 import qualified Data.HashMap.Strict as HM
@@ -23,6 +24,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TL
 import qualified Data.Vector as V
 import qualified Database.PostgreSQL.LibPQ as PQ
+import qualified Network.Connection as NC
 import qualified Network.HTTP.Client as H
 import qualified Network.HTTP.Client.TLS as H
 import qualified Options.Applicative as O
@@ -72,6 +74,10 @@ main = run =<< O.execParser parser where
               <> O.metavar "API_URL_PASSWORD"
               <> O.value ""
               <> O.help "Blockchain API url password for authentication"
+              )
+            <*> O.switch
+              (  O.long "api-url-insecure"
+              <> O.help "Do not validate HTTPS certificate"
               )
             <*> O.strOption
               (  O.long "blockchain"
@@ -237,6 +243,7 @@ data OptionCommand
     { options_apiUrl :: !String
     , options_apiUrlUserName :: !String
     , options_apiUrlPassword :: !String
+    , options_apiUrlInsecure :: !Bool
     , options_blockchain :: !T.Text
     , options_beginBlock :: !BlockHeight
     , options_endBlock :: !BlockHeight
@@ -283,6 +290,7 @@ run Options
     { options_apiUrl = apiUrl
     , options_apiUrlUserName = apiUrlUserName
     , options_apiUrlPassword = apiUrlPassword
+    , options_apiUrlInsecure = apiUrlInsecure
     , options_blockchain = blockchainType
     , options_beginBlock = maybeBeginBlock
     , options_endBlock = maybeEndBlock
@@ -293,7 +301,9 @@ run Options
     , options_threadsCount = threadsCount
     , options_ignoreMissingBlocks = ignoreMissingBlocks
     } -> do
-    httpManager <- H.newTlsManagerWith H.tlsManagerSettings
+    httpManager <- H.newTlsManagerWith (H.mkManagerSettings def
+      { NC.settingDisableCertificateValidation = apiUrlInsecure
+      } Nothing)
       { H.managerConnCount = threadsCount * 2
       }
 

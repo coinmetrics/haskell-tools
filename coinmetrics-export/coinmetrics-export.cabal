@@ -28,6 +28,8 @@ executable coinmetrics-export
     , coinmetrics
     , coinmetrics-all-blockchains
     , coinmetrics-iota
+    , connection
+    , data-default
     , hanalytics-base
     , hanalytics-bigquery
     , hanalytics-postgres
