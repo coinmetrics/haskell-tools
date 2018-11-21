@@ -8,8 +8,11 @@ module CoinMetrics.Bitcoin
   , BitcoinVout(..)
   ) where
 
+import Control.Exception
+import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
+import qualified Data.HashMap.Strict as HM
 import Data.Int
 import Data.Maybe
 import Data.Proxy
@@ -155,6 +158,16 @@ instance BlockChain Bitcoin where
 
   getBlockByHeight (Bitcoin jsonRpc) blockHeight = do
     blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
-    unwrapBitcoinBlock <$> jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Number 2] :: V.Vector J.Value)
+    -- try get everything in one RPC call
+    eitherBlock <- try $ unwrapBitcoinBlock <$> jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Number 2] :: V.Vector J.Value)
+    case eitherBlock of
+      Right block -> return block
+      Left SomeException {} -> do
+        -- request block with transactions' hashes
+        blockJson <- jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Bool True] :: V.Vector J.Value)
+        transactionsHashes <- either fail return $ J.parseEither (J..: "tx") blockJson
+        transactions <- forM transactionsHashes $ \transactionHash ->
+          jsonRpcRequest jsonRpc "getrawtransaction" ([transactionHash, J.Number 1] :: V.Vector J.Value)
+        fmap unwrapBitcoinBlock $ either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "tx" (J.Array transactions) blockJson
 
   blockHeightFieldName _ = "height"
