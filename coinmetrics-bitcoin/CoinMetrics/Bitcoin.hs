@@ -166,8 +166,12 @@ instance BlockChain Bitcoin where
         -- request block with transactions' hashes
         blockJson <- jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Bool True] :: V.Vector J.Value)
         transactionsHashes <- either fail return $ J.parseEither (J..: "tx") blockJson
-        transactions <- forM transactionsHashes $ \transactionHash ->
-          jsonRpcRequest jsonRpc "getrawtransaction" ([transactionHash, J.Number 1] :: V.Vector J.Value)
+        transactions <- forM transactionsHashes $ \case
+          -- some bitcoin clones return full transaction here anyhow, because fuck you
+          -- well, less work needed in that case
+          transaction@(J.Object {}) -> return transaction
+          transactionHash@(J.String {}) -> jsonRpcRequest jsonRpc "getrawtransaction" ([transactionHash, J.Number 1] :: V.Vector J.Value)
+          _ -> fail "wrong tx hash"
         fmap unwrapBitcoinBlock $ either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "tx" (J.Array transactions) blockJson
 
   blockHeightFieldName _ = "height"
