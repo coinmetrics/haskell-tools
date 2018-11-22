@@ -30,13 +30,14 @@ import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Util
 -- import CoinMetrics.Schema.Flatten
 import CoinMetrics.Util
+import CoinMetrics.WebCache
 import Hanalytics.Schema
 
 -- | Ripple connector.
 data Ripple
   -- | Ripple Data API.
   = RippleDataApi
-    { ripple_httpManager :: !H.Manager
+    { ripple_webCache :: !WebCache
     , ripple_httpRequest :: !H.Request
     }
   -- | Ripple JSON RPC API.
@@ -47,17 +48,17 @@ data Ripple
 rippleRequest :: J.FromJSON r => Ripple -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> T.Text -> J.Object -> IO r
 rippleRequest ripple dataPath dataParams rpcMethod rpcParams = case ripple of
   RippleDataApi
-    { ripple_httpManager = httpManager
+    { ripple_webCache = webCache
     , ripple_httpRequest = httpRequest
     } -> tryWithRepeat $ do
-    body <- H.responseBody <$> H.httpLbs (H.setQueryString dataParams httpRequest
+    requestWebCache webCache (H.setQueryString dataParams httpRequest
       { H.path = T.encodeUtf8 dataPath
-      }) httpManager
-    case J.eitherDecode body of
-      Right decodedBody -> return decodedBody
-      Left err -> do
-        putStrLn $ "wrong ripple response for " <> T.unpack dataPath <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
-        fail err
+      }) $ \body -> do
+      case J.eitherDecode body of
+        Right decodedBody -> return (True, decodedBody)
+        Left err -> do
+          putStrLn $ "wrong ripple response for " <> T.unpack dataPath <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
+          fail err
   RippleJsonRpcApi
     { ripple_jsonRpc = jsonRpc
     } -> jsonRpcRequest jsonRpc rpcMethod (J.Array [J.Object rpcParams])
@@ -162,10 +163,12 @@ instance BlockChain Ripple where
       r <- try $ jsonRpcRequest jsonRpc "server_info" (J.Array [])
       case r :: Either SomeException J.Object of
         Right (J.parseEither (J..: "status") -> Right (J.String "success")) -> return $ RippleJsonRpcApi jsonRpc
-        _ -> return RippleDataApi
-          { ripple_httpManager = httpManager
-          , ripple_httpRequest = httpRequest
-          }
+        _ -> do
+          webCache <- initWebCache httpManager
+          return RippleDataApi
+            { ripple_webCache = webCache
+            , ripple_httpRequest = httpRequest
+            }
     , bci_defaultApiUrl = "https://data.ripple.com/"
     , bci_defaultBeginBlock = 32570 -- genesis ledger
     , bci_defaultEndBlock = 0 -- history data, no rewrites

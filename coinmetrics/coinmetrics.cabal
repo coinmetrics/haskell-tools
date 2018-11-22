@@ -18,18 +18,22 @@ library
     CoinMetrics.Schema.Flatten
     CoinMetrics.Schema.Util
     CoinMetrics.Util
+    CoinMetrics.WebCache
   build-depends:
     aeson
     , avro
     , base
     , bytestring
+    , directory
     , hanalytics-avro
     , hanalytics-base
     , hanalytics-bigquery
     , hanalytics-postgres
     , hashable
     , http-client
+    , http-types
     , memory
+    , network-uri
     , scientific
     , tagged
     , text
