@@ -303,7 +303,8 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       , tr_code = txResultCode
       , tr_results = opResults
       } = do
-      unless (V.length operations == V.length opResults) $ fail "operations do not correspond to results"
+      -- some results are missing, allow that
+      unless (V.length operations == V.length opResults || V.length opResults == 0) $ fail "operations do not correspond to results"
       combinedOperations <- V.zipWithM combineOperationAndResult operations opResults
       return transaction
         { st_feeCharged = feeCharged
