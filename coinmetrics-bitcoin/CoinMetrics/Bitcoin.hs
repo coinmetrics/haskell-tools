@@ -135,7 +135,7 @@ instance BlockChain Bitcoin where
       } -> return $ Bitcoin $ newJsonRpc httpManager httpRequest Nothing
     , bci_defaultApiUrl = "http://127.0.0.1:8332/"
     , bci_defaultBeginBlock = 0
-    , bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+    , bci_defaultEndBlock = -100 -- conservative rewrite limit
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy BitcoinBlock))
       [ schemaOf (Proxy :: Proxy BitcoinVin)

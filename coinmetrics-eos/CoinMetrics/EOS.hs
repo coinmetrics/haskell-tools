@@ -144,7 +144,7 @@ instance BlockChain Eos where
         }
     , bci_defaultApiUrl = "http://127.0.0.1:8888/"
     , bci_defaultBeginBlock = 1
-    , bci_defaultEndBlock = -1 -- no need in a gap, as it uses irreversible block number
+    , bci_defaultEndBlock = 0 -- no need in a gap, as it uses irreversible block number
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy EosBlock))
       [ schemaOf (Proxy :: Proxy EosAuthorization)

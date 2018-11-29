@@ -178,7 +178,7 @@ instance BlockChain Waves where
         }
     , bci_defaultApiUrl = "http://127.0.0.1:6869/"
     , bci_defaultBeginBlock = 1
-    , bci_defaultEndBlock = -100 -- conservative limit
+    , bci_defaultEndBlock = 0 -- PoS
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy WavesBlock))
       [ schemaOf (Proxy :: Proxy WavesTransfer)

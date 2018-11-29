@@ -151,7 +151,7 @@ instance BlockChain Cardano where
         }
     , bci_defaultApiUrl = "http://127.0.0.1:8100/"
     , bci_defaultBeginBlock = 2
-    , bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+    , bci_defaultEndBlock = 0
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy CardanoBlock))
       [ schemaOf (Proxy :: Proxy CardanoInput)

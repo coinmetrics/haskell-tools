@@ -266,7 +266,7 @@ instance BlockChain Ethereum where
       }
     , bci_defaultApiUrl = "http://127.0.0.1:8545/"
     , bci_defaultBeginBlock = 0
-    , bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+    , bci_defaultEndBlock = -100 -- conservative rewrite limit
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy EthereumBlock))
       [ schemaOf (Proxy :: Proxy EthereumAction)
