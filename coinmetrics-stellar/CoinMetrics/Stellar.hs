@@ -37,11 +37,12 @@ import System.IO.Unsafe(unsafeInterleaveIO)
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
 import CoinMetrics.Util
+import CoinMetrics.WebCache
 import Hanalytics.Schema
 
 -- | Stellar connector.
 data Stellar = Stellar
-  { stellar_httpManager :: !H.Manager
+  { stellar_webCache :: !WebCache
   , stellar_httpRequest :: !H.Request
   , stellar_checkpointCacheVar :: {-# UNPACK #-} !(TVar [(Int64, [StellarLedger])])
   , stellar_checkpointCacheSize :: {-# UNPACK #-} !Int
@@ -835,11 +836,11 @@ instance Default (V.Vector a) where
 
 stellarRequest :: Stellar -> T.Text -> IO BL.ByteString
 stellarRequest Stellar
-  { stellar_httpManager = httpManager
+  { stellar_webCache = webCache
   , stellar_httpRequest = httpRequest
-  } path = tryWithRepeat $ H.responseBody <$> H.httpLbs httpRequest
+  } path = requestWebCache webCache httpRequest
   { H.path = H.path httpRequest <> T.encodeUtf8 path
-  } httpManager
+  } $ \body -> return (True, body)
 
 withCheckpointCache :: Stellar -> Int64 -> IO [StellarLedger]
 withCheckpointCache stellar@Stellar
@@ -878,9 +879,10 @@ instance BlockChain Stellar where
       , bcp_httpRequest = httpRequest
       , bcp_threadsCount = threadsCount
       } -> do
+      webCache <- initWebCache httpManager
       checkpointCacheVar <- newTVarIO []
       return Stellar
-        { stellar_httpManager = httpManager
+        { stellar_webCache = webCache
         , stellar_httpRequest = httpRequest
         , stellar_checkpointCacheVar = checkpointCacheVar
         , stellar_checkpointCacheSize = 2 + threadsCount `quot` 64
