@@ -20,12 +20,15 @@ library
     , bytestring
     , cereal
     , coinmetrics
+    , cryptonite
     , data-default
     , hanalytics-base
     , http-client
+    , memory
     , stm
     , text
     , time
+    , unordered-containers
     , vector
     , zlib
   ghc-options:         -Wall

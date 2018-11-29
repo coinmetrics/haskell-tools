@@ -23,6 +23,7 @@ import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as BS
 import qualified Data.ByteString.Lazy as BL
+import Data.Hashable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Tagged as Tag
 import qualified Data.Text as T
@@ -41,7 +42,7 @@ import Hanalytics.Schema.Postgres
 -- | ByteString which serializes to JSON as hex string.
 newtype HexString = HexString
   { unHexString :: BS.ShortByteString
-  } deriving (Semigroup, Monoid)
+  } deriving (Eq, Ord, Semigroup, Monoid, Hashable)
 instance SchemableField HexString where
   schemaFieldTypeOf _ = SchemaFieldType_bytes
 instance A.HasAvroSchema HexString where

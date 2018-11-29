@@ -13,13 +13,16 @@ module CoinMetrics.Stellar
 import qualified Codec.Compression.GZip as GZip
 import Control.Concurrent.STM
 import Control.Monad
+import qualified Crypto.Hash as C
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import Data.Bits
+import qualified Data.ByteArray as BA
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Short as BS
 import Data.Default
+import qualified Data.HashMap.Strict as HM
 import Data.Int
 import Data.Proxy
 import qualified Data.Serialize as S
@@ -63,11 +66,14 @@ instance IsBlock StellarLedger where
   getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . sl_closeTime
 
 data StellarTransaction = StellarTransaction
-  { st_sourceAccount :: {-# UNPACK #-} !HexString
+  { st_hash :: {-# UNPACK #-} !HexString
+  , st_sourceAccount :: {-# UNPACK #-} !HexString
   , st_fee :: {-# UNPACK #-} !Int64
   , st_seqNum :: {-# UNPACK #-} !Int64
   , st_timeBoundsMinTime :: !(Maybe Int64)
   , st_timeBoundsMaxTime :: !(Maybe Int64)
+  , st_feeCharged :: {-# UNPACK #-} !Int64
+  , st_resultCode :: {-# UNPACK #-} !Int64
   , st_operations :: !(V.Vector StellarOperation)
   }
 
@@ -103,6 +109,8 @@ data StellarOperation = StellarOperation
   , so_setFlags :: !(Maybe Int64)
   , so_startingBalance :: !(Maybe Int64)
   , so_trustor :: !(Maybe HexString)
+  , so_resultCode :: !(Maybe Int64)
+  , so_result :: !(Maybe Int64)
   }
 
 instance Default StellarOperation
@@ -124,22 +132,110 @@ pattern ASSET_TYPE_NATIVE = 0
 pattern ASSET_TYPE_CREDIT_ALPHANUM4 = 1
 pattern ASSET_TYPE_CREDIT_ALPHANUM12 = 2
 
+pattern TX_SUCCESS = 0
+pattern TX_FAILED = -1
+-- pattern TX_TOO_EARLY = -2
+-- pattern TX_TOO_LATE = -3
+-- pattern TX_MISSING_OPERATION = -4
+-- pattern TX_BAD_SEQ = -5
+-- pattern TX_BAD_AUTH = -6
+-- pattern TX_INSUFFICIENT_BALANCE = -7
+-- pattern TX_NO_ACCOUNT = -8
+-- pattern TX_INSUFFICIENT_FEE = -9
+-- pattern TX_BAD_AUTH_EXTRA = -10
+-- pattern TX_INTERNAL_ERROR = -11
+
+pattern OP_INNER = 0
+-- pattern OP_BAD_AUTH = -1
+-- pattern OP_NO_ACCOUNT = -2
+-- pattern OP_NOT_SUPPORTED = -3
+
+pattern PATH_PAYMENT_SUCCESS = 0
+-- pattern PATH_PAYMENT_MALFORMED = -1
+-- pattern PATH_PAYMENT_UNDERFUNDED = -2
+-- pattern PATH_PAYMENT_SRC_NO_TRUST = -3
+-- pattern PATH_PAYMENT_SRC_NOT_AUTHORIZED = -4
+-- pattern PATH_PAYMENT_NO_DESTINATION = -5
+-- pattern PATH_PAYMENT_NO_TRUST = -6
+-- pattern PATH_PAYMENT_NOT_AUTHORIZED = -7
+-- pattern PATH_PAYMENT_LINE_FULL = -8
+pattern PATH_PAYMENT_NO_ISSUER = -9
+-- pattern PATH_PAYMENT_TOO_FEW_OFFERS = -10
+-- pattern PATH_PAYMENT_OFFER_CROSS_SELF = -11
+-- pattern PATH_PAYMENT_OVER_SENDMAX = -12
+
+pattern MANAGE_OFFER_SUCCESS = 0
+-- pattern MANAGE_OFFER_MALFORMED = -1
+-- pattern MANAGE_OFFER_SELL_NO_TRUST = -2
+-- pattern MANAGE_OFFER_BUY_NO_TRUST = -3
+-- pattern MANAGE_OFFER_SELL_NOT_AUTHORIZED = -4
+-- pattern MANAGE_OFFER_BUY_NOT_AUTHORIZED = -5
+-- pattern MANAGE_OFFER_LINE_FULL = -6
+-- pattern MANAGE_OFFER_UNDERFUNDED = -7
+-- pattern MANAGE_OFFER_CROSS_SELF = -8
+-- pattern MANAGE_OFFER_SELL_NO_ISSUER = -9
+-- pattern MANAGE_OFFER_BUY_NO_ISSUER = -10
+-- pattern MANAGE_OFFER_NOT_FOUND = -11
+-- pattern MANAGE_OFFER_LOW_RESERVE = -12
+
+pattern ACCOUNT_MERGE_SUCCESS = 0
+-- pattern ACCOUNT_MERGE_MALFORMED = -1
+-- pattern ACCOUNT_MERGE_NO_ACCOUNT = -2
+-- pattern ACCOUNT_MERGE_IMMUTABLE_SET = -3
+-- pattern ACCOUNT_MERGE_HAS_SUB_ENTRIES = -4
+-- pattern ACCOUNT_MERGE_SEQNUM_TOO_FAR = -5
+-- pattern ACCOUNT_MERGE_DEST_FULL = -6
+
+pattern INFLATION_SUCCESS = 0
+-- pattern INFLATION_NOT_TIME = -1
+
+pattern MANAGE_OFFER_CREATED = 0
+pattern MANAGE_OFFER_UPDATED = 1
+-- pattern MANAGE_OFFER_DELETED = 2
+
+-- pattern ENVELOPE_TYPE_SCP = 1
+pattern ENVELOPE_TYPE_TX = 2
+-- pattern ENVELOPE_TYPE_AUTH = 3
+
+
 data StellarAsset = StellarAsset
   { sa_assetCode :: !(Maybe T.Text)
   , sa_issuer :: !(Maybe HexString)
   }
 
-genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarAsset]
+data TransactionResult = TransactionResult
+  { tr_feeCharded :: {-# UNPACK #-} !Int64
+  , tr_code :: {-# UNPACK #-} !Int64
+  , tr_results :: !(V.Vector OperationResult)
+  }
 
-parseLedgers :: BL.ByteString -> BL.ByteString -> IO [StellarLedger]
-parseLedgers ledgersBytes transactionsBytes = do
+data OperationResult = OperationResult
+  { or_code :: {-# UNPACK #-} !Int64
+  , or_type :: !(Maybe Int64)
+  , or_result :: !(Maybe OpResult)
+  }
+
+type OpResult = Int64
+
+genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarAsset, ''TransactionResult, ''OperationResult]
+
+
+parseLedgers :: BL.ByteString -> BL.ByteString -> BL.ByteString -> IO [StellarLedger]
+parseLedgers ledgersBytes transactionsBytes resultsBytes = do
   ledgers <- either fail return $ S.runGetLazy (getSequence getLedgerHeaderHistoryEntry) ledgersBytes
   transactions <- either fail return $ S.runGetLazy (getSequence getTransactionHistoryEntry) transactionsBytes
-  return $ flip map ledgers $ \ledger@StellarLedger
+  results <- either fail return $ S.runGetLazy (getSequence getTransactionHistoryResultEntry) resultsBytes
+  forM ledgers $ \ledger@StellarLedger
     { sl_sequence = ledgerSeq
-    } -> ledger
-    { sl_transactions = mconcat $ map snd $ filter ((== ledgerSeq) . fst) transactions
-    }
+    } -> do
+    let
+      ledgerTransactions = mconcat $ map snd $ filter ((== ledgerSeq) . fst) transactions
+      ledgerResults = HM.fromList $ V.toList $ mconcat $ map snd $ filter ((== ledgerSeq) . fst) results
+    unless (V.length ledgerTransactions == HM.size ledgerResults) $ fail "transactions do not correspond to results"
+    ledgerTransactionsWithResults <- forM ledgerTransactions $ \tx@(flip HM.lookup ledgerResults . st_hash -> Just result) -> combineTransactionAndResult tx result
+    return ledger
+      { sl_transactions = ledgerTransactionsWithResults
+      }
   where
     getLedgerHeaderHistoryEntry :: S.Get StellarLedger
     getLedgerHeaderHistoryEntry = do
@@ -155,7 +251,7 @@ parseLedgers ledgersBytes transactionsBytes = do
     getLedgerHeader = do
       _ledgerVersion <- S.getWord32be
       _previousLedgerHash <- getHash
-      scpValue <- getStellarValue
+      (_txSetHash, closeTime) <- getStellarValue
       _txSetResultHash <- getHash
       _bucketListHash <- getHash
       ledgerSeq <- fromIntegral <$> S.getWord32be
@@ -171,7 +267,7 @@ parseLedgers ledgersBytes transactionsBytes = do
       return StellarLedger
         { sl_sequence = ledgerSeq
         , sl_hash = mempty
-        , sl_closeTime = scpValue
+        , sl_closeTime = closeTime
         , sl_totalCoins = totalCoins
         , sl_feePool = feePool
         , sl_inflationSeq = inflationSeq
@@ -190,16 +286,76 @@ parseLedgers ledgersBytes transactionsBytes = do
       getExt
       return (ledgerSeq, txSet)
 
+    getTransactionHistoryResultEntry :: S.Get (Int64, V.Vector (HexString, TransactionResult))
+    getTransactionHistoryResultEntry = do
+      S.skip 4
+      ledgerSeq <- fromIntegral <$> S.getWord32be
+      txResultSet <- getTransactionResultSet
+      getExt
+      return (ledgerSeq, txResultSet)
+
+    combineTransactionAndResult :: StellarTransaction -> TransactionResult -> IO StellarTransaction
+    combineTransactionAndResult transaction@StellarTransaction
+      { st_operations = operations
+      } TransactionResult
+      { tr_feeCharded = feeCharged
+      , tr_code = txResultCode
+      , tr_results = opResults
+      } = do
+      unless (V.length operations == V.length opResults) $ fail "operations do not correspond to results"
+      combinedOperations <- V.zipWithM combineOperationAndResult operations opResults
+      return transaction
+        { st_feeCharged = feeCharged
+        , st_resultCode = txResultCode
+        , st_operations = combinedOperations
+        }
+
+    combineOperationAndResult :: StellarOperation -> OperationResult -> IO StellarOperation
+    combineOperationAndResult operation@StellarOperation
+      { so_type = opType
+      } OperationResult
+      { or_code = opResultCode
+      , or_type = opResultOpType
+      , or_result = opResultResult
+      } = do
+      -- allow operation be "create passive offer" and result be "manage offer"; it happens quite frequently
+      let
+        opTypesEqual ot rot = (ot == rot) || (ot == SOT_CREATE_PASSIVE_OFFER && rot == SOT_MANAGE_OFFER)
+        in unless (maybe True (opTypesEqual opType) opResultOpType) $ fail "operation does not correspond to result"
+      return operation
+        { so_resultCode = Just opResultCode
+        , so_result = opResultResult
+        }
+
     getTransactionSet :: S.Get (V.Vector StellarTransaction)
     getTransactionSet = do
       _previousLedgerHash <- getHash
       getArray getTransactionEnvelope
 
+    getTransactionResultSet :: S.Get (V.Vector (HexString, TransactionResult))
+    getTransactionResultSet = getArray getTransactionResultPair
+
+    getTransactionResultPair :: S.Get (HexString, TransactionResult)
+    getTransactionResultPair = do
+      txHash <- getHash
+      txResult <- getTransactionResult
+      return (txHash, txResult)
+
     getTransactionEnvelope :: S.Get StellarTransaction
     getTransactionEnvelope = do
-      tx <- getTransaction
+      (txBytes, tx) <- alsoBytes getTransaction
+      -- calculate hash
+      let
+        txHash = let
+          payload = S.runPut $ do -- this is TransactionSignaturePayload struct
+            S.putByteString productionNetworkId
+            S.putWord32be ENVELOPE_TYPE_TX
+            S.putByteString txBytes
+          in HexString $ BS.toShort $ BA.convert (C.hash payload :: C.Digest C.SHA256)
       _signatures <- getArray getDecoratedSignature
       return tx
+        { st_hash = txHash
+        }
 
     getTransaction :: S.Get StellarTransaction
     getTransaction = do
@@ -211,12 +367,29 @@ parseLedgers ledgersBytes transactionsBytes = do
       operations <- getArray getOperation
       getExt
       return StellarTransaction
-        { st_sourceAccount = sourceAccount
+        { st_hash = mempty
+        , st_sourceAccount = sourceAccount
         , st_fee = fee
         , st_seqNum = seqNum
         , st_timeBoundsMinTime = fst <$> timeBounds
         , st_timeBoundsMaxTime = snd <$> timeBounds
+        , st_feeCharged = 0
+        , st_resultCode = -0x7fffffff
         , st_operations = operations
+        }
+
+    getTransactionResult :: S.Get TransactionResult
+    getTransactionResult = do
+      feeCharged <- S.getInt64be
+      code <- fromIntegral <$> S.getInt32be
+      results <- if code == TX_SUCCESS || code == TX_FAILED
+        then getArray getOperationResult
+        else return mempty
+      getExt
+      return TransactionResult
+        { tr_feeCharded = feeCharged
+        , tr_code = code
+        , tr_results = results
         }
 
     getOperation :: S.Get StellarOperation
@@ -376,6 +549,123 @@ parseLedgers ledgersBytes transactionsBytes = do
         { so_bumpTo = Just bumpTo
         }
 
+    getOperationResult :: S.Get OperationResult
+    getOperationResult = do
+      code <- S.getInt32be
+      case code of
+        OP_INNER -> do
+          opType <- getOperationType
+          opResult <- case opType of
+            SOT_CREATE_ACCOUNT -> getCreateAccountResult
+            SOT_PAYMENT -> getPaymentResult
+            SOT_PATH_PAYMENT -> getPathPaymentResult
+            SOT_MANAGE_OFFER -> getManageOfferResult
+            SOT_CREATE_PASSIVE_OFFER -> getManageOfferResult
+            SOT_SET_OPTIONS -> getSetOptionsResult
+            SOT_CHANGE_TRUST -> getChangeTrustResult
+            SOT_ALLOW_TRUST -> getAllowTrustResult
+            SOT_ACCOUNT_MERGE -> getAccountMergeResult
+            SOT_INFLATION -> getInflationResult
+            SOT_MANAGE_DATA -> getManageDataResult
+            SOT_BUMP_SEQUENCE -> getBumpSequenceResult
+            _ -> fail "wrong op type"
+          return OperationResult
+            { or_code = fromIntegral code
+            , or_type = Just opType
+            , or_result = Just opResult
+            }
+        _ -> return OperationResult
+          { or_code = fromIntegral code
+          , or_type = Nothing
+          , or_result = Nothing
+          }
+
+    getCreateAccountResult :: S.Get OpResult
+    getCreateAccountResult = getOpResult
+
+    getPaymentResult :: S.Get OpResult
+    getPaymentResult = getOpResult
+
+    getPathPaymentResult :: S.Get OpResult
+    getPathPaymentResult = do
+      resultCode <- getOpResult
+      case resultCode of
+        PATH_PAYMENT_SUCCESS -> do
+          void $ getArray getClaimOfferAtom
+          void getSimplePaymentResult
+        PATH_PAYMENT_NO_ISSUER -> do
+          void getAsset
+        _ -> return ()
+      return resultCode
+
+    getManageOfferResult :: S.Get OpResult
+    getManageOfferResult = do
+      resultCode <- getOpResult
+      case resultCode of
+        MANAGE_OFFER_SUCCESS -> getManageOfferSuccessResult
+        _ -> return ()
+      return resultCode
+
+    getSetOptionsResult :: S.Get OpResult
+    getSetOptionsResult = getOpResult
+
+    getChangeTrustResult :: S.Get OpResult
+    getChangeTrustResult = getOpResult
+
+    getAllowTrustResult :: S.Get OpResult
+    getAllowTrustResult = getOpResult
+
+    getAccountMergeResult :: S.Get OpResult
+    getAccountMergeResult = do
+      resultCode <- getOpResult
+      case resultCode of
+        ACCOUNT_MERGE_SUCCESS -> do
+          _sourceAccountBalance <- S.getInt64be
+          return ()
+        _ -> return ()
+      return resultCode
+
+    getInflationResult :: S.Get OpResult
+    getInflationResult = do
+      resultCode <- getOpResult
+      case resultCode of
+        INFLATION_SUCCESS -> void $ getArray getInflationPayout
+        _ -> return ()
+      return resultCode
+
+    getManageDataResult :: S.Get OpResult
+    getManageDataResult = getOpResult
+
+    getBumpSequenceResult :: S.Get OpResult
+    getBumpSequenceResult = getOpResult
+
+
+    getManageOfferSuccessResult :: S.Get ()
+    getManageOfferSuccessResult = do
+      void $ getArray getClaimOfferAtom
+      effect <- S.getInt32be
+      case effect of
+        MANAGE_OFFER_CREATED -> getOfferEntry
+        MANAGE_OFFER_UPDATED -> getOfferEntry
+        _ -> return ()
+      return ()
+
+    getOpResult :: S.Get OpResult
+    getOpResult = fromIntegral <$> S.getInt32be
+
+    getSimplePaymentResult :: S.Get ()
+    getSimplePaymentResult = do
+      _destination <- getAccountID
+      _asset <- getAsset
+      _amount <- S.getInt64be
+      return ()
+
+    getInflationPayout :: S.Get ()
+    getInflationPayout = do
+      _destination <- getAccountID
+      _amount <- S.getInt64be
+      return ()
+
     getSigner :: S.Get ()
     getSigner = do
       _key <- getSignerKey
@@ -387,13 +677,35 @@ parseLedgers ledgersBytes transactionsBytes = do
       _type <- S.getWord32be
       S.skip 32
 
-    getStellarValue :: S.Get Int64
+    getClaimOfferAtom :: S.Get ()
+    getClaimOfferAtom = do
+      _accountID <- getAccountID
+      _offerID <- S.getWord64be
+      _assetSold <- getAsset
+      _amountSold <- S.getInt64be
+      _assetBought <- getAsset
+      _amountBought <- S.getInt64be
+      return ()
+
+    getOfferEntry :: S.Get ()
+    getOfferEntry = do
+      _sellerID <- getAccountID
+      _offerID <- S.getWord64be
+      _selling <- getAsset
+      _buying <- getAsset
+      _amount <- S.getWord64be
+      _price <- getPrice
+      _flags <- S.getWord32be
+      getExt
+      return ()
+
+    getStellarValue :: S.Get (HexString, Int64)
     getStellarValue = do
-      _txSetHash <- getHash
+      txSetHash <- getHash
       closeTime <- fromIntegral <$> S.getWord64be
       _upgrades <- getArray getOpaque
       getExt
-      return closeTime
+      return (txSetHash, closeTime)
 
     getAccountID :: S.Get HexString
     getAccountID = getPublicKey
@@ -507,6 +819,17 @@ parseLedgers ledgersBytes transactionsBytes = do
     trimZeros :: B.ByteString -> B.ByteString
     trimZeros = fst . B.spanEnd (== 0)
 
+    alsoBytes :: S.Get a -> S.Get (B.ByteString, a)
+    alsoBytes m = do
+      (len, r) <- S.lookAhead $ do
+        i <- S.bytesRead
+        r <- m
+        j <- S.bytesRead
+        return (j - i, r)
+      bytes <- S.getBytes len
+      return (bytes, r)
+
+
 instance Default (V.Vector a) where
   def = V.empty
 
@@ -537,12 +860,14 @@ withCheckpointCache stellar@Stellar
     io = do
       ledgersBytes <- GZip.decompress <$> stellarRequest stellar ledgerPath
       transactionsBytes <- GZip.decompress <$> stellarRequest stellar transactionsPath
-      parseLedgers ledgersBytes transactionsBytes
+      resultsBytes <- GZip.decompress <$> stellarRequest stellar resultsPath
+      parseLedgers ledgersBytes transactionsBytes resultsBytes
     sequenceHex = showHex checkpointSequence ""
     sequenceHexPadded@[h0, h1, h2, h3, h4, h5, _h6, _h7]
       = replicate (max 0 (8 - length sequenceHex)) '0' ++ sequenceHex
     ledgerPath = "/ledger/" <> T.pack [h0, h1, '/', h2, h3, '/', h4, h5] <> "/ledger-" <> T.pack sequenceHexPadded <> ".xdr.gz"
     transactionsPath = "/transactions/" <> T.pack [h0, h1, '/', h2, h3, '/', h4, h5] <> "/transactions-" <> T.pack sequenceHexPadded <> ".xdr.gz"
+    resultsPath = "/results/" <> T.pack [h0, h1, '/', h2, h3, '/', h4, h5] <> "/results-" <> T.pack sequenceHexPadded <> ".xdr.gz"
 
 instance BlockChain Stellar where
   type Block Stellar = StellarLedger
@@ -584,3 +909,8 @@ instance BlockChain Stellar where
       _ -> fail "ledger cache error"
 
   blockHeightFieldName _ = "sequence"
+
+
+-- Only mainnet is supported for now.
+productionNetworkId :: B.ByteString
+productionNetworkId = BA.convert (C.hash ("Public Global Stellar Network ; September 2015" :: B.ByteString) :: C.Digest C.SHA256)
