@@ -834,11 +834,11 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
 instance Default (V.Vector a) where
   def = V.empty
 
-stellarRequest :: Stellar -> T.Text -> IO BL.ByteString
+stellarRequest :: Stellar -> Bool -> T.Text -> IO BL.ByteString
 stellarRequest Stellar
   { stellar_webCache = webCache
   , stellar_httpRequest = httpRequest
-  } path = requestWebCache webCache httpRequest
+  } skipCache path = tryWithRepeat $ requestWebCache webCache skipCache httpRequest
   { H.path = H.path httpRequest <> T.encodeUtf8 path
   } $ \body -> return (True, body)
 
@@ -859,9 +859,9 @@ withCheckpointCache stellar@Stellar
         return lazyLedgers
   where
     io = do
-      ledgersBytes <- GZip.decompress <$> stellarRequest stellar ledgerPath
-      transactionsBytes <- GZip.decompress <$> stellarRequest stellar transactionsPath
-      resultsBytes <- GZip.decompress <$> stellarRequest stellar resultsPath
+      ledgersBytes <- GZip.decompress <$> stellarRequest stellar False ledgerPath
+      transactionsBytes <- GZip.decompress <$> stellarRequest stellar False transactionsPath
+      resultsBytes <- GZip.decompress <$> stellarRequest stellar False resultsPath
       parseLedgers ledgersBytes transactionsBytes resultsBytes
     sequenceHex = showHex checkpointSequence ""
     sequenceHexPadded@[h0, h1, h2, h3, h4, h5, _h6, _h7]
@@ -901,7 +901,7 @@ instance BlockChain Stellar where
 
   getCurrentBlockHeight stellar = either fail return
     . (J.parseEither (J..: "currentLedger") <=< J.eitherDecode)
-    =<< stellarRequest stellar "/.well-known/stellar-history.json"
+    =<< stellarRequest stellar True "/.well-known/stellar-history.json"
 
   getBlockByHeight stellar blockHeight = do
     ledgers <- filter ((== blockHeight) . sl_sequence) <$>

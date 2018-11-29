@@ -45,13 +45,13 @@ data Ripple
     { ripple_jsonRpc :: !JsonRpc
     }
 
-rippleRequest :: J.FromJSON r => Ripple -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> T.Text -> J.Object -> IO r
-rippleRequest ripple dataPath dataParams rpcMethod rpcParams = case ripple of
+rippleRequest :: J.FromJSON r => Ripple -> Bool -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> T.Text -> J.Object -> IO r
+rippleRequest ripple skipCache dataPath dataParams rpcMethod rpcParams = case ripple of
   RippleDataApi
     { ripple_webCache = webCache
     , ripple_httpRequest = httpRequest
     } -> tryWithRepeat $ do
-    requestWebCache webCache (H.setQueryString dataParams httpRequest
+    requestWebCache webCache skipCache (H.setQueryString dataParams httpRequest
       { H.path = T.encodeUtf8 dataPath
       }) $ \body -> do
       case J.eitherDecode body of
@@ -188,11 +188,11 @@ instance BlockChain Ripple where
 
   getCurrentBlockHeight ripple = either fail return
     . J.parseEither (decodeMaybeFromText <=< (J..: "ledger_index") <=< (J..: "ledger"))
-    =<< rippleRequest ripple "/v2/ledgers" [] "ledger" [("ledger_index", J.String "validated")]
+    =<< rippleRequest ripple True "/v2/ledgers" [] "ledger" [("ledger_index", J.String "validated")]
 
   getBlockByHeight ripple blockHeight = do
     eitherLedger <- J.parseEither (J..: "ledger")
-      <$> rippleRequest ripple
+      <$> rippleRequest ripple False
         -- Data API path and params
         ("/v2/ledgers/" <> T.pack (show blockHeight))
         [ ("transactions", Just "true")
@@ -211,7 +211,7 @@ instance BlockChain Ripple where
         -- fallback to retrieving transactions individually
         preLedger <- either fail return
           . J.parseEither (J..: "ledger")
-          =<< rippleRequest ripple
+          =<< rippleRequest ripple False
             -- Data API path and params
             ("/v2/ledgers/" <> T.pack (show blockHeight))
             [ ("transactions", Just "true")
@@ -224,7 +224,7 @@ instance BlockChain Ripple where
         transactionsHashes <- either fail return $ J.parseEither (J..: "transactions") preLedger
         transactions <- forM transactionsHashes $ \transactionHash ->
           either (const J.Null) J.Object . J.parseEither (J..: "transaction")
-            <$> rippleRequest ripple
+            <$> rippleRequest ripple False
               -- Data API path and params
               ("/v2/transactions/" <> transactionHash) []
               -- JSON RPC API path and params
