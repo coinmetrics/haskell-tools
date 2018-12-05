@@ -112,6 +112,12 @@ data StellarOperation = StellarOperation
   , so_trustor :: !(Maybe HexString)
   , so_resultCode :: !(Maybe Int64)
   , so_result :: !(Maybe Int64)
+  , so_inflationPayouts :: !(Maybe (V.Vector StellarInflationPayout))
+  }
+
+data StellarInflationPayout = StellarInflationPayout
+  { sip_destination :: !HexString
+  , sip_amount :: !Int64
   }
 
 instance Default StellarOperation
@@ -214,11 +220,14 @@ data OperationResult = OperationResult
   { or_code :: {-# UNPACK #-} !Int64
   , or_type :: !(Maybe Int64)
   , or_result :: !(Maybe OpResult)
+  , or_inflationPayouts :: !(Maybe (V.Vector StellarInflationPayout))
   }
+
+instance Default OperationResult
 
 type OpResult = Int64
 
-genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarAsset, ''TransactionResult, ''OperationResult]
+genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarInflationPayout, ''StellarAsset, ''TransactionResult, ''OperationResult]
 
 
 parseLedgers :: BL.ByteString -> BL.ByteString -> BL.ByteString -> IO [StellarLedger]
@@ -319,6 +328,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       { or_code = opResultCode
       , or_type = opResultOpType
       , or_result = opResultResult
+      , or_inflationPayouts = opResultInflationPayouts
       } = do
       -- allow operation be "create passive offer" and result be "manage offer"; it happens quite frequently
       let
@@ -327,6 +337,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       return operation
         { so_resultCode = Just opResultCode
         , so_result = opResultResult
+        , so_inflationPayouts = opResultInflationPayouts
         }
 
     getTransactionSet :: S.Get (V.Vector StellarTransaction)
@@ -571,26 +582,25 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
             SOT_MANAGE_DATA -> getManageDataResult
             SOT_BUMP_SEQUENCE -> getBumpSequenceResult
             _ -> fail "wrong op type"
-          return OperationResult
+          return opResult
             { or_code = fromIntegral code
             , or_type = Just opType
-            , or_result = Just opResult
             }
-        _ -> return OperationResult
+        _ -> return def
           { or_code = fromIntegral code
-          , or_type = Nothing
-          , or_result = Nothing
           }
 
-    getCreateAccountResult :: S.Get OpResult
+    getCreateAccountResult :: S.Get OperationResult
     getCreateAccountResult = getOpResult
 
-    getPaymentResult :: S.Get OpResult
+    getPaymentResult :: S.Get OperationResult
     getPaymentResult = getOpResult
 
-    getPathPaymentResult :: S.Get OpResult
+    getPathPaymentResult :: S.Get OperationResult
     getPathPaymentResult = do
-      resultCode <- getOpResult
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
       case resultCode of
         PATH_PAYMENT_SUCCESS -> do
           void $ getArray getClaimOfferAtom
@@ -598,47 +608,56 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         PATH_PAYMENT_NO_ISSUER -> do
           void getAsset
         _ -> return ()
-      return resultCode
+      return opResult
 
-    getManageOfferResult :: S.Get OpResult
+    getManageOfferResult :: S.Get OperationResult
     getManageOfferResult = do
-      resultCode <- getOpResult
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
       case resultCode of
         MANAGE_OFFER_SUCCESS -> getManageOfferSuccessResult
         _ -> return ()
-      return resultCode
+      return opResult
 
-    getSetOptionsResult :: S.Get OpResult
+    getSetOptionsResult :: S.Get OperationResult
     getSetOptionsResult = getOpResult
 
-    getChangeTrustResult :: S.Get OpResult
+    getChangeTrustResult :: S.Get OperationResult
     getChangeTrustResult = getOpResult
 
-    getAllowTrustResult :: S.Get OpResult
+    getAllowTrustResult :: S.Get OperationResult
     getAllowTrustResult = getOpResult
 
-    getAccountMergeResult :: S.Get OpResult
+    getAccountMergeResult :: S.Get OperationResult
     getAccountMergeResult = do
-      resultCode <- getOpResult
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
       case resultCode of
         ACCOUNT_MERGE_SUCCESS -> do
           _sourceAccountBalance <- S.getInt64be
           return ()
         _ -> return ()
-      return resultCode
+      return opResult
 
-    getInflationResult :: S.Get OpResult
+    getInflationResult :: S.Get OperationResult
     getInflationResult = do
-      resultCode <- getOpResult
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
       case resultCode of
-        INFLATION_SUCCESS -> void $ getArray getInflationPayout
-        _ -> return ()
-      return resultCode
+        INFLATION_SUCCESS -> do
+          inflationPayouts <- getArray getInflationPayout
+          return opResult
+            { or_inflationPayouts = Just inflationPayouts
+            }
+        _ -> return opResult
 
-    getManageDataResult :: S.Get OpResult
+    getManageDataResult :: S.Get OperationResult
     getManageDataResult = getOpResult
 
-    getBumpSequenceResult :: S.Get OpResult
+    getBumpSequenceResult :: S.Get OperationResult
     getBumpSequenceResult = getOpResult
 
 
@@ -652,8 +671,12 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         _ -> return ()
       return ()
 
-    getOpResult :: S.Get OpResult
-    getOpResult = fromIntegral <$> S.getInt32be
+    getOpResult :: S.Get OperationResult
+    getOpResult = do
+      opResult <- fromIntegral <$> S.getInt32be
+      return def
+        { or_result = Just opResult
+        }
 
     getSimplePaymentResult :: S.Get ()
     getSimplePaymentResult = do
@@ -662,11 +685,14 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       _amount <- S.getInt64be
       return ()
 
-    getInflationPayout :: S.Get ()
+    getInflationPayout :: S.Get StellarInflationPayout
     getInflationPayout = do
-      _destination <- getAccountID
-      _amount <- S.getInt64be
-      return ()
+      destination <- getAccountID
+      amount <- S.getInt64be
+      return StellarInflationPayout
+        { sip_destination = destination
+        , sip_amount = amount
+        }
 
     getSigner :: S.Get ()
     getSigner = do
@@ -894,6 +920,7 @@ instance BlockChain Stellar where
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy StellarLedger))
       [ schemaOf (Proxy :: Proxy StellarAsset)
+      , schemaOf (Proxy :: Proxy StellarInflationPayout)
       , schemaOf (Proxy :: Proxy StellarOperation)
       , schemaOf (Proxy :: Proxy StellarTransaction)
       ]
