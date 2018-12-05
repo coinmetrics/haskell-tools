@@ -112,7 +112,7 @@ data StellarOperation = StellarOperation
   , so_trustor :: !(Maybe HexString)
   , so_resultCode :: !(Maybe Int64)
   , so_result :: !(Maybe Int64)
-  , so_inflationPayouts :: !(Maybe (V.Vector StellarInflationPayout))
+  , so_inflationPayouts :: !(V.Vector StellarInflationPayout)
   }
 
 data StellarInflationPayout = StellarInflationPayout
@@ -220,7 +220,7 @@ data OperationResult = OperationResult
   { or_code :: {-# UNPACK #-} !Int64
   , or_type :: !(Maybe Int64)
   , or_result :: !(Maybe OpResult)
-  , or_inflationPayouts :: !(Maybe (V.Vector StellarInflationPayout))
+  , or_inflationPayouts :: !(V.Vector StellarInflationPayout)
   }
 
 instance Default OperationResult
@@ -650,7 +650,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         INFLATION_SUCCESS -> do
           inflationPayouts <- getArray getInflationPayout
           return opResult
-            { or_inflationPayouts = Just inflationPayouts
+            { or_inflationPayouts = inflationPayouts
             }
         _ -> return opResult
 
