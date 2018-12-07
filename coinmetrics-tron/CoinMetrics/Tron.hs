@@ -34,6 +34,7 @@ data TronBlock = TronBlock
   { tb_hash :: {-# UNPACK #-} !HexString
   , tb_timestamp :: {-# UNPACK #-} !Int64
   , tb_number :: {-# UNPACK #-} !Int64
+  , tb_witness_address :: {-# UNPACK #-} !HexString
   , tb_transactions :: !(V.Vector TronTransaction)
   }
 
@@ -52,6 +53,7 @@ instance J.FromJSON TronBlockWrapper where
       <$> (fields J..: "blockID")
       <*> (fromMaybe 0 <$> headerData J..:? "timestamp")
       <*> (fromMaybe 0 <$> headerData J..:? "number")
+      <*> (headerData J..: "witness_address")
       <*> (V.map unwrapTronTransaction . fromMaybe mempty <$> fields J..:? "transactions")
 
 data TronTransaction = TronTransaction
