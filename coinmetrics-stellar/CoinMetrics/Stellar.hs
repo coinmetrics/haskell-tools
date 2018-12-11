@@ -112,11 +112,24 @@ data StellarOperation = StellarOperation
   , so_trustor :: !(Maybe HexString)
   , so_resultCode :: !(Maybe Int64)
   , so_result :: !(Maybe Int64)
+  , so_resultDestination :: !(Maybe HexString)
+  , so_resultAsset :: !(Maybe StellarAsset)
+  , so_resultAmount :: !(Maybe Int64)
+  , so_claimOffers :: !(V.Vector StellarClaimOfferAtom)
   , so_inflationPayouts :: !(V.Vector StellarInflationPayout)
   }
 
+data StellarClaimOfferAtom = StellarClaimOfferAtom
+  { scoa_sellerID :: {-# UNPACK #-} !HexString
+  , scoa_offerID :: {-# UNPACK #-} !Int64
+  , scoa_assetSold :: !StellarAsset
+  , scoa_amountSold :: {-# UNPACK #-} !Int64
+  , scoa_assetBought :: !StellarAsset
+  , scoa_amountBought :: {-# UNPACK #-} !Int64
+  }
+
 data StellarInflationPayout = StellarInflationPayout
-  { sip_destination :: !HexString
+  { sip_destination :: {-# UNPACK #-} !HexString
   , sip_amount :: !Int64
   }
 
@@ -220,6 +233,10 @@ data OperationResult = OperationResult
   { or_code :: {-# UNPACK #-} !Int64
   , or_type :: !(Maybe Int64)
   , or_result :: !(Maybe OpResult)
+  , or_destination :: !(Maybe HexString)
+  , or_asset :: !(Maybe StellarAsset)
+  , or_amount :: !(Maybe Int64)
+  , or_claimOffers :: !(V.Vector StellarClaimOfferAtom)
   , or_inflationPayouts :: !(V.Vector StellarInflationPayout)
   }
 
@@ -227,7 +244,7 @@ instance Default OperationResult
 
 type OpResult = Int64
 
-genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarInflationPayout, ''StellarAsset, ''TransactionResult, ''OperationResult]
+genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarClaimOfferAtom, ''StellarInflationPayout, ''StellarAsset, ''TransactionResult, ''OperationResult]
 
 
 parseLedgers :: BL.ByteString -> BL.ByteString -> BL.ByteString -> IO [StellarLedger]
@@ -328,6 +345,10 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       { or_code = opResultCode
       , or_type = opResultOpType
       , or_result = opResultResult
+      , or_destination = opResultDestination
+      , or_asset = opResultAsset
+      , or_amount = opResultAmount
+      , or_claimOffers = opResultClaimOffers
       , or_inflationPayouts = opResultInflationPayouts
       } = do
       -- allow operation be "create passive offer" and result be "manage offer"; it happens quite frequently
@@ -337,6 +358,10 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       return operation
         { so_resultCode = Just opResultCode
         , so_result = opResultResult
+        , so_resultDestination = opResultDestination
+        , so_resultAsset = opResultAsset
+        , so_resultAmount = opResultAmount
+        , so_claimOffers = opResultClaimOffers
         , so_inflationPayouts = opResultInflationPayouts
         }
 
@@ -603,12 +628,18 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         } <- getOpResult
       case resultCode of
         PATH_PAYMENT_SUCCESS -> do
-          void $ getArray getClaimOfferAtom
-          void getSimplePaymentResult
+          claimOffers <- getArray getClaimOfferAtom
+          (destination, asset, amount) <- getSimplePaymentResult
+          return opResult
+            { or_destination = Just destination
+            , or_asset = Just asset
+            , or_amount = Just amount
+            , or_claimOffers = claimOffers
+            }
         PATH_PAYMENT_NO_ISSUER -> do
           void getAsset
-        _ -> return ()
-      return opResult
+          return opResult
+        _ -> return opResult
 
     getManageOfferResult :: S.Get OperationResult
     getManageOfferResult = do
@@ -678,12 +709,12 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         { or_result = Just opResult
         }
 
-    getSimplePaymentResult :: S.Get ()
+    getSimplePaymentResult :: S.Get (HexString, StellarAsset, Int64)
     getSimplePaymentResult = do
-      _destination <- getAccountID
-      _asset <- getAsset
-      _amount <- S.getInt64be
-      return ()
+      destination <- getAccountID
+      asset <- getAsset
+      amount <- S.getInt64be
+      return (destination, asset, amount)
 
     getInflationPayout :: S.Get StellarInflationPayout
     getInflationPayout = do
@@ -705,15 +736,14 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       _type <- S.getWord32be
       S.skip 32
 
-    getClaimOfferAtom :: S.Get ()
-    getClaimOfferAtom = do
-      _accountID <- getAccountID
-      _offerID <- S.getWord64be
-      _assetSold <- getAsset
-      _amountSold <- S.getInt64be
-      _assetBought <- getAsset
-      _amountBought <- S.getInt64be
-      return ()
+    getClaimOfferAtom :: S.Get StellarClaimOfferAtom
+    getClaimOfferAtom = StellarClaimOfferAtom
+      <$> getAccountID
+      <*> S.getInt64be
+      <*> getAsset
+      <*> S.getInt64be
+      <*> getAsset
+      <*> S.getInt64be
 
     getOfferEntry :: S.Get ()
     getOfferEntry = do
@@ -921,6 +951,7 @@ instance BlockChain Stellar where
       (schemaOf (Proxy :: Proxy StellarLedger))
       [ schemaOf (Proxy :: Proxy StellarAsset)
       , schemaOf (Proxy :: Proxy StellarInflationPayout)
+      , schemaOf (Proxy :: Proxy StellarClaimOfferAtom)
       , schemaOf (Proxy :: Proxy StellarOperation)
       , schemaOf (Proxy :: Proxy StellarTransaction)
       ]
