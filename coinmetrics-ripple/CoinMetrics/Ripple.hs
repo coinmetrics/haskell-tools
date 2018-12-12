@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Ripple
   ( Ripple(..)
@@ -94,12 +94,15 @@ data RippleTransaction = RippleTransaction
   , rt_date :: !(Maybe Int64)
   , rt_account :: !T.Text
   , rt_fee :: {-# UNPACK #-} !Scientific
+  , rt_sequence :: {-# UNPACK #-} !Int64
+  , rt_accountTxnId :: !(Maybe HexString)
+  , rt_flags :: {-# UNPACK #-} !Int64
+  , rt_lastLedgerSequence :: !(Maybe Int64)
   , rt_type :: !T.Text
-  , rt_amount :: !(Maybe Scientific)
-  , rt_currency :: !(Maybe T.Text)
-  , rt_issuer :: !(Maybe T.Text)
+  , rt_amount :: !(Maybe RippleCurrencyAmount)
   , rt_destination :: !(Maybe T.Text)
   , rt_result :: !T.Text
+  , rt_deliveredAmount :: !(Maybe RippleCurrencyAmount)
   }
 
 newtype RippleTransactionWrapper = RippleTransactionWrapper
@@ -109,32 +112,44 @@ newtype RippleTransactionWrapper = RippleTransactionWrapper
 instance J.FromJSON RippleTransactionWrapper where
   parseJSON = J.withObject "ripple transaction" $ \fields -> do
     tx <- fromMaybe fields <$> fields J..:? "tx"
-    maybeAmountValue <- tx J..:? "Amount"
-    (maybeAmount, maybeCurrency, maybeIssuer) <-
-      case maybeAmountValue of
-        Just amountValue -> case amountValue of
-          J.String amountStr -> do
-            amount <- decodeAmount amountStr
-            return (Just amount, Nothing, Nothing)
-          J.Object amountObject -> do
-            amount <- decodeAmount =<< amountObject J..: "value"
-            currency <- amountObject J..: "currency"
-            issuer <- amountObject J..: "issuer"
-            return (Just amount, Just currency, Just issuer)
-          _ -> fail "wrong amount"
-        Nothing -> return (Nothing, Nothing, Nothing)
     meta <- maybe (fields J..: "metaData") return =<< fields J..:? "meta"
     fmap RippleTransactionWrapper $ RippleTransaction
       <$> (fields J..: "hash")
       <*> (traverse decodeDate =<< fields J..:? "date")
       <*> (tx J..: "Account")
       <*> (decodeAmount =<< tx J..: "Fee")
+      <*> (tx J..: "Sequence")
+      <*> (tx J..:? "AccountTxnID")
+      <*> (fromMaybe 0 <$> tx J..:? "Flags")
+      <*> (tx J..:? "LastLedgerSequence")
       <*> (tx J..: "TransactionType")
-      <*> return maybeAmount
-      <*> return maybeCurrency
-      <*> return maybeIssuer
+      <*> (traverse decodeCurrencyAmount =<< tx J..:? "Amount")
       <*> (tx J..:? "Destination")
       <*> (meta J..: "TransactionResult")
+      <*> (maybe (return Nothing) decodeDeliveredAmount =<< maybe (meta J..:? "DeliveredAmount") (return . Just) =<< meta J..:? "delivered_amount")
+
+data RippleCurrencyAmount = RippleCurrencyAmount
+  { rca_amount :: {-# UNPACK #-} !Scientific
+  , rca_currency :: !(Maybe T.Text)
+  , rca_issuer :: !(Maybe T.Text)
+  }
+
+decodeCurrencyAmount :: J.Value -> J.Parser RippleCurrencyAmount
+decodeCurrencyAmount = \case
+  J.String amountStr -> RippleCurrencyAmount
+    <$> (decodeAmount amountStr)
+    <*> (return Nothing)
+    <*> (return Nothing)
+  J.Object amountObject -> RippleCurrencyAmount
+    <$> (decodeAmount =<< amountObject J..: "value")
+    <*> (amountObject J..: "currency")
+    <*> (amountObject J..: "issuer")
+  _ -> fail "wrong currency amount"
+
+decodeDeliveredAmount :: J.Value -> J.Parser (Maybe RippleCurrencyAmount)
+decodeDeliveredAmount = \case
+  J.String "unavailable" -> return Nothing
+  value -> Just <$> decodeCurrencyAmount value
 
 decodeAmount :: T.Text -> J.Parser Scientific
 decodeAmount (T.unpack -> t) = case readP_to_S scientificP t of
@@ -147,7 +162,7 @@ decodeDate (T.unpack -> t) = case Time.parseISO8601 t of
   Nothing -> fail $ "wrong date: " <> t
 
 
-genSchemaInstances [''RippleLedger, ''RippleTransaction]
+genSchemaInstances [''RippleLedger, ''RippleTransaction, ''RippleCurrencyAmount]
 -- doesn't work because of Vector (Maybe RippleTransaction)
 -- genFlattenedTypes "index" [| rl_index |] [("ledger", ''RippleLedger), ("transaction", ''RippleTransaction)]
 
@@ -174,7 +189,8 @@ instance BlockChain Ripple where
     , bci_defaultEndBlock = 0 -- history data, no rewrites
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy RippleLedger))
-      [ schemaOf (Proxy :: Proxy RippleTransaction)
+      [ schemaOf (Proxy :: Proxy RippleCurrencyAmount)
+      , schemaOf (Proxy :: Proxy RippleTransaction)
       ]
       "CREATE TABLE \"ripple\" OF \"RippleLedger\" (PRIMARY KEY (\"index\"));"
     -- , bci_flattenSuffixes = ["ledgers", "transactions"]
