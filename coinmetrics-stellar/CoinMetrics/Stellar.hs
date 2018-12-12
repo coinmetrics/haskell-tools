@@ -115,8 +115,10 @@ data StellarOperation = StellarOperation
   , so_resultDestination :: !(Maybe HexString)
   , so_resultAsset :: !(Maybe StellarAsset)
   , so_resultAmount :: !(Maybe Int64)
-  , so_claimOffers :: !(V.Vector StellarClaimOfferAtom)
-  , so_inflationPayouts :: !(V.Vector StellarInflationPayout)
+  , so_resultEffect :: !(Maybe Int64)
+  , so_resultClaimOffers :: !(V.Vector StellarClaimOfferAtom)
+  , so_resultOffer :: !(Maybe StellarOfferEntry)
+  , so_resultInflationPayouts :: !(V.Vector StellarInflationPayout)
   }
 
 data StellarClaimOfferAtom = StellarClaimOfferAtom
@@ -126,6 +128,16 @@ data StellarClaimOfferAtom = StellarClaimOfferAtom
   , scoa_amountSold :: {-# UNPACK #-} !Int64
   , scoa_assetBought :: !StellarAsset
   , scoa_amountBought :: {-# UNPACK #-} !Int64
+  }
+
+data StellarOfferEntry = StellarOfferEntry
+  { soe_sellerID :: {-# UNPACK #-} !HexString
+  , soe_offerID :: {-# UNPACK #-} !Int64
+  , soe_selling :: !StellarAsset
+  , soe_buying :: !StellarAsset
+  , soe_amount :: {-# UNPACK #-} !Int64
+  , soe_price :: {-# UNPACK #-} !Double
+  , soe_flags :: {-# UNPACK #-} !Int64
   }
 
 data StellarInflationPayout = StellarInflationPayout
@@ -236,7 +248,9 @@ data OperationResult = OperationResult
   , or_destination :: !(Maybe HexString)
   , or_asset :: !(Maybe StellarAsset)
   , or_amount :: !(Maybe Int64)
+  , or_effect :: !(Maybe Int64)
   , or_claimOffers :: !(V.Vector StellarClaimOfferAtom)
+  , or_offer :: !(Maybe StellarOfferEntry)
   , or_inflationPayouts :: !(V.Vector StellarInflationPayout)
   }
 
@@ -244,7 +258,7 @@ instance Default OperationResult
 
 type OpResult = Int64
 
-genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarClaimOfferAtom, ''StellarInflationPayout, ''StellarAsset, ''TransactionResult, ''OperationResult]
+genSchemaInstances [''StellarLedger, ''StellarTransaction, ''StellarOperation, ''StellarClaimOfferAtom, ''StellarOfferEntry, ''StellarInflationPayout, ''StellarAsset, ''TransactionResult, ''OperationResult]
 
 
 parseLedgers :: BL.ByteString -> BL.ByteString -> BL.ByteString -> IO [StellarLedger]
@@ -348,7 +362,9 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       , or_destination = opResultDestination
       , or_asset = opResultAsset
       , or_amount = opResultAmount
+      , or_effect = opResultEffect
       , or_claimOffers = opResultClaimOffers
+      , or_offer = opResultOffer
       , or_inflationPayouts = opResultInflationPayouts
       } = do
       -- allow operation be "create passive offer" and result be "manage offer"; it happens quite frequently
@@ -361,8 +377,10 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         , so_resultDestination = opResultDestination
         , so_resultAsset = opResultAsset
         , so_resultAmount = opResultAmount
-        , so_claimOffers = opResultClaimOffers
-        , so_inflationPayouts = opResultInflationPayouts
+        , so_resultEffect = opResultEffect
+        , so_resultClaimOffers = opResultClaimOffers
+        , so_resultOffer = opResultOffer
+        , so_resultInflationPayouts = opResultInflationPayouts
         }
 
     getTransactionSet :: S.Get (V.Vector StellarTransaction)
@@ -647,9 +665,8 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         { or_result = Just resultCode
         } <- getOpResult
       case resultCode of
-        MANAGE_OFFER_SUCCESS -> getManageOfferSuccessResult
-        _ -> return ()
-      return opResult
+        MANAGE_OFFER_SUCCESS -> getManageOfferSuccessResult opResult
+        _ -> return opResult
 
     getSetOptionsResult :: S.Get OperationResult
     getSetOptionsResult = getOpResult
@@ -692,15 +709,19 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
     getBumpSequenceResult = getOpResult
 
 
-    getManageOfferSuccessResult :: S.Get ()
-    getManageOfferSuccessResult = do
-      void $ getArray getClaimOfferAtom
+    getManageOfferSuccessResult :: OperationResult -> S.Get OperationResult
+    getManageOfferSuccessResult opResult = do
+      claimOffers <- getArray getClaimOfferAtom
       effect <- S.getInt32be
-      case effect of
-        MANAGE_OFFER_CREATED -> getOfferEntry
-        MANAGE_OFFER_UPDATED -> getOfferEntry
-        _ -> return ()
-      return ()
+      offer <- case effect of
+        MANAGE_OFFER_CREATED -> Just <$> getOfferEntry
+        MANAGE_OFFER_UPDATED -> Just <$> getOfferEntry
+        _ -> return Nothing
+      return opResult
+        { or_effect = Just $ fromIntegral effect
+        , or_claimOffers = claimOffers
+        , or_offer = offer
+        }
 
     getOpResult :: S.Get OperationResult
     getOpResult = do
@@ -745,17 +766,25 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       <*> getAsset
       <*> S.getInt64be
 
-    getOfferEntry :: S.Get ()
+    getOfferEntry :: S.Get StellarOfferEntry
     getOfferEntry = do
-      _sellerID <- getAccountID
-      _offerID <- S.getWord64be
-      _selling <- getAsset
-      _buying <- getAsset
-      _amount <- S.getWord64be
-      _price <- getPrice
-      _flags <- S.getWord32be
+      sellerID <- getAccountID
+      offerID <- fromIntegral <$> S.getWord64be
+      selling <- getAsset
+      buying <- getAsset
+      amount <- S.getInt64be
+      price <- getPrice
+      flags <- fromIntegral <$> S.getWord32be
       getExt
-      return ()
+      return StellarOfferEntry
+        { soe_sellerID = sellerID
+        , soe_offerID = offerID
+        , soe_selling = selling
+        , soe_buying = buying
+        , soe_amount = amount
+        , soe_price = price
+        , soe_flags = flags
+        }
 
     getStellarValue :: S.Get (HexString, Int64)
     getStellarValue = do
@@ -951,6 +980,7 @@ instance BlockChain Stellar where
       (schemaOf (Proxy :: Proxy StellarLedger))
       [ schemaOf (Proxy :: Proxy StellarAsset)
       , schemaOf (Proxy :: Proxy StellarInflationPayout)
+      , schemaOf (Proxy :: Proxy StellarOfferEntry)
       , schemaOf (Proxy :: Proxy StellarClaimOfferAtom)
       , schemaOf (Proxy :: Proxy StellarOperation)
       , schemaOf (Proxy :: Proxy StellarTransaction)
