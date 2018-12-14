@@ -68,6 +68,7 @@ instance IsBlock StellarLedger where
 
 data StellarTransaction = StellarTransaction
   { st_hash :: {-# UNPACK #-} !HexString
+  , st_applyIndex :: {-# UNPACK #-} !Int64
   , st_sourceAccount :: {-# UNPACK #-} !HexString
   , st_fee :: {-# UNPACK #-} !Int64
   , st_seqNum :: {-# UNPACK #-} !Int64
@@ -271,9 +272,11 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
     } -> do
     let
       ledgerTransactions = mconcat $ map snd $ filter ((== ledgerSeq) . fst) transactions
-      ledgerResults = HM.fromList $ V.toList $ mconcat $ map snd $ filter ((== ledgerSeq) . fst) results
+      ledgerResults = HM.fromList $ zipWith (\i (h, l) -> (h, (i, l))) [0..] $ V.toList $ mconcat $ map snd $ filter ((== ledgerSeq) . fst) results
     unless (V.length ledgerTransactions == HM.size ledgerResults) $ fail "transactions do not correspond to results"
-    ledgerTransactionsWithResults <- forM ledgerTransactions $ \tx@(flip HM.lookup ledgerResults . st_hash -> Just result) -> combineTransactionAndResult tx result
+    ledgerTransactionsWithResults <- forM ledgerTransactions $ \tx@(flip HM.lookup ledgerResults . st_hash -> Just (applyIndex, result)) -> combineTransactionAndResult tx
+      { st_applyIndex = applyIndex
+      } result
     return ledger
       { sl_transactions = ledgerTransactionsWithResults
       }
@@ -424,6 +427,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
       getExt
       return StellarTransaction
         { st_hash = mempty
+        , st_applyIndex = -1
         , st_sourceAccount = sourceAccount
         , st_fee = fee
         , st_seqNum = seqNum
