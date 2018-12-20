@@ -22,7 +22,7 @@ before_install:
 
 install:
 - stack --no-terminal --install-ghc test --only-dependencies
-- gem install --no-ri --no-rdoc fpm
+- gem install --no-document fpm
 
 script:
 - "./.travis-build.sh"
