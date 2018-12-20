@@ -56,6 +56,11 @@ flag stellar
   default:             True
   manual:              True
 
+flag tezos
+  description:         Support Tezos
+  default:             True
+  manual:              True
+
 flag tron
   description:         Support Tron
   default:             True
@@ -110,6 +115,10 @@ library
   if flag(stellar)
     build-depends:       coinmetrics-stellar
     cpp-options:         -DCM_SUPPORT_STELLAR
+
+  if flag(tezos)
+    build-depends:       coinmetrics-tezos
+    cpp-options:         -DCM_SUPPORT_TEZOS
 
   if flag(tron)
     build-depends:       coinmetrics-tron
