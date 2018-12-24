@@ -344,10 +344,10 @@ run Options
     let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
     -- simple multithreaded pipeline
-    blockIndexQueue <- newTBQueueIO (threadsCount * 2)
+    blockIndexQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
     blockIndexQueueEndedVar <- newTVarIO False
     nextBlockIndexVar <- newTVarIO beginBlock
-    blockQueue <- newTBQueueIO (threadsCount * 2)
+    blockQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
 
     -- thread adding indices to index queue
     void $ forkIO $
@@ -441,12 +441,12 @@ run Options
 
     -- simple multithreaded pipeline
     hashQueue <- newTQueueIO
-    transactionQueue <- newTBQueueIO (threadsCount * 2)
+    transactionQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
 
     queueSizeVar <- newTVarIO 0 :: IO (TVar Int)
 
     -- thread working with sync db
-    syncDbActionsQueue <- newTBQueueIO (threadsCount * 2)
+    syncDbActionsQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
     removeFile syncDbFile `catch` (\SomeException {} -> return ())
     void $ forkIO $ DH.withDiskHashRW syncDbFile 82 $ \syncDb -> forever $ do
       action <- atomically $ readTBQueue syncDbActionsQueue

@@ -1,4 +1,4 @@
-resolver: lts-12.16
+resolver: lts-13.0
 
 packages:
 - coinmetrics
@@ -21,9 +21,8 @@ packages:
 
 extra-deps:
 - diskhash-0.0.4.0
-- prometheus-client-1.0.0
 - git: https://github.com/quyse/hanalytics.git
-  commit: b24c3baecab6fa733ff07d1799ff64013ecbe64c
+  commit: d79ecb442fb5ecc84b684272f69fca78d9031eb2
   subdirs:
   - hanalytics-avro
   - hanalytics-base
