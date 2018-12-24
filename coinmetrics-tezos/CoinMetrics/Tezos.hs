@@ -54,7 +54,7 @@ instance J.FromJSON TezosBlockWrapper where
       <*> (fields J..: "hash")
       <*> (decodeDate =<< headerData J..: "timestamp")
       <*> (V.map unwrapTezosOperation . V.concat <$> fields J..: "operations")
-      <*> (V.map unwrapTezosBalanceUpdate <$> metadata J..: "balance_updates")
+      <*> (V.map unwrapTezosBalanceUpdate . fromMaybe V.empty <$> metadata J..:? "balance_updates")
 
 data TezosOperation = TezosOperation
   { to_hash :: !T.Text
