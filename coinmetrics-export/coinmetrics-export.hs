@@ -57,28 +57,7 @@ main = run =<< O.execParser parser where
       (  O.command "export"
         (  O.info
           (O.helper <*> (OptionExportCommand
-            <$> O.strOption
-              (  O.long "api-url"
-              <> O.metavar "API_URL"
-              <> O.value ""
-              <> O.help "Blockchain API url, like \"http://<host>:<port>/\""
-              )
-            <*> O.strOption
-              (  O.long "api-url-username"
-              <> O.metavar "API_URL_USERNAME"
-              <> O.value ""
-              <> O.help "Blockchain API url username for authentication"
-              )
-            <*> O.strOption
-              (  O.long "api-url-password"
-              <> O.metavar "API_URL_PASSWORD"
-              <> O.value ""
-              <> O.help "Blockchain API url password for authentication"
-              )
-            <*> O.switch
-              (  O.long "api-url-insecure"
-              <> O.help "Do not validate HTTPS certificate"
-              )
+            <$> O.some optionApi
             <*> O.strOption
               (  O.long "blockchain"
               <> O.metavar "BLOCKCHAIN"
@@ -164,6 +143,28 @@ main = run =<< O.execParser parser where
           )) (O.fullDesc <> O.progDesc "Prints schema")
         )
       )
+  optionApi = Api
+    <$> O.strOption
+      (  O.long "api-url"
+      <> O.metavar "API_URL"
+      <> O.help "Blockchain API url, like \"http://<host>:<port>/\""
+      )
+    <*> O.strOption
+      (  O.long "api-url-username"
+      <> O.metavar "API_URL_USERNAME"
+      <> O.value ""
+      <> O.help "Blockchain API url username for authentication"
+      )
+    <*> O.strOption
+      (  O.long "api-url-password"
+      <> O.metavar "API_URL_PASSWORD"
+      <> O.value ""
+      <> O.help "Blockchain API url password for authentication"
+      )
+    <*> O.switch
+      (  O.long "api-url-insecure"
+      <> O.help "Do not validate HTTPS certificate"
+      )
   optionOutput = Output
     <$> O.option (O.maybeReader (Just . Just))
       (  O.long "output-avro-file"
@@ -240,10 +241,7 @@ newtype Options = Options
 
 data OptionCommand
   = OptionExportCommand
-    { options_apiUrl :: !String
-    , options_apiUrlUserName :: !String
-    , options_apiUrlPassword :: !String
-    , options_apiUrlInsecure :: !Bool
+    { options_apis :: [Api]
     , options_blockchain :: !T.Text
     , options_beginBlock :: !BlockHeight
     , options_endBlock :: !BlockHeight
@@ -266,6 +264,13 @@ data OptionCommand
     , options_storage :: !T.Text
     }
 
+data Api = Api
+  { api_apiUrl :: !String
+  , api_apiUrlUserName :: !String
+  , api_apiUrlPassword :: !String
+  , api_apiUrlInsecure :: !Bool
+  }
+
 data Output = Output
   { output_avroFile :: !(Maybe String)
   , output_postgresFile :: !(Maybe String)
@@ -287,10 +292,7 @@ run Options
   } = case command of
 
   OptionExportCommand
-    { options_apiUrl = apiUrl
-    , options_apiUrlUserName = apiUrlUserName
-    , options_apiUrlPassword = apiUrlPassword
-    , options_apiUrlInsecure = apiUrlInsecure
+    { options_apis = apis@(length -> apisCount)
     , options_blockchain = blockchainType
     , options_beginBlock = maybeBeginBlock
     , options_endBlock = maybeEndBlock
@@ -301,10 +303,15 @@ run Options
     , options_threadsCount = threadsCount
     , options_ignoreMissingBlocks = ignoreMissingBlocks
     } -> do
-    httpManager <- H.newTlsManagerWith (H.mkManagerSettings def
-      { NC.settingDisableCertificateValidation = apiUrlInsecure
+    -- init http managers
+    let httpManagerConnCount = (apisCount * threadsCount + 1) * 2
+    httpSecureManager <- H.newTlsManagerWith H.tlsManagerSettings
+      { H.managerConnCount = httpManagerConnCount
+      }
+    httpInsecureManager <- H.newTlsManagerWith (H.mkManagerSettings def
+      { NC.settingDisableCertificateValidation = True
       } Nothing)
-      { H.managerConnCount = threadsCount * 2
+      { H.managerConnCount = httpManagerConnCount
       }
 
     -- get blockchain info by name
@@ -317,8 +324,13 @@ run Options
       , bci_flattenPack = flattenPack
       } <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
 
-    -- init blockchain
-    blockChain <- do
+    -- init blockchains
+    blockchains <- forM apis $ \Api
+      { api_apiUrl = apiUrl
+      , api_apiUrlUserName = apiUrlUserName
+      , api_apiUrlPassword = apiUrlPassword
+      , api_apiUrlInsecure = apiUrlInsecure
+      } -> do
       httpRequest <- do
         let url = if null apiUrl then defaultApiUrl else apiUrl
         httpRequest <- H.parseRequest url
@@ -326,7 +338,7 @@ run Options
           then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
           else httpRequest
       initBlockChain BlockChainParams
-        { bcp_httpManager = httpManager
+        { bcp_httpManager = if apiUrlInsecure then httpInsecureManager else httpSecureManager
         , bcp_httpRequest = httpRequest
         , bcp_trace = trace
         , bcp_excludeUnaccountedActions = excludeUnaccountedActions
@@ -335,7 +347,7 @@ run Options
 
     -- init output storages and begin block
     (outputStorages, beginBlock) <- do
-      outputStorages <- initOutputStorages httpManager output blockchainType (blockHeightFieldName blockChain) flattenSuffixes
+      outputStorages <- initOutputStorages httpSecureManager output blockchainType (blockHeightFieldName $ head blockchains) flattenSuffixes
       let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
       if continue
         then initContinuingOutputStorages outputStorages specifiedBeginBlock
@@ -344,82 +356,107 @@ run Options
     let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
     -- simple multithreaded pipeline
-    blockIndexQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
+    let queueSize = apisCount * threadsCount * 2
+    blockIndexQueue <- newTBQueueIO $ fromIntegral queueSize
     blockIndexQueueEndedVar <- newTVarIO False
     nextBlockIndexVar <- newTVarIO beginBlock
-    blockQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
+    blockQueue <- newTBQueueIO $ fromIntegral queueSize
 
-    -- thread adding indices to index queue
-    void $ forkIO $
-      if endBlock > 0 then do
+    -- upper limits of blockchains
+    blockchainsLimitVars <- forM blockchains $ \_ -> newTVarIO 0
+
+    -- threads adding indices to index queue
+    nextIndexToAddVar <- newTVarIO beginBlock
+    -- if end block is fixed, just add indices without checking for blockchains limits
+    if endBlock > 0
+      then void $ forkIO $ do
         mapM_ (atomically . writeTBQueue blockIndexQueue) [beginBlock..(endBlock - 1)]
         atomically $ writeTVar blockIndexQueueEndedVar True
-      -- else do infinite stream of indices
-      else let
-        step i = do
+    -- else blockchains add indices concurrently (but every index still can be added only once)
+    else
+      forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) -> forkIO $ let
+        step = do
           -- determine current (known) block index
-          currentBlockIndex <- getCurrentBlockHeight blockChain
-          -- insert indices up to this index minus offset
-          let endIndex = currentBlockIndex + endBlock
-          hPutStrLn stderr $ "continuously syncing blocks... currently from " <> show i <> " to " <> show (endIndex - 1)
-          mapM_ (atomically . writeTBQueue blockIndexQueue) [i..(endIndex - 1)]
+          eitherCurrentBlockIndex <- try $ getCurrentBlockHeight blockchain
+          case eitherCurrentBlockIndex of
+            Right currentBlockIndex -> do
+              -- insert indices up to this index minus offset
+              let endIndex = currentBlockIndex + endBlock
+              atomically $ writeTVar blockchainLimitVar endIndex
+              logStrLn $ "continuously syncing blocks... up to " <> show (endIndex - 1)
+              let
+                f = join $ atomically $ do
+                  nextIndexToAdd <- readTVar nextIndexToAddVar
+                  if nextIndexToAdd < endIndex
+                    then do
+                      writeTBQueue blockIndexQueue nextIndexToAdd
+                      writeTVar nextIndexToAddVar (nextIndexToAdd + 1)
+                      return f
+                    else return $ return ()
+                in f
+            Left (SomeException err) -> logPrint err
           -- pause
           threadDelay 10000000
           -- repeat
-          step $ max i endIndex
-        in step beginBlock
+          step
+        in step
 
     -- work threads getting blocks from blockchain
-    forM_ [1..threadsCount] $ \_ -> let
-      step = do
-        maybeBlockIndex <- atomically $ do
-          maybeBlockIndex <- tryReadTBQueue blockIndexQueue
-          case maybeBlockIndex of
-            Just _ -> return maybeBlockIndex
-            Nothing -> do
-              blockIndexQueueEnded <- readTVar blockIndexQueueEndedVar
-              if blockIndexQueueEnded
-                then return Nothing
-                else retry
-        case maybeBlockIndex of
-          Just blockIndex -> do
-            -- get block from blockchain
-            eitherBlock <- try $ getBlockByHeight blockChain blockIndex
-            case eitherBlock of
-              Right block ->
-                -- insert block into block queue ensuring order
-                atomically $ do
-                  nextBlockIndex <- readTVar nextBlockIndexVar
-                  if blockIndex == nextBlockIndex then do
-                    writeTBQueue blockQueue (blockIndex, block)
-                    writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+    forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) ->
+      forM_ [1..threadsCount] $ \_ -> let
+        step = do
+          maybeBlockIndex <- atomically $ do
+            maybeBlockIndex <- tryReadTBQueue blockIndexQueue
+            case maybeBlockIndex of
+              Just blockIndex -> do
+                blockchainLimit <- readTVar blockchainLimitVar
+                if blockIndex < blockchainLimit
+                  then return $ Just blockIndex
                   else retry
-              Left (SomeException err) -> do
-                print err
-                -- if it's allowed to ignore errors, do that
-                if ignoreMissingBlocks
-                  then atomically $ do
+              Nothing -> do
+                blockIndexQueueEnded <- readTVar blockIndexQueueEndedVar
+                if blockIndexQueueEnded
+                  then return Nothing
+                  else retry
+          case maybeBlockIndex of
+            Just blockIndex -> do
+              -- get block from blockchain
+              eitherBlock <- try $ getBlockByHeight blockchain blockIndex
+              case eitherBlock of
+                Right block ->
+                  -- insert block into block queue ensuring order
+                  atomically $ do
                     nextBlockIndex <- readTVar nextBlockIndexVar
-                    if blockIndex == nextBlockIndex
-                      then writeTVar nextBlockIndexVar (nextBlockIndex + 1)
-                      else retry
-                  -- otherwise rethrow error
-                  else throwIO err
-            -- repeat
-            step
-          Nothing -> return ()
-      in forkIO step
+                    if blockIndex == nextBlockIndex then do
+                      writeTBQueue blockQueue (blockIndex, block)
+                      writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+                    else retry
+                Left (SomeException err) -> do
+                  logPrint err
+                  -- if it's allowed to ignore errors, do that
+                  if ignoreMissingBlocks
+                    then atomically $ do
+                      nextBlockIndex <- readTVar nextBlockIndexVar
+                      if blockIndex == nextBlockIndex
+                        then writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+                        else retry
+                    -- otherwise rethrow error
+                    else throwIO err
+              -- repeat
+              step
+            Nothing -> return ()
+        in forkIO step
 
     -- write blocks into outputs, using lazy IO
     let
       step i = if endBlock <= 0 || i < endBlock
         then unsafeInterleaveIO $ do
           (blockIndex, block) <- atomically $ readTBQueue blockQueue
-          when (blockIndex `rem` 100 == 0) $ hPutStrLn stderr $ "synced up to " ++ show blockIndex
+          when (blockIndex `rem` 100 == 0) $ logStrLn $ "synced up to " <> show blockIndex
           (block :) <$> step (blockIndex + 1)
         else return []
     writeToOutputStorages outputStorages flattenPack beginBlock =<< step beginBlock
-    hPutStrLn stderr $ "sync from " ++ show beginBlock ++ " to " ++ show (endBlock - 1) ++ " complete"
+    logStrLn $ "sync from " <> show beginBlock <> " to " <> show (endBlock - 1) <> " complete"
 
   OptionExportIotaCommand
     { options_apiUrl = apiUrl
@@ -508,7 +545,7 @@ run Options
             transaction <- either (fail "failed to parse transaction from dump") return $ S.runGet (deserIotaTransaction transactionHash) $ T.encodeUtf8 transactionData
             addTransaction transaction
             step $ i + 1
-          Nothing -> hPutStrLn stderr $ "read " <> show i <> " transactions from dump"
+          Nothing -> logStrLn $ "read " <> show i <> " transactions from dump"
           _ -> fail "wrong line in transaction dump"
       in step (0 :: Int)
 
@@ -537,12 +574,12 @@ run Options
     unless readDump $ void $ forkIO $ forever $ do
       -- get milestone
       milestones <- iotaGetMilestones iota
-      hPutStrLn stderr $ "milestones: " <> show milestones
+      logStrLn $ "milestones: " <> show milestones
       -- put milestones into queue
       mapM_ addHash milestones
       -- output queue size
       queueSize <- readTVarIO queueSizeVar
-      hPutStrLn stderr $ "queue size: " <> show queueSize
+      logStrLn $ "queue size: " <> show queueSize
       -- pause
       threadDelay 10000000
 
@@ -565,7 +602,7 @@ run Options
     let
       step i = unsafeInterleaveIO $ do
         transaction <- atomically $ readTBQueue transactionQueue
-        when (i `rem` 100 == 0) $ hPutStrLn stderr $ "synced transactions: " ++ show i
+        when (i `rem` 100 == 0) $ logStrLn $ "synced transactions: " <> show i
         (transaction :) <$> step (i + 1)
       in writeToOutputStorages outputStorages (pure . SomeBlocks) 0 =<< step (0 :: Int)
 
@@ -685,7 +722,7 @@ initContinuingOutputStorages outputStorages@OutputStorages
       }
     return $ maybe defaultBeginBlock (max defaultBeginBlock . (+ 1)) <$> getBeginBlockFunc
   beginBlocks <- sequence getBeginBlockFuncs
-  hPutStrLn stderr $ "continuing from blocks: " <> show beginBlocks
+  logStrLn $ "continuing from blocks: " <> show beginBlocks
   let beginBlock = if null beginBlocks then defaultBeginBlock else minimum beginBlocks
   return
     ( outputStorages
@@ -715,7 +752,7 @@ writeToOutputStorages OutputStorages
     return results
   let erroredResults = concatMap (maybe [] (either pure (const []))) results
   unless (null erroredResults) $ do
-    print erroredResults
+    logPrint erroredResults
     fail "output failed"
 
   where
@@ -747,3 +784,13 @@ writeToOutputStorages OutputStorages
       -- TODO: figure out why
       . (if fileSize > 0 then splitWithSize fileSize else pure)
       . drop skipBlocks
+
+logStrLn :: String -> IO ()
+logStrLn str = withMVar logStrMVar $ \_ -> hPutStrLn stderr str
+
+logPrint :: Show a => a -> IO ()
+logPrint = logStrLn . show
+
+{-# NOINLINE logStrMVar #-}
+logStrMVar :: MVar ()
+logStrMVar = unsafePerformIO $ newMVar ()
