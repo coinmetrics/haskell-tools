@@ -72,6 +72,33 @@ instance J.FromJSON BitcoinBlockWrapper where
     <*> (parseNonce =<< fields J..: "nonce")
     <*> (fields J..: "difficulty")
 
+data BitcoinBlockHeader = BitcoinBlockHeader
+  { bbh_hash :: {-# UNPACK #-} !HexString
+  , bbh_height :: {-# UNPACK #-} !Int64
+  , bbh_time :: {-# UNPACK #-} !Int64
+  }
+
+instance HasBlockHeader BitcoinBlockHeader where
+  getBlockHeader BitcoinBlockHeader
+    { bbh_hash = hash
+    , bbh_height = height
+    , bbh_time = time
+    } = BlockHeader
+    { bh_height = height
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral time
+    }
+
+newtype BitcoinBlockHeaderWrapper = BitcoinBlockHeaderWrapper
+  { unwrapBitcoinBlockHeader :: BitcoinBlockHeader
+  }
+
+instance J.FromJSON BitcoinBlockHeaderWrapper where
+  parseJSON = J.withObject "bitcoin block header" $ \fields -> fmap BitcoinBlockHeaderWrapper $ BitcoinBlockHeader
+    <$> (fields J..: "hash")
+    <*> (fields J..: "height")
+    <*> (fields J..: "time")
+
 data BitcoinTransaction = BitcoinTransaction
   { bt_txid :: {-# UNPACK #-} !HexString
   , bt_hash :: !(Maybe HexString)
@@ -163,6 +190,10 @@ instance BlockChain Bitcoin where
     }
 
   getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
+
+  getBlockHeaderByHeight (Bitcoin jsonRpc) blockHeight = do
+    blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
+    getBlockHeader . unwrapBitcoinBlockHeader <$> jsonRpcRequest jsonRpc "getblock" ([blockHash] :: V.Vector J.Value)
 
   getBlockByHeight (Bitcoin jsonRpc) blockHeight = do
     blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
