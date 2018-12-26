@@ -411,7 +411,7 @@ run Options
             case maybeBlockIndex of
               Just blockIndex -> do
                 blockchainLimit <- readTVar blockchainLimitVar
-                if blockIndex < blockchainLimit
+                if blockIndex < blockchainLimit || endBlock > 0
                   then return $ Just blockIndex
                   else retry
               Nothing -> do
