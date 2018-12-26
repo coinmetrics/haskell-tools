@@ -44,9 +44,16 @@ data MoneroBlock = MoneroBlock
   , mb_transactions :: !(V.Vector MoneroTransaction)
   }
 
-instance IsBlock MoneroBlock where
-  getBlockHeight = mb_height
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . mb_timestamp
+instance HasBlockHeader MoneroBlock where
+  getBlockHeader MoneroBlock
+    { mb_height = height
+    , mb_hash = hash
+    , mb_timestamp = timestamp
+    } = BlockHeader
+    { bh_height = height
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp
+    }
 
 newtype MoneroBlockWrapper = MoneroBlockWrapper
   { unwrapMoneroBlock :: MoneroBlock
@@ -145,6 +152,7 @@ instance BlockChain Monero where
     , bci_defaultApiUrl = "http://127.0.0.1:18081/json_rpc"
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -60 -- conservative rewrite limit
+    , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy MoneroBlock))
       [ schemaOf (Proxy :: Proxy MoneroTransactionInput)
@@ -195,5 +203,3 @@ instance BlockChain Monero where
     case J.fromJSON jsonBlock of
       J.Success block -> return $ unwrapMoneroBlock block
       J.Error err -> fail err
-
-  blockHeightFieldName _ = "height"

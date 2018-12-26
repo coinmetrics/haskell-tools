@@ -320,6 +320,7 @@ run Options
       , bci_defaultApiUrl = defaultApiUrl
       , bci_defaultBeginBlock = defaultBeginBlock
       , bci_defaultEndBlock = defaultEndBlock
+      , bci_heightFieldName = heightFieldName
       , bci_flattenSuffixes = flattenSuffixes
       , bci_flattenPack = flattenPack
       } <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
@@ -347,7 +348,7 @@ run Options
 
     -- init output storages and begin block
     (outputStorages, beginBlock) <- do
-      outputStorages <- initOutputStorages httpSecureManager output blockchainType (blockHeightFieldName $ head blockchains) flattenSuffixes
+      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName flattenSuffixes
       let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
       if continue
         then initContinuingOutputStorages outputStorages specifiedBeginBlock

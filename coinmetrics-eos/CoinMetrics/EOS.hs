@@ -36,9 +36,15 @@ data EosBlock = EosBlock
   , eb_transactions :: !(V.Vector EosTransaction)
   }
 
-instance IsBlock EosBlock where
-  getBlockHeight = eb_number
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . eb_timestamp
+instance HasBlockHeader EosBlock where
+  getBlockHeader EosBlock
+    { eb_number = number
+    , eb_timestamp = timestamp
+    } = BlockHeader
+    { bh_height = number
+    , bh_hash = mempty
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp
+    }
 
 newtype EosBlockWrapper = EosBlockWrapper
   { unwrapEosBlock :: EosBlock
@@ -145,6 +151,7 @@ instance BlockChain Eos where
     , bci_defaultApiUrl = "http://127.0.0.1:8888/"
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- no need in a gap, as it uses irreversible block number
+    , bci_heightFieldName = "number"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy EosBlock))
       [ schemaOf (Proxy :: Proxy EosAuthorization)
@@ -174,5 +181,3 @@ instance BlockChain Eos where
         ]
       } httpManager
     either fail (return . unwrapEosBlock) $ J.eitherDecode' $ H.responseBody response
-
-  blockHeightFieldName _ = "number"

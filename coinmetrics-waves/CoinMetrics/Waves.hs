@@ -39,9 +39,15 @@ data WavesBlock = WavesBlock
   , wb_transactions :: !(V.Vector WavesTransaction)
   }
 
-instance IsBlock WavesBlock where
-  getBlockHeight = wb_height
-  getBlockTimestamp = posixSecondsToUTCTime . (* 0.001) . fromIntegral . wb_timestamp
+instance HasBlockHeader WavesBlock where
+  getBlockHeader WavesBlock
+    { wb_height = height
+    , wb_timestamp = timestamp
+    } = BlockHeader
+    { bh_height = height
+    , bh_hash = mempty
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp * 0.001
+    }
 
 newtype WavesBlockWrapper = WavesBlockWrapper
   { unwrapWavesBlock :: WavesBlock
@@ -179,6 +185,7 @@ instance BlockChain Waves where
     , bci_defaultApiUrl = "http://127.0.0.1:6869/"
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- PoS
+    , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy WavesBlock))
       [ schemaOf (Proxy :: Proxy WavesTransfer)
@@ -205,5 +212,3 @@ instance BlockChain Waves where
       { H.path = "/blocks/at/" <> fromString (show blockHeight)
       } httpManager
     either fail (return . unwrapWavesBlock) $ J.eitherDecode' $ H.responseBody response
-
-  blockHeightFieldName _ = "height"

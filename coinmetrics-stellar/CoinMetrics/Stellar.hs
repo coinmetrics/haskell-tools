@@ -62,9 +62,16 @@ data StellarLedger = StellarLedger
   , sl_transactions :: !(V.Vector StellarTransaction)
   }
 
-instance IsBlock StellarLedger where
-  getBlockHeight = sl_sequence
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . sl_closeTime
+instance HasBlockHeader StellarLedger where
+  getBlockHeader StellarLedger
+    { sl_sequence = height
+    , sl_hash = hash
+    , sl_closeTime = closeTime
+    } = BlockHeader
+    { bh_height = height
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral closeTime
+    }
 
 data StellarTransaction = StellarTransaction
   { st_hash :: {-# UNPACK #-} !HexString
@@ -980,6 +987,7 @@ instance BlockChain Stellar where
     , bci_defaultApiUrl = "http://history.stellar.org/prd/core-live/core_live_001"
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- history data, no rewrites
+    , bci_heightFieldName = "sequence"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy StellarLedger))
       [ schemaOf (Proxy :: Proxy StellarAsset)
@@ -1002,8 +1010,6 @@ instance BlockChain Stellar where
     case ledgers of
       [ledger] -> return ledger
       _ -> fail "ledger cache error"
-
-  blockHeightFieldName _ = "sequence"
 
 
 -- Only mainnet is supported for now.

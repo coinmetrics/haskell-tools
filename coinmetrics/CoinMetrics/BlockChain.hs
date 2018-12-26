@@ -2,9 +2,10 @@
 
 module CoinMetrics.BlockChain
   ( BlockChain(..)
-  , IsBlock(..)
+  , HasBlockHeader(..)
   , BlockChainParams(..)
   , BlockChainInfo(..)
+  , BlockHeader(..)
   , BlockHash()
   , BlockHeight()
   , BlockTimestamp()
@@ -15,7 +16,6 @@ module CoinMetrics.BlockChain
 
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
-import qualified Data.ByteString as B
 import Data.Int
 import qualified Data.HashMap.Strict as HM
 import Data.Proxy
@@ -26,16 +26,23 @@ import qualified Network.HTTP.Client as H
 import Hanalytics.Schema
 import Hanalytics.Schema.Postgres
 
-class (IsBlock (Block a), Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a), J.ToJSON (Block a)) => BlockChain a where
-  type Block a :: *
-  getBlockChainInfo :: Proxy a -> BlockChainInfo a
-  getCurrentBlockHeight :: a -> IO Int64
-  getBlockByHeight :: a -> BlockHeight -> IO (Block a)
-  blockHeightFieldName :: a -> T.Text
+import CoinMetrics.Util
 
-class IsBlock a where
-  getBlockHeight :: a -> BlockHeight
-  getBlockTimestamp :: a -> BlockTimestamp
+class (HasBlockHeader (Block a), Schemable (Block a), A.ToAvro (Block a), ToPostgresText (Block a), J.ToJSON (Block a)) => BlockChain a where
+  type Block a :: *
+
+  getBlockChainInfo :: Proxy a -> BlockChainInfo a
+
+  getCurrentBlockHeight :: a -> IO BlockHeight
+
+  getBlockHeaderByHeight :: a -> BlockHeight -> IO BlockHeader
+  getBlockHeaderByHeight blockChain blockHeight = getBlockHeader <$> getBlockByHeight blockChain blockHeight
+
+  getBlockByHeight :: a -> BlockHeight -> IO (Block a)
+
+
+class HasBlockHeader a where
+  getBlockHeader :: a -> BlockHeader
 
 -- | Params for initializing blockchain.
 data BlockChainParams = BlockChainParams
@@ -55,6 +62,7 @@ data BlockChainInfo a = BlockChainInfo
   , bci_defaultApiUrl :: !String
   , bci_defaultBeginBlock :: {-# UNPACK #-} !BlockHeight
   , bci_defaultEndBlock :: {-# UNPACK #-} !BlockHeight
+  , bci_heightFieldName :: !T.Text
   -- | Schemas referenced by storage type.
   , bci_schemas :: !(HM.HashMap T.Text T.Text)
   -- | Table suffixes for flattened blocks.
@@ -63,7 +71,17 @@ data BlockChainInfo a = BlockChainInfo
   , bci_flattenPack :: [Block a] -> [SomeBlocks]
   }
 
-type BlockHash = B.ByteString
+-- | Information about block.
+data BlockHeader = BlockHeader
+  { bh_height :: {-# UNPACK #-} !BlockHeight
+  , bh_hash :: {-# UNPACK #-} !HexString
+  , bh_timestamp :: !UTCTime
+  }
+
+instance HasBlockHeader BlockHeader where
+  getBlockHeader = id
+
+type BlockHash = HexString
 type BlockHeight = Int64
 type BlockTimestamp = UTCTime
 

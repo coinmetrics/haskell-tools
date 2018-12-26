@@ -33,9 +33,16 @@ data NeoBlock = NeoBlock
   , nb_tx :: !(V.Vector NeoTransaction)
   }
 
-instance IsBlock NeoBlock where
-  getBlockHeight = nb_index
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . nb_time
+instance HasBlockHeader NeoBlock where
+  getBlockHeader NeoBlock
+    { nb_hash = hash
+    , nb_index = index
+    , nb_time = time
+    } = BlockHeader
+    { bh_height = index
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral time
+    }
 
 newtype NeoBlockWrapper = NeoBlockWrapper
   { unwrapNeoBlock :: NeoBlock
@@ -118,6 +125,7 @@ instance BlockChain Neo where
     , bci_defaultApiUrl = "http://127.0.0.1:10332/"
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -1000 -- very conservative rewrite limit
+    , bci_heightFieldName = "index"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy NeoBlock))
       [ schemaOf (Proxy :: Proxy NeoTransactionInput)
@@ -139,5 +147,3 @@ instance BlockChain Neo where
   getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 
   getBlockByHeight (Neo jsonRpc) blockHeight = unwrapNeoBlock <$> jsonRpcRequest jsonRpc "getblock" ([J.Number $ fromIntegral blockHeight, J.Number 1] :: V.Vector J.Value)
-
-  blockHeightFieldName _ = "index"

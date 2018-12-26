@@ -44,9 +44,16 @@ data BitcoinBlock = BitcoinBlock
   , bb_difficulty :: {-# UNPACK #-} !Double
   }
 
-instance IsBlock BitcoinBlock where
-  getBlockHeight = bb_height
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . bb_time
+instance HasBlockHeader BitcoinBlock where
+  getBlockHeader BitcoinBlock
+    { bb_hash = hash
+    , bb_height = height
+    , bb_time = time
+    } = BlockHeader
+    { bh_height = height
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral time
+    }
 
 newtype BitcoinBlockWrapper = BitcoinBlockWrapper
   { unwrapBitcoinBlock :: BitcoinBlock
@@ -136,6 +143,7 @@ instance BlockChain Bitcoin where
     , bci_defaultApiUrl = "http://127.0.0.1:8332/"
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -100 -- conservative rewrite limit
+    , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy BitcoinBlock))
       [ schemaOf (Proxy :: Proxy BitcoinVin)
@@ -173,5 +181,3 @@ instance BlockChain Bitcoin where
           transactionHash@(J.String {}) -> jsonRpcRequest jsonRpc "getrawtransaction" ([transactionHash, J.Number 1] :: V.Vector J.Value)
           _ -> fail "wrong tx hash"
         fmap unwrapBitcoinBlock $ either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "tx" (J.Array transactions) blockJson
-
-  blockHeightFieldName _ = "height"

@@ -59,9 +59,16 @@ data CardanoBlock = CardanoBlock
   , cb_transactions :: !(V.Vector CardanoTransaction)
   }
 
-instance IsBlock CardanoBlock where
-  getBlockHeight = cb_height
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . cb_timeIssued
+instance HasBlockHeader CardanoBlock where
+  getBlockHeader CardanoBlock
+    { cb_height = height
+    , cb_hash = hash
+    , cb_timeIssued = timeIssued
+    } = BlockHeader
+    { bh_height = height
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timeIssued
+    }
 
 newtype CardanoBlockWrapper = CardanoBlockWrapper
   { unwrapCardanoBlock :: CardanoBlock
@@ -152,6 +159,7 @@ instance BlockChain Cardano where
     , bci_defaultApiUrl = "http://127.0.0.1:8100/"
     , bci_defaultBeginBlock = 2
     , bci_defaultEndBlock = 0
+    , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy CardanoBlock))
       [ schemaOf (Proxy :: Proxy CardanoInput)
@@ -197,5 +205,3 @@ instance BlockChain Cardano where
       $ HM.insert "height" (J.Number $ fromIntegral blockHeight)
       $ HM.insert "transactions" (J.Array blockTxs)
       blockObject
-
-  blockHeightFieldName _ = "height"

@@ -8,6 +8,7 @@ import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Short as BS
 import Data.Int
 import Data.Maybe
 import Data.Proxy
@@ -37,9 +38,16 @@ data TezosBlock = TezosBlock
   , tb_balanceUpdates :: !(V.Vector TezosBalanceUpdate)
   }
 
-instance IsBlock TezosBlock where
-  getBlockHeight = tb_level
-  getBlockTimestamp = Time.posixSecondsToUTCTime . fromIntegral . tb_timestamp
+instance HasBlockHeader TezosBlock where
+  getBlockHeader TezosBlock
+    { tb_level = level
+    , tb_hash = hash
+    , tb_timestamp = timestamp
+    } = BlockHeader
+    { bh_height = level
+    , bh_hash = HexString $ BS.toShort $ T.encodeUtf8 hash
+    , bh_timestamp = Time.posixSecondsToUTCTime $ fromIntegral timestamp
+    }
 
 newtype TezosBlockWrapper = TezosBlockWrapper
   { unwrapTezosBlock :: TezosBlock
@@ -161,6 +169,7 @@ instance BlockChain Tezos where
     , bci_defaultApiUrl = "http://127.0.0.1:8732/"
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = 0
+    , bci_heightFieldName = "level"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy TezosBlock))
       [ schemaOf (Proxy :: Proxy TezosBalanceUpdate)
@@ -191,8 +200,6 @@ instance BlockChain Tezos where
     tryWithRepeat $ either fail (return . unwrapTezosBlock) . J.eitherDecode . H.responseBody =<< H.httpLbs httpRequest
       { H.path = "/chains/" <> mainnetChain <> "/blocks/" <> T.encodeUtf8 headBlockHash <> "~" <> (T.encodeUtf8 $ T.pack $ show $ headBlockLevel - blockHeight)
       } httpManager
-
-  blockHeightFieldName _ = "level"
 
 mainnetChain :: B.ByteString
 mainnetChain = "NetXdQprcVkpaWU"

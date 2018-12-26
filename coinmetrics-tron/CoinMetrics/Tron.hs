@@ -38,9 +38,16 @@ data TronBlock = TronBlock
   , tb_transactions :: !(V.Vector TronTransaction)
   }
 
-instance IsBlock TronBlock where
-  getBlockHeight = tb_number
-  getBlockTimestamp = posixSecondsToUTCTime . (* 0.001) . fromIntegral . tb_timestamp
+instance HasBlockHeader TronBlock where
+  getBlockHeader TronBlock
+    { tb_hash = hash
+    , tb_timestamp = timestamp
+    , tb_number = number
+    } = BlockHeader
+    { bh_height = number
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp * 0.001
+    }
 
 newtype TronBlockWrapper = TronBlockWrapper
   { unwrapTronBlock :: TronBlock
@@ -157,6 +164,7 @@ instance BlockChain Tron where
     , bci_defaultApiUrl = "http://127.0.0.1:8091/"
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = 0 -- no need in gap with solidity node
+    , bci_heightFieldName = "number"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy TronBlock))
       [ schemaOf (Proxy :: Proxy TronVote)
@@ -196,5 +204,3 @@ instance BlockChain Tron where
       , H.method = "POST"
       } httpManager
     either fail (return . unwrapTronBlock) $ J.eitherDecode' $ H.responseBody response
-
-  blockHeightFieldName _ = "number"

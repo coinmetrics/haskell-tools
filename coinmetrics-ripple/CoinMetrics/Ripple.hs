@@ -73,9 +73,16 @@ data RippleLedger = RippleLedger
   , rl_transactions :: !(V.Vector (Maybe RippleTransaction))
   }
 
-instance IsBlock RippleLedger where
-  getBlockHeight = rl_index
-  getBlockTimestamp = Time.posixSecondsToUTCTime . fromIntegral . rl_closeTime
+instance HasBlockHeader RippleLedger where
+  getBlockHeader RippleLedger
+    { rl_index = index
+    , rl_hash = hash
+    , rl_closeTime = closeTime
+    } = BlockHeader
+    { bh_height = index
+    , bh_hash = hash
+    , bh_timestamp = Time.posixSecondsToUTCTime $ fromIntegral closeTime
+    }
 
 newtype RippleLedgerWrapper = RippleLedgerWrapper
   { unwrapRippleLedger :: RippleLedger
@@ -187,6 +194,7 @@ instance BlockChain Ripple where
     , bci_defaultApiUrl = "https://data.ripple.com/"
     , bci_defaultBeginBlock = 32570 -- genesis ledger
     , bci_defaultEndBlock = 0 -- history data, no rewrites
+    , bci_heightFieldName = "index"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy RippleLedger))
       [ schemaOf (Proxy :: Proxy RippleCurrencyAmount)
@@ -246,8 +254,6 @@ instance BlockChain Ripple where
               -- JSON RPC API path and params
               "tx" [("transaction", J.toJSON transactionHash)]
         either fail (return . unwrapRippleLedgerWithCorrection ripple) $ J.parseEither J.parseJSON $ J.Object $ HM.insert "transactions" (J.Array transactions) preLedger
-
-  blockHeightFieldName _ = "index"
 
 unwrapRippleLedgerWithCorrection :: Ripple -> RippleLedgerWrapper -> RippleLedger
 unwrapRippleLedgerWithCorrection ripple RippleLedgerWrapper

@@ -57,9 +57,16 @@ data EthereumBlock = EthereumBlock
   , eb_uncles :: !(V.Vector EthereumUncleBlock)
   }
 
-instance IsBlock EthereumBlock where
-  getBlockHeight = eb_number
-  getBlockTimestamp = posixSecondsToUTCTime . fromIntegral . eb_timestamp
+instance HasBlockHeader EthereumBlock where
+  getBlockHeader EthereumBlock
+    { eb_number = number
+    , eb_hash = hash
+    , eb_timestamp = timestamp
+    } = BlockHeader
+    { bh_height = number
+    , bh_hash = hash
+    , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp
+    }
 
 newtype EthereumBlockWrapper = EthereumBlockWrapper
   { unwrapEthereumBlock :: EthereumBlock
@@ -267,6 +274,7 @@ instance BlockChain Ethereum where
     , bci_defaultApiUrl = "http://127.0.0.1:8545/"
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -100 -- conservative rewrite limit
+    , bci_heightFieldName = "number"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy EthereumBlock))
       [ schemaOf (Proxy :: Proxy EthereumAction)
@@ -371,5 +379,3 @@ instance BlockChain Ethereum where
       { eb_transactions = transactions
       , eb_uncles = uncles
       }
-
-  blockHeightFieldName _ = "number"

@@ -167,7 +167,7 @@ run Options
       maybeBlockHeight <- errorHandler <=< try $ evaluate =<< getCurrentBlockHeight blockChain
       -- get timestamp
       maybeBlockTimestamp <- errorHandler <=< try $ case maybeBlockHeight of
-        Just blockHeight -> evaluate . utcTimeToPOSIXSeconds . getBlockTimestamp =<< getBlockByHeight blockChain blockHeight
+        Just blockHeight -> evaluate . utcTimeToPOSIXSeconds . bh_timestamp =<< getBlockHeaderByHeight blockChain blockHeight
         Nothing -> fail "height is not known"
 
       -- update metrics

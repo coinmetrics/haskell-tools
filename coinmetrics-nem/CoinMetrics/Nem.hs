@@ -51,9 +51,15 @@ data NemBlock = NemBlock
   , nb_transactions :: !(V.Vector NemTransaction)
   }
 
-instance IsBlock NemBlock where
-  getBlockHeight = nb_height
-  getBlockTimestamp = (`addUTCTime` nemBlockGenesisTimestamp) . fromIntegral . nb_timeStamp
+instance HasBlockHeader NemBlock where
+  getBlockHeader NemBlock
+    { nb_timeStamp = timeStamp
+    , nb_height = height
+    } = BlockHeader
+    { bh_height = height
+    , bh_hash = mempty
+    , bh_timestamp = fromIntegral timeStamp `addUTCTime` nemBlockGenesisTimestamp
+    }
 
 nemBlockGenesisTimestamp :: UTCTime
 nemBlockGenesisTimestamp = parseTimeOrError False defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" "2015-03-29T00:06:25Z"
@@ -157,6 +163,7 @@ instance BlockChain Nem where
     , bci_defaultApiUrl = "http://127.0.0.1:7890/"
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = -360 -- actual rewrite limit
+    , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy NemBlock))
       [ schemaOf (Proxy :: Proxy NemNestedTransaction)
@@ -183,5 +190,3 @@ instance BlockChain Nem where
         { nt_signerAddress = signerAddress
         }) transactions signersAddresses
       }
-
-  blockHeightFieldName _ = "height"
