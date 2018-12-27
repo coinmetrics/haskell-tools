@@ -156,7 +156,7 @@ instance BlockChain Cardano where
         { cardano_httpManager = httpManager
         , cardano_httpRequest = httpRequest
         }
-    , bci_defaultApiUrl = "http://127.0.0.1:8100/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:8100/"]
     , bci_defaultBeginBlock = 2
     , bci_defaultEndBlock = 0
     , bci_heightFieldName = "height"

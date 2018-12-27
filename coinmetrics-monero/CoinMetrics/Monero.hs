@@ -149,7 +149,7 @@ instance BlockChain Monero where
       { bcp_httpManager = httpManager
       , bcp_httpRequest = httpRequest
       } -> return $ Monero $ newJsonRpc httpManager httpRequest Nothing
-    , bci_defaultApiUrl = "http://127.0.0.1:18081/json_rpc"
+    , bci_defaultApiUrls = ["http://127.0.0.1:18081/json_rpc"]
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -60 -- conservative rewrite limit
     , bci_heightFieldName = "height"

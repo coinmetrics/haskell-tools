@@ -122,7 +122,7 @@ instance BlockChain Neo where
       { bcp_httpManager = httpManager
       , bcp_httpRequest = httpRequest
       } -> return $ Neo $ newJsonRpc httpManager httpRequest Nothing
-    , bci_defaultApiUrl = "http://127.0.0.1:10332/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:10332/"]
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -1000 -- very conservative rewrite limit
     , bci_heightFieldName = "index"

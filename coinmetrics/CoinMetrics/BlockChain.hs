@@ -59,7 +59,7 @@ data BlockChainParams = BlockChainParams
 -- | Information about blockchain.
 data BlockChainInfo a = BlockChainInfo
   { bci_init :: !(BlockChainParams -> IO a)
-  , bci_defaultApiUrl :: !String
+  , bci_defaultApiUrls :: ![String]
   , bci_defaultBeginBlock :: {-# UNPACK #-} !BlockHeight
   , bci_defaultEndBlock :: {-# UNPACK #-} !BlockHeight
   , bci_heightFieldName :: !T.Text

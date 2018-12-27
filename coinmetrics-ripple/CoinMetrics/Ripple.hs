@@ -191,7 +191,7 @@ instance BlockChain Ripple where
             { ripple_webCache = webCache
             , ripple_httpRequest = httpRequest
             }
-    , bci_defaultApiUrl = "https://data.ripple.com/"
+    , bci_defaultApiUrls = ["https://data.ripple.com/"]
     , bci_defaultBeginBlock = 32570 -- genesis ledger
     , bci_defaultEndBlock = 0 -- history data, no rewrites
     , bci_heightFieldName = "index"

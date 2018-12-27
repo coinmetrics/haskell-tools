@@ -166,7 +166,7 @@ instance BlockChain Tezos where
       { tezos_httpManager = httpManager
       , tezos_httpRequest = httpRequest
       }
-    , bci_defaultApiUrl = "http://127.0.0.1:8732/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:8732/"]
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = 0
     , bci_heightFieldName = "level"

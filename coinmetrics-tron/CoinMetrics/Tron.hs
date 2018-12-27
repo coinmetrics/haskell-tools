@@ -161,7 +161,7 @@ instance BlockChain Tron where
       { tron_httpManager = httpManager
       , tron_httpRequest = httpRequest
       }
-    , bci_defaultApiUrl = "http://127.0.0.1:8091/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:8091/"]
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = 0 -- no need in gap with solidity node
     , bci_heightFieldName = "number"

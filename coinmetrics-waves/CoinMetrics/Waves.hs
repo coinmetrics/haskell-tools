@@ -182,7 +182,7 @@ instance BlockChain Waves where
         { waves_httpManager = httpManager
         , waves_httpRequest = httpRequest
         }
-    , bci_defaultApiUrl = "http://127.0.0.1:6869/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:6869/"]
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- PoS
     , bci_heightFieldName = "height"

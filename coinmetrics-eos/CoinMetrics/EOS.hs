@@ -148,7 +148,7 @@ instance BlockChain Eos where
         { eos_httpManager = httpManager
         , eos_httpRequest = httpRequest
         }
-    , bci_defaultApiUrl = "http://127.0.0.1:8888/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:8888/"]
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- no need in a gap, as it uses irreversible block number
     , bci_heightFieldName = "number"

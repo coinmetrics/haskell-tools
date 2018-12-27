@@ -167,7 +167,7 @@ instance BlockChain Bitcoin where
       { bcp_httpManager = httpManager
       , bcp_httpRequest = httpRequest
       } -> return $ Bitcoin $ newJsonRpc httpManager httpRequest Nothing
-    , bci_defaultApiUrl = "http://127.0.0.1:8332/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:8332/"]
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -100 -- conservative rewrite limit
     , bci_heightFieldName = "height"

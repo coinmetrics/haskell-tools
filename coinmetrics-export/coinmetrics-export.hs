@@ -57,7 +57,7 @@ main = run =<< O.execParser parser where
       (  O.command "export"
         (  O.info
           (O.helper <*> (OptionExportCommand
-            <$> O.some optionApi
+            <$> O.many optionApi
             <*> O.strOption
               (  O.long "blockchain"
               <> O.metavar "BLOCKCHAIN"
@@ -292,7 +292,7 @@ run Options
   } = case command of
 
   OptionExportCommand
-    { options_apis = apis@(length -> apisCount)
+    { options_apis = apisByUser
     , options_blockchain = blockchainType
     , options_beginBlock = maybeBeginBlock
     , options_endBlock = maybeEndBlock
@@ -303,8 +303,30 @@ run Options
     , options_threadsCount = threadsCount
     , options_ignoreMissingBlocks = ignoreMissingBlocks
     } -> do
+    -- get blockchain info by name
+    SomeBlockChainInfo BlockChainInfo
+      { bci_init = initBlockChain
+      , bci_defaultApiUrls = defaultApiUrls
+      , bci_defaultBeginBlock = defaultBeginBlock
+      , bci_defaultEndBlock = defaultEndBlock
+      , bci_heightFieldName = heightFieldName
+      , bci_flattenSuffixes = flattenSuffixes
+      , bci_flattenPack = flattenPack
+      } <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
+
+    let
+      apis = if null apisByUser
+        then map (\defaultApiUrl -> Api
+          { api_apiUrl = defaultApiUrl
+          , api_apiUrlUserName = ""
+          , api_apiUrlPassword = ""
+          , api_apiUrlInsecure = False
+          }) defaultApiUrls
+        else apisByUser
+      apisCount = length apis
+      httpManagerConnCount = (apisCount * threadsCount + 1) * 2
+
     -- init http managers
-    let httpManagerConnCount = (apisCount * threadsCount + 1) * 2
     httpSecureManager <- H.newTlsManagerWith H.tlsManagerSettings
       { H.managerConnCount = httpManagerConnCount
       }
@@ -314,17 +336,6 @@ run Options
       { H.managerConnCount = httpManagerConnCount
       }
 
-    -- get blockchain info by name
-    SomeBlockChainInfo BlockChainInfo
-      { bci_init = initBlockChain
-      , bci_defaultApiUrl = defaultApiUrl
-      , bci_defaultBeginBlock = defaultBeginBlock
-      , bci_defaultEndBlock = defaultEndBlock
-      , bci_heightFieldName = heightFieldName
-      , bci_flattenSuffixes = flattenSuffixes
-      , bci_flattenPack = flattenPack
-      } <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
-
     -- init blockchains
     blockchains <- forM apis $ \Api
       { api_apiUrl = apiUrl
@@ -333,8 +344,7 @@ run Options
       , api_apiUrlInsecure = apiUrlInsecure
       } -> do
       httpRequest <- do
-        let url = if null apiUrl then defaultApiUrl else apiUrl
-        httpRequest <- H.parseRequest url
+        httpRequest <- H.parseRequest apiUrl
         return $ if not (null apiUrlUserName) || not (null apiUrlPassword)
           then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
           else httpRequest

@@ -160,7 +160,7 @@ instance BlockChain Nem where
           { H.requestHeaders = [("Content-Type", "application/json")]
           }
         }
-    , bci_defaultApiUrl = "http://127.0.0.1:7890/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:7890/"]
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = -360 -- actual rewrite limit
     , bci_heightFieldName = "height"

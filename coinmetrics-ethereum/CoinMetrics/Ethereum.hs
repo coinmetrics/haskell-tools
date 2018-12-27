@@ -271,7 +271,7 @@ instance BlockChain Ethereum where
       , ethereum_enableTrace = trace
       , ethereum_excludeUnaccountedActions = excludeUnaccountedActions
       }
-    , bci_defaultApiUrl = "http://127.0.0.1:8545/"
+    , bci_defaultApiUrls = ["http://127.0.0.1:8545/"]
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -100 -- conservative rewrite limit
     , bci_heightFieldName = "number"
