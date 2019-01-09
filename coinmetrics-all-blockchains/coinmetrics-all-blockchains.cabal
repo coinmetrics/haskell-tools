@@ -31,6 +31,11 @@ flag ethereum
   default:             True
   manual:              True
 
+flag grin
+  description:         Support Grin
+  default:             True
+  manual:              True
+
 flag monero
   description:         Support Monero
   default:             True
@@ -95,6 +100,10 @@ library
   if flag(ethereum)
     build-depends:       coinmetrics-ethereum
     cpp-options:         -DCM_SUPPORT_ETHEREUM
+
+  if flag(grin)
+    build-depends:       coinmetrics-grin
+    cpp-options:         -DCM_SUPPORT_GRIN
 
   if flag(monero)
     build-depends:       coinmetrics-monero

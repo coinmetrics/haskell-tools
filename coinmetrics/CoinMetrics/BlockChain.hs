@@ -53,7 +53,7 @@ data BlockChainParams = BlockChainParams
   -- | Exclude unaccounted actions from trace information.
   , bcp_excludeUnaccountedActions :: !Bool
   -- | Number of threads working with blockchain.
-  , bcp_threadsCount :: !Int
+  , bcp_threadsCount :: {-# UNPACK #-} !Int
   }
 
 -- | Information about blockchain.

@@ -24,6 +24,9 @@ import CoinMetrics.EOS
 #if defined(CM_SUPPORT_ETHEREUM)
 import CoinMetrics.Ethereum
 #endif
+#if defined(CM_SUPPORT_GRIN)
+import CoinMetrics.Grin
+#endif
 #if defined(CM_SUPPORT_MONERO)
 import CoinMetrics.Monero
 #endif
@@ -67,6 +70,10 @@ allBlockChainInfos = HM.fromList infos
 
 #if defined(CM_SUPPORT_ETHEREUM)
       ("ethereum", SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Ethereum)) :
+#endif
+
+#if defined(CM_SUPPORT_GRIN)
+      ("grin",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Grin)) :
 #endif
 
 #if defined(CM_SUPPORT_MONERO)

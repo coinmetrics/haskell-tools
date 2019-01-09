@@ -8,6 +8,7 @@ packages:
 - coinmetrics-eos
 - coinmetrics-ethereum
 - coinmetrics-export
+- coinmetrics-grin
 - coinmetrics-iota
 - coinmetrics-monero
 - coinmetrics-monitor
