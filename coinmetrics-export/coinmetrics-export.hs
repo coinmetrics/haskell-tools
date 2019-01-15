@@ -392,7 +392,7 @@ run Options
           case eitherCurrentBlockIndex of
             Right currentBlockIndex -> do
               -- insert indices up to this index minus offset
-              let endIndex = currentBlockIndex + endBlock
+              let endIndex = currentBlockIndex + endBlock + 1
               atomically $ writeTVar blockchainLimitVar endIndex
               logStrLn $ "continuously syncing blocks... up to " <> show (endIndex - 1)
               let
