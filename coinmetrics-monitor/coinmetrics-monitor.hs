@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ViewPatterns #-}
 
 module Main(main) where
 
@@ -6,6 +6,7 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import Data.Default
+import Data.Maybe
 import Data.String
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX
@@ -48,18 +49,34 @@ main = run =<< O.execParser parser where
       <> O.value 10 <> O.showDefault
       <> O.help "Blockchain polling interval"
       )
+    <*> O.strOption
+      (  O.long "height-metric"
+      <> O.metavar "HEIGHT_METRIC"
+      <> O.value "blockchain_node_sync_height" <> O.showDefault
+      <> O.help "Name of height metric"
+      )
+    <*> O.strOption
+      (  O.long "time-metric"
+      <> O.metavar "TIME_METRIC"
+      <> O.value "blockchain_node_sync_time" <> O.showDefault
+      <> O.help "Name of time metric"
+      )
+    <*> O.many (O.strOption
+      (  O.long "global-label"
+      <> O.metavar "GLOBAL_LABEL"
+      <> O.help "Global metric label in form of NAME=VALUE"
+      ))
     <*> O.some (OptionBlockchain
       <$> O.strOption
         (  O.long "blockchain"
         <> O.metavar "BLOCKCHAIN"
         <> O.help ("Type of blockchain: " <> blockchainTypesStr)
         )
-      <*> O.strOption
-        (  O.long "name"
-        <> O.metavar "NAME"
-        <> O.value ""
-        <> O.help "Name of metric"
-        )
+      <*> O.many (O.strOption
+        (  O.long "label"
+        <> O.metavar "LABEL"
+        <> O.help "Metric label in form of NAME=VALUE"
+        ))
       <*> O.many (OptionApi
         <$> O.strOption
           (  O.long "api-url"
@@ -89,12 +106,15 @@ data Options = Options
   { options_host :: !String
   , options_port :: {-# UNPACK #-} !Int
   , options_interval :: {-# UNPACK #-} !Int
+  , options_heightMetric :: !T.Text
+  , options_timeMetric :: !T.Text
+  , options_labels :: [T.Text]
   , options_blockchains :: [OptionBlockchain]
   }
 
 data OptionBlockchain = OptionBlockchain
   { optionBlockchain_blockchain :: !T.Text
-  , optionBlockchain_name :: !T.Text
+  , optionBlockchain_labels :: [T.Text]
   , optionBlockchain_apis :: [OptionApi]
   }
 
@@ -110,19 +130,11 @@ run Options
   { options_host = host
   , options_port = port
   , options_interval = interval
+  , options_heightMetric = heightMetricName
+  , options_timeMetric = timeMetricName
+  , options_labels = parseLabels -> globalLabels
   , options_blockchains = blockchains
   } = do
-
-  -- register metrics
-  heightMetric <- P.register $ P.vector ("name", "url") $ P.gauge P.Info
-    { P.metricName = "blockchain_node_sync_height"
-    , P.metricHelp = "Blockchain node's sync height"
-    }
-  timeMetric <- P.register $ P.vector ("name", "url") $ P.gauge P.Info
-    { P.metricName = "blockchain_node_sync_time"
-    , P.metricHelp = "Blockchain node's sync time"
-    }
-
   -- init http managers
   httpManager <- H.newTlsManagerWith H.tlsManagerSettings
     { H.managerConnCount = length blockchains * 2 + 2
@@ -136,10 +148,18 @@ run Options
   -- run continuous updates of metrics
   forM_ blockchains $ \OptionBlockchain
     { optionBlockchain_blockchain = blockchainType
-    , optionBlockchain_name = redefinedName
+    , optionBlockchain_labels = (globalLabels ++) . parseLabels -> labels
     , optionBlockchain_apis = apisByUser
     } -> do
-    let name = if T.null redefinedName then blockchainType else redefinedName
+    -- register metrics
+    heightMetric <- P.register $ P.vector (ArrayLabel $ "blockchain" : "url" : map fst labels) $ P.gauge P.Info
+      { P.metricName = heightMetricName
+      , P.metricHelp = "Blockchain node's sync height"
+      }
+    timeMetric <- P.register $ P.vector (ArrayLabel $ "blockchain" : "url" : map fst labels) $ P.gauge P.Info
+      { P.metricName = timeMetricName
+      , P.metricHelp = "Blockchain node's sync time"
+      }
 
     -- get blockchain info by name
     SomeBlockChainInfo BlockChainInfo
@@ -187,8 +207,8 @@ run Options
           Nothing -> fail "height is not known"
 
         -- update metrics
-        setGauge heightMetric (name, T.pack apiUrl) $ fromIntegral <$> maybeBlockHeight
-        setGauge timeMetric (name, T.pack apiUrl) $ realToFrac <$> maybeBlockTimestamp
+        setGauge heightMetric (ArrayLabel $ blockchainType : T.pack apiUrl : map snd labels) $ fromIntegral <$> maybeBlockHeight
+        setGauge timeMetric (ArrayLabel $ blockchainType : T.pack apiUrl : map snd labels) $ realToFrac <$> maybeBlockTimestamp
 
         -- pause
         threadDelay $ interval * 1000000
@@ -199,6 +219,9 @@ run Options
       [ (H.hContentType, "text/plain; version=0.0.4")
       ] =<< P.exportMetricsAsText
 
+parseLabels :: [T.Text] -> [(T.Text, T.Text)]
+parseLabels = map $ \(T.breakOn "=" -> (key, value)) -> (key, fromMaybe "1" $ T.stripPrefix "=" value)
+
 setGauge :: P.Label l => P.Vector l P.Gauge -> l -> Maybe Double -> IO ()
 setGauge metric label = maybe (P.removeLabel metric label) (P.withLabel metric label . flip P.setGauge)
 
@@ -207,3 +230,8 @@ errorHandler = either printError (return . Just) where
   printError e = do
     hPrint stderr e
     return Nothing
+
+newtype ArrayLabel = ArrayLabel [T.Text] deriving (Eq, Ord)
+
+instance P.Label ArrayLabel where
+  labelPairs (ArrayLabel a) (ArrayLabel b) = zip a b
