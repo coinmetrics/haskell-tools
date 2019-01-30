@@ -139,7 +139,7 @@ instance BlockChain Grin where
         }
     , bci_defaultApiUrls = ["http://127.0.0.1:3413/"]
     , bci_defaultBeginBlock = 0
-    , bci_defaultEndBlock = 0
+    , bci_defaultEndBlock = -60
     , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy GrinBlock))
