@@ -42,14 +42,6 @@ instance ExportStorage RabbitMQExportStorage where
       connOpts =  parseConnectionOpts . T.pack . esp_destination $ params
       queueExchange = maybe cantGetNames (T.splitOn ":") (listToMaybe eso_tables)
 
-data AmqpConnectionParams = AmqpConnectionParams
-  { acpUser :: T.Text
-  , acpPass :: T.Text
-  , acpPort :: Int
-  , acpVhost :: T.Text
-  , acpHost :: T.Text
-  } deriving (Show)
-
 -- format is: amqp://user:pass@host:10000/vhost
 parseConnectionOpts :: T.Text -> AMQP.ConnectionOpts
 parseConnectionOpts connStr = AMQP.fromURI (T.unpack connStr)
