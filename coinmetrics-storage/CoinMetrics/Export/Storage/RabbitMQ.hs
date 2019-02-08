@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ViewPatterns, RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings, RecordWildCards #-}
 
 module CoinMetrics.Export.Storage.RabbitMQ
   ( RabbitMQExportStorage()
@@ -7,8 +7,6 @@ module CoinMetrics.Export.Storage.RabbitMQ
 import qualified Data.Aeson as J
 import qualified Network.AMQP as AMQP
 import qualified Data.Text as T
-import qualified Data.Char as C
-import qualified Text.Read as T
 import Control.Monad
 import Control.Exception
 import Data.Maybe
@@ -32,7 +30,7 @@ instance ExportStorage RabbitMQExportStorage where
             connect = connectToBroker connOpts queueName exchangeName
             mkMessage block = AMQP.newMsg { AMQP.msgBody = block,  AMQP.msgDeliveryMode = Just AMQP.Persistent}
             close conn chan = AMQP.closeChannel chan >> AMQP.closeConnection conn
-            send _ chan = sequence_ (AMQP.publishMsg chan exchangeName "export-block" . mkMessage <$> encoded)
+            send _ chan = mapM_ (AMQP.publishMsg chan exchangeName "export-block" . mkMessage) encoded
         bracket connect (uncurry close) (uncurry send)
       cantGetNames = error "Can't get queue and exchange name"
       connOpts =  parseConnectionOpts . T.pack . esp_destination $ params
@@ -53,10 +51,14 @@ parseConnectionOpts connStr = AMQP.fromURI (T.unpack connStr)
 
 connectToBroker :: AMQP.ConnectionOpts -> T.Text -> T.Text -> IO (AMQP.Connection, AMQP.Channel)
 connectToBroker opts queueName exchangeName = do
-  conn <- AMQP.openConnection'' opts
-  chan <- AMQP.openChannel conn
-  let queue = AMQP.newQueue {AMQP.queueName = queueName}
+  let openChannel conn = do
+        chan <- AMQP.openChannel conn
+        pure (conn, chan)
+      openConn = AMQP.openConnection'' opts
+      closeConn = AMQP.closeConnection
+      queue = AMQP.newQueue {AMQP.queueName = queueName}
       exchange = AMQP.newExchange {AMQP.exchangeName = exchangeName, AMQP.exchangeType = "direct"}
+  (conn, chan) <- bracketOnError openConn closeConn openChannel
   _ <- AMQP.declareQueue chan queue
   AMQP.bindQueue chan queueName exchangeName "export-block"
   AMQP.declareExchange chan exchange
