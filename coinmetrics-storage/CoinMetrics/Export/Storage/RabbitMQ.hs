@@ -25,7 +25,7 @@ instance ExportStorage RabbitMQExportStorage where
     when (length queueExchange < 2) cantGetNames
     let queueName = queueExchange !! 0
         exchangeName = queueExchange !! 1
-    sequence_ $ (handleBlock queueName exchangeName) <$> blocks
+    mapM_ (handleBlock queueName exchangeName) blocks
     where
       handleBlock queueName exchangeName someBlocks = do
         let encoded = (\(SomeBlocks b) -> J.encode b) <$> someBlocks
@@ -47,28 +47,13 @@ data AmqpConnectionParams = AmqpConnectionParams
   } deriving (Show)
 
 -- format is: amqp://user:pass@host:10000/vhost
-parseConnectionOpts :: T.Text -> AmqpConnectionParams
-parseConnectionOpts connStr =
-  AmqpConnectionParams{
-    acpUser = user,
-    acpPass = pass,
-    acpVhost = vhost,
-    acpHost = host,
-    acpPort = fromMaybe (error "Port should be a number") (T.readMaybe $ T.unpack port)
-  }
-  where
-    withoutProto = T.replace "amqp://" "" connStr
-    creds = T.splitOn ":" . head . T.splitOn "@" $ withoutProto
-    user = creds !! 0
-    pass = creds !! 1
-    hosts = last . T.splitOn "@" $ withoutProto
-    host = T.takeWhile ((/=) ':') hosts
-    port = T.takeWhile C.isDigit . T.drop 1 . T.dropWhile ((/=) ':') $ hosts
-    vhost = T.dropWhile ((/=) '/') hosts
+parseConnectionOpts :: T.Text -> AMQP.ConnectionOpts
+parseConnectionOpts connStr = AMQP.fromURI (T.unpack connStr)
 
-connectToBroker :: AmqpConnectionParams -> T.Text -> T.Text -> IO (AMQP.Connection, AMQP.Channel)
-connectToBroker AmqpConnectionParams{..} queueName exchangeName = do
-  conn <- AMQP.openConnection (T.unpack acpHost) acpVhost acpUser acpPass
+
+connectToBroker :: AMQP.ConnectionOpts -> T.Text -> T.Text -> IO (AMQP.Connection, AMQP.Channel)
+connectToBroker opts queueName exchangeName = do
+  conn <- AMQP.openConnection'' opts
   chan <- AMQP.openChannel conn
   let queue = AMQP.newQueue {AMQP.queueName = queueName}
       exchange = AMQP.newExchange {AMQP.exchangeName = exchangeName, AMQP.exchangeType = "direct"}
