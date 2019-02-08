@@ -27,10 +27,16 @@ instance ExportStorage RabbitMQExportStorage where
     where
       handleBlock queueName exchangeName someBlocks = do
         let encoded = (\(SomeBlocks b) -> J.encode b) <$> someBlocks
-            connect = connectToBroker connOpts queueName exchangeName
+            connect = connectToBroker connOpts
             mkMessage block = AMQP.newMsg { AMQP.msgBody = block,  AMQP.msgDeliveryMode = Just AMQP.Persistent}
             close conn chan = AMQP.closeChannel chan >> AMQP.closeConnection conn
-            send _ chan = mapM_ (AMQP.publishMsg chan exchangeName "export-block" . mkMessage) encoded
+            send _ chan = do
+              let queue = AMQP.newQueue {AMQP.queueName = queueName}
+                  exchange = AMQP.newExchange {AMQP.exchangeName = exchangeName, AMQP.exchangeType = "direct"}
+              _ <- AMQP.declareQueue chan queue
+              AMQP.bindQueue chan queueName exchangeName "export-block"
+              AMQP.declareExchange chan exchange
+              mapM_ (AMQP.publishMsg chan exchangeName "export-block" . mkMessage) encoded
         bracket connect (uncurry close) (uncurry send)
       cantGetNames = error "Can't get queue and exchange name"
       connOpts =  parseConnectionOpts . T.pack . esp_destination $ params
@@ -49,17 +55,7 @@ parseConnectionOpts :: T.Text -> AMQP.ConnectionOpts
 parseConnectionOpts connStr = AMQP.fromURI (T.unpack connStr)
 
 
-connectToBroker :: AMQP.ConnectionOpts -> T.Text -> T.Text -> IO (AMQP.Connection, AMQP.Channel)
-connectToBroker opts queueName exchangeName = do
-  let openChannel conn = do
-        chan <- AMQP.openChannel conn
-        pure (conn, chan)
-      openConn = AMQP.openConnection'' opts
-      closeConn = AMQP.closeConnection
-      queue = AMQP.newQueue {AMQP.queueName = queueName}
-      exchange = AMQP.newExchange {AMQP.exchangeName = exchangeName, AMQP.exchangeType = "direct"}
-  (conn, chan) <- bracketOnError openConn closeConn openChannel
-  _ <- AMQP.declareQueue chan queue
-  AMQP.bindQueue chan queueName exchangeName "export-block"
-  AMQP.declareExchange chan exchange
-  pure (conn, chan)
+connectToBroker :: AMQP.ConnectionOpts -> IO (AMQP.Connection, AMQP.Channel)
+connectToBroker opts = do
+  let openChannel conn = AMQP.openChannel conn >>= (\chan -> pure (conn, chan))
+  bracketOnError (AMQP.openConnection'' opts) AMQP.closeConnection openChannel
