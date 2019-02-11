@@ -15,6 +15,7 @@ import qualified Network.HTTP.Client as H
 import qualified Network.HTTP.Types.URI as HU
 import System.Environment
 import System.Directory
+import System.IO
 
 newtype WebCache = WebCache
   { requestWebCache :: forall a. Bool -> H.Request -> (Either String BL.ByteString -> IO (Bool, a)) -> IO a
@@ -25,6 +26,7 @@ initWebCache :: H.Manager -> IO WebCache
 initWebCache httpManager = do
   maybeVar <- lookupEnv "WEB_CACHE"
   offline <- maybe False (const True) <$> lookupEnv "WEB_CACHE_OFFLINE"
+  debug <- maybe False (const True) <$> lookupEnv "WEB_CACHE_DEBUG"
   case maybeVar of
     Just (T.pack -> var) -> case var of
       (T.stripPrefix "file:" -> Just filePath) -> do
@@ -32,6 +34,7 @@ initWebCache httpManager = do
           { requestWebCache = \skipCache httpRequest f -> let
             fileName = T.unpack $ filePath <> "/" <> T.decodeUtf8 (HU.urlEncode False (T.encodeUtf8 $ T.pack $ NU.uriToString id (H.getUri httpRequest) ""))
             doRequest = do
+              when debug $ hPutStrLn stderr $ "performing HTTP request: " <> NU.uriToString id (H.getUri httpRequest) ""
               H.responseBody <$> H.httpLbs httpRequest httpManager
             in if skipCache
               then snd <$> (f . Right =<< doRequest)
@@ -39,17 +42,23 @@ initWebCache httpManager = do
                 eitherCachedResponse <- try $ BL.readFile fileName
                 case eitherCachedResponse of
                   Right cachedResponse -> do
+                    when debug $ hPutStrLn stderr $ "using cached response: " <> fileName
                     snd <$> f (Right cachedResponse)
                   Left SomeException {} ->
                     if offline
-                      then snd <$> f (Left "no cached response in offline mode")
+                      then do
+                        when debug $ hPutStrLn stderr $ "no cached offline response: " <> fileName
+                        snd <$> f (Left "no cached response in offline mode")
                       else do
                         response <- doRequest
                         (ok, result) <- f (Right response)
-                        when ok $ do
-                          let tempFileName = fileName <> ".tmp"
-                          BL.writeFile tempFileName response
-                          renameFile tempFileName fileName
+                        if ok
+                          then do
+                            when debug $ hPutStrLn stderr $ "saving to cache: " <> fileName
+                            let tempFileName = fileName <> ".tmp"
+                            BL.writeFile tempFileName response
+                            renameFile tempFileName fileName
+                          else when debug $ hPutStrLn stderr $ "bad response, not saving to cache"
                         return result
           }
       _ -> fail "wrong WEB_CACHE"
