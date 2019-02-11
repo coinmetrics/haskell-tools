@@ -46,7 +46,10 @@ import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
 
 main :: IO ()
-main = run =<< O.execParser parser where
+main = do
+  prepare
+  run =<< O.execParser parser
+  where
   parser = O.info (O.helper <*> opts)
     (  O.fullDesc
     <> O.progDesc "Exports blocks from blockchains into files"
@@ -805,3 +808,8 @@ logPrint = logStrLn . show
 {-# NOINLINE logStrMVar #-}
 logStrMVar :: MVar ()
 logStrMVar = unsafePerformIO $ newMVar ()
+
+prepare :: IO ()
+prepare = do
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stderr LineBuffering
