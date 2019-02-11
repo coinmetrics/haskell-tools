@@ -17,36 +17,42 @@ import System.Environment
 import System.Directory
 
 newtype WebCache = WebCache
-  { requestWebCache :: forall a. Bool -> H.Request -> (BL.ByteString -> IO (Bool, a)) -> IO a
+  { requestWebCache :: forall a. Bool -> H.Request -> (Either String BL.ByteString -> IO (Bool, a)) -> IO a
   }
 
 -- | Init web cache, using environment variables.
 initWebCache :: H.Manager -> IO WebCache
 initWebCache httpManager = do
   maybeVar <- lookupEnv "WEB_CACHE"
+  offline <- maybe False (const True) <$> lookupEnv "WEB_CACHE_OFFLINE"
   case maybeVar of
     Just (T.pack -> var) -> case var of
       (T.stripPrefix "file:" -> Just filePath) -> do
         return WebCache
-          { requestWebCache = \skipCache httpRequest f -> do
-            let fileName = T.unpack $ filePath <> "/" <> T.decodeUtf8 (HU.urlEncode False (T.encodeUtf8 $ T.pack $ NU.uriToString id (H.getUri httpRequest) ""))
-            -- try cache
-            eitherCachedResponse <- if skipCache
-              then return $ Left (undefined :: SomeException)
-              else try $ BL.readFile fileName
-            case eitherCachedResponse of
-              Right cachedResponse -> snd <$> f cachedResponse
-              Left _ -> do
-                -- perform request
-                response <- H.responseBody <$> H.httpLbs httpRequest httpManager
-                (ok, result) <- f response
-                when (ok && not skipCache) $ do
-                  let tempFileName = fileName <> ".tmp"
-                  BL.writeFile tempFileName response
-                  renameFile tempFileName fileName
-                return result
+          { requestWebCache = \skipCache httpRequest f -> let
+            fileName = T.unpack $ filePath <> "/" <> T.decodeUtf8 (HU.urlEncode False (T.encodeUtf8 $ T.pack $ NU.uriToString id (H.getUri httpRequest) ""))
+            doRequest = do
+              H.responseBody <$> H.httpLbs httpRequest httpManager
+            in if skipCache
+              then snd <$> (f . Right =<< doRequest)
+              else do
+                eitherCachedResponse <- try $ BL.readFile fileName
+                case eitherCachedResponse of
+                  Right cachedResponse -> do
+                    snd <$> f (Right cachedResponse)
+                  Left SomeException {} ->
+                    if offline
+                      then snd <$> f (Left "no cached response in offline mode")
+                      else do
+                        response <- doRequest
+                        (ok, result) <- f (Right response)
+                        when ok $ do
+                          let tempFileName = fileName <> ".tmp"
+                          BL.writeFile tempFileName response
+                          renameFile tempFileName fileName
+                        return result
           }
       _ -> fail "wrong WEB_CACHE"
     Nothing -> return WebCache
-      { requestWebCache = \_skipCache httpRequest f -> fmap snd . f . H.responseBody =<< H.httpLbs httpRequest httpManager
+      { requestWebCache = \_skipCache httpRequest f -> fmap snd . f . Right . H.responseBody =<< H.httpLbs httpRequest httpManager
       }

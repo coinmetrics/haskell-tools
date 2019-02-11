@@ -33,6 +33,7 @@ import qualified Data.Text.Lazy.Builder as TL
 import Data.Time.Clock
 import Data.Time.LocalTime
 import Numeric
+import System.IO
 import System.IO.Unsafe
 
 import Hanalytics.Schema
@@ -89,7 +90,7 @@ tryWithRepeat io = let
       case eitherResult of
         Right result -> return result
         Left (SomeException err) -> do
-          putStrLn $ "error: " ++ show err ++ ", retrying again in 10 seconds"
+          hPutStrLn stderr $ "error: " ++ show err ++ ", retrying again in 10 seconds"
           threadDelay 10000000
           step (i + 1)
     else fail "repeating failed"

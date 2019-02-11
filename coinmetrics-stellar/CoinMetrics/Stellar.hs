@@ -935,7 +935,7 @@ stellarRequest :: Stellar -> Bool -> T.Text -> IO BL.ByteString
 stellarRequest Stellar
   { stellar_webCache = webCache
   , stellar_httpRequest = httpRequest
-  } skipCache path = tryWithRepeat $ requestWebCache webCache skipCache httpRequest
+  } skipCache path = either fail return <=< tryWithRepeat $ requestWebCache webCache skipCache httpRequest
   { H.path = H.path httpRequest <> T.encodeUtf8 path
   } $ \body -> return (True, body)
 

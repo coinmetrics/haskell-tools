@@ -23,6 +23,7 @@ import qualified Data.Time.Clock.POSIX as Time
 import qualified Data.Time.ISO8601 as Time
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
+import System.IO
 import Text.ParserCombinators.ReadP
 
 import CoinMetrics.BlockChain
@@ -50,15 +51,20 @@ rippleRequest ripple skipCache dataPath dataParams rpcMethod rpcParams = case ri
   RippleDataApi
     { ripple_webCache = webCache
     , ripple_httpRequest = httpRequest
-    } -> tryWithRepeat $ do
+    } -> either fail return <=< tryWithRepeat $ do
     requestWebCache webCache skipCache (H.setQueryString dataParams httpRequest
       { H.path = T.encodeUtf8 dataPath
-      }) $ \body -> do
-      case J.eitherDecode body of
-        Right decodedBody -> return (True, decodedBody)
-        Left err -> do
-          putStrLn $ "wrong ripple response for " <> T.unpack dataPath <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
-          fail err
+      }) $ \case
+        -- response
+        Right body -> case J.eitherDecode body of
+          -- correctly decoded response
+          Right decodedBody -> return (True, Right decodedBody)
+          -- temporary failure
+          Left err -> do
+            hPutStrLn stderr $ "wrong ripple response for " <> T.unpack dataPath <> ": " <> T.unpack (T.decodeUtf8 $ BL.toStrict $ BL.take 256 body)
+            fail err
+        -- persistent failure
+        Left err -> return (False, Left err)
   RippleJsonRpcApi
     { ripple_jsonRpc = jsonRpc
     } -> jsonRpcRequest jsonRpc rpcMethod (J.Array [J.Object rpcParams])
@@ -231,7 +237,6 @@ instance BlockChain Ripple where
     case eitherLedger of
       Right ledger -> return $ unwrapRippleLedgerWithCorrection ripple ledger
       Left e -> do
-        print e
         -- fallback to retrieving transactions individually
         preLedger <- either fail return
           . J.parseEither (J..: "ledger")
