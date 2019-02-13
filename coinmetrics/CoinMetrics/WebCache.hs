@@ -5,6 +5,7 @@ module CoinMetrics.WebCache
   , initWebCache
   ) where
 
+import Control.Applicative
 import Control.Exception
 import Control.Monad
 import qualified Data.ByteString.Lazy as BL
@@ -32,14 +33,31 @@ initWebCache httpManager = do
       (T.stripPrefix "file:" -> Just filePath) -> do
         return WebCache
           { requestWebCache = \skipCache httpRequest f -> let
-            fileName = T.unpack $ filePath <> "/" <> T.decodeUtf8 (HU.urlEncode False (T.encodeUtf8 $ T.pack $ NU.uriToString id (H.getUri httpRequest) ""))
+            -- uri2 tries the same uri, but with the explicit port
+            -- that's needed, because old cache may contain explicit port,
+            -- due to breaking change in URLs
+            (uri, uri2) = let
+              u@NU.URI
+                { NU.uriScheme = scheme
+                , NU.uriAuthority = maybeAuthority
+                } = H.getUri httpRequest
+              in (u, u
+                { NU.uriAuthority = (\a -> a
+                  { NU.uriPort = case (scheme, NU.uriPort a) of
+                    ("https:", "") -> ":443"
+                    ("http:", "") -> ":80"
+                    _ -> NU.uriPort a
+                  }) <$> maybeAuthority
+                })
+            fileName = T.unpack $ filePath <> "/" <> T.decodeUtf8 (HU.urlEncode False (T.encodeUtf8 $ T.pack $ NU.uriToString id uri ""))
+            fileName2 = T.unpack $ filePath <> "/" <> T.decodeUtf8 (HU.urlEncode False (T.encodeUtf8 $ T.pack $ NU.uriToString id uri2 ""))
             doRequest = do
-              when debug $ hPutStrLn stderr $ "performing HTTP request: " <> NU.uriToString id (H.getUri httpRequest) ""
+              when debug $ hPutStrLn stderr $ "performing HTTP request: " <> NU.uriToString id uri ""
               H.responseBody <$> H.httpLbs httpRequest httpManager
             in if skipCache
               then snd <$> (f . Right =<< doRequest)
               else do
-                eitherCachedResponse <- try $ BL.readFile fileName
+                eitherCachedResponse <- try $ BL.readFile fileName <|> BL.readFile fileName2 -- try both files
                 case eitherCachedResponse of
                   Right cachedResponse -> do
                     when debug $ hPutStrLn stderr $ "using cached response: " <> fileName
