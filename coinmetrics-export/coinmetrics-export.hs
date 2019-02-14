@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, OverloadedStrings, ViewPatterns #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings, ViewPatterns, TypeApplications #-}
 
 module Main(main) where
 
@@ -40,6 +40,7 @@ import CoinMetrics.Export.Storage.AvroFile
 import CoinMetrics.Export.Storage.Elastic
 import CoinMetrics.Export.Storage.Postgres
 import CoinMetrics.Export.Storage.PostgresFile
+import CoinMetrics.Export.Storage.RabbitMQ
 import CoinMetrics.Iota
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
@@ -193,6 +194,24 @@ main = do
       <> O.metavar "OUTPUT_POSTGRES"
       <> O.help "Output directly to PostgreSQL DB"
       )
+      <*> O.option (O.maybeReader (Just . Just))
+      (  O.long "output-rabbitmq"
+      <> O.value Nothing
+      <> O.metavar "OUTPUT_RABBITMQ"
+      <> O.help "Connection string like amqp://user:pass@host:10000/vhost"
+      )
+      <*> O.option (O.maybeReader (Just . Just))
+      (  O.long "output-rabbitmq-queue-name"
+      <> O.value Nothing
+      <> O.metavar "OUTPUT_RABBITMQ_QUEUE"
+      <> O.help "Name of RabbitMQ Queue"
+      )
+      <*> O.strOption
+      (  O.long "output-rabbitmq-exchange-name"
+      <> O.value "export"
+      <> O.metavar "OUTPUT_RABBITMQ_EXCHANGE"
+      <> O.help "Name of RabbitMQ exchange (queue required)"
+      )
     <*> O.option (O.maybeReader (Just . Just))
       (  O.long "output-elastic"
       <> O.value Nothing
@@ -279,6 +298,9 @@ data Output = Output
   , output_postgresFile :: !(Maybe String)
   , output_elasticFile :: !(Maybe String)
   , output_postgres :: !(Maybe String)
+  , output_rabbitmq :: !(Maybe String)
+  , output_rabbitmqQueue :: !(Maybe String)
+  , output_rabbitmqExchange :: !String
   , output_elastic :: !(Maybe String)
   , output_postgresTable :: !(Maybe String)
   , output_elasticIndex :: !(Maybe String)
@@ -630,7 +652,7 @@ run Options
     _ -> case (schemaTypeStr, storageTypeStr) of
       ("iota", "postgres") -> do
         putStr $ T.unpack $ TL.toStrict $ TL.toLazyText $ mconcat $ map postgresSqlCreateType
-          [ schemaOf (Proxy :: Proxy IotaTransaction)
+          [ schemaOf (Proxy @IotaTransaction)
           ]
         putStrLn $ T.unpack "CREATE TABLE \"iota\" OF \"IotaTransaction\" (PRIMARY KEY (\"hash\"));"
       ("iota", "bigquery") ->
@@ -659,6 +681,9 @@ initOutputStorages httpManager Output
   , output_postgresFile = maybeOutputPostgresFile
   , output_elasticFile = maybeOutputElasticFile
   , output_postgres = maybeOutputPostgres
+  , output_rabbitmq = maybeOutputRabbitmq
+  , output_rabbitmqQueue = maybeOutputRabbitmqQueueName
+  , output_rabbitmqExchange = outputRabbitmqExchangeName
   , output_elastic = maybeOutputElastic
   , output_postgresTable = maybePostgresTable
   , output_elasticIndex = maybeElasticIndex
@@ -669,19 +694,22 @@ initOutputStorages httpManager Output
   , output_flat = flat
   } defaultTableName primaryField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
   [ case maybeOutputAvroFile of
-    Just outputAvroFile -> initStorage (Proxy :: Proxy AvroFileExportStorage) mempty (mkFileDestFunc outputAvroFile)
+    Just outputAvroFile -> initStorage (Proxy @AvroFileExportStorage) mempty (mkFileDestFunc outputAvroFile)
     Nothing -> return []
   , case maybeOutputPostgresFile of
-    Just outputPostgresFile -> initStorage (Proxy :: Proxy PostgresFileExportStorage) postgresTableName (mkFileDestFunc outputPostgresFile)
+    Just outputPostgresFile -> initStorage (Proxy @PostgresFileExportStorage) postgresTableName (mkFileDestFunc outputPostgresFile)
     Nothing -> return []
   , case maybeOutputElasticFile of
-    Just outputElasticFile -> initStorage (Proxy :: Proxy ElasticFileExportStorage) elasticIndexName (mkFileDestFunc outputElasticFile)
+    Just outputElasticFile -> initStorage (Proxy @ElasticFileExportStorage) elasticIndexName (mkFileDestFunc outputElasticFile)
     Nothing -> return []
   , case maybeOutputPostgres of
-    Just outputPostgres -> initStorage (Proxy :: Proxy PostgresExportStorage) postgresTableName (const outputPostgres)
+    Just outputPostgres -> initStorage (Proxy @PostgresExportStorage) postgresTableName (const outputPostgres)
+    Nothing -> return []
+  , case maybeOutputRabbitmq of
+    Just outputRabbitmq -> initStorage (Proxy @RabbitMQExportStorage) amqpQueueExchangeName (const outputRabbitmq)
     Nothing -> return []
   , case maybeOutputElastic of
-    Just outputElastic -> initStorage (Proxy :: Proxy ElasticExportStorage) elasticIndexName (const outputElastic)
+    Just outputElastic -> initStorage (Proxy @ElasticExportStorage) elasticIndexName (const outputElastic)
     Nothing -> return []
   ]
   where
@@ -719,6 +747,11 @@ initOutputStorages httpManager Output
     mkFileDestFunc template beginBlock = T.unpack $ T.replace "%N" (T.pack $ show beginBlock) (T.pack template)
 
     postgresTableName = maybe defaultTableName T.pack maybePostgresTable
+    amqpQueueExchangeName = maybe
+      (mkAmqpNames (T.unpack defaultTableName) outputRabbitmqExchangeName)
+      (flip mkAmqpNames outputRabbitmqExchangeName)
+      maybeOutputRabbitmqQueueName
+    mkAmqpNames queue exchange = T.pack (queue <> ":" <> exchange)
     elasticIndexName = maybe defaultTableName T.pack maybeElasticIndex
 
 -- | Get minimum begin block among storages, and initialize them with skip blocks values.
