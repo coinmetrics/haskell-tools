@@ -18,10 +18,12 @@ library
     CoinMetrics.Export.Storage.Elastic
     CoinMetrics.Export.Storage.Postgres
     CoinMetrics.Export.Storage.PostgresFile
+    CoinMetrics.Export.Storage.RabbitMQ
   build-depends:
     aeson
     , avro
     , base
+    , amqp
     , bytestring
     , coinmetrics
     , hanalytics-base
