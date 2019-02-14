@@ -8,7 +8,7 @@ binaries:
   script:
   - mkdir -p bin cache
   - export PATH=$HOME/.local/bin:$PATH
-  - stack --stack-root $(readlink -f ../cache/.stack) --no-terminal --install-ghc test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
+  - stack --stack-root $(readlink -f cache/.stack) --no-terminal --install-ghc test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
   cache:
     key: haskell-tools
     paths:
