@@ -113,6 +113,8 @@ data RippleTransaction = RippleTransaction
   , rt_lastLedgerSequence :: !(Maybe Int64)
   , rt_type :: !T.Text
   , rt_amount :: !(Maybe RippleCurrencyAmount)
+  , rt_balance :: !(Maybe RippleCurrencyAmount)
+  , rt_channel :: !(Maybe T.Text)
   , rt_destination :: !(Maybe T.Text)
   , rt_result :: !T.Text
   , rt_deliveredAmount :: !(Maybe RippleCurrencyAmount)
@@ -137,6 +139,8 @@ instance J.FromJSON RippleTransactionWrapper where
       <*> (tx J..:? "LastLedgerSequence")
       <*> (tx J..: "TransactionType")
       <*> (traverse decodeCurrencyAmount =<< tx J..:? "Amount")
+      <*> (traverse decodeCurrencyAmount =<< tx J..:? "Balance")
+      <*> (tx J..:? "Channel")
       <*> (tx J..:? "Destination")
       <*> (meta J..: "TransactionResult")
       <*> (maybe (return Nothing) decodeDeliveredAmount =<< maybe (meta J..:? "DeliveredAmount") (return . Just) =<< meta J..:? "delivered_amount")
