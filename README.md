@@ -15,16 +15,18 @@ The project is in early alpha deep development seems-like-its-working-oh-crap st
 
 Supported blockchains:
 
-* [Bitcoin](https://bitcoin.org/) (WIP)
-* [Ethereum](https://www.ethereum.org/)
+* [Bitcoin](https://bitcoin.org/)
 * [Cardano](https://www.cardanohub.org/)
 * [EOS](https://eos.io/) (WIP)
+* [Ethereum](https://www.ethereum.org/)
+* [Grin](https://grin-tech.org/)
 * [IOTA](https://iota.org/)
 * [Monero](https://getmonero.org/)
 * [NEM](https://nem.io/)
 * [NEO](https://neo.org/)
 * [Ripple](https://ripple.com/)
 * [Stellar](https://www.stellar.org/)
+* [Tezos](https://tezos.com/)
 * [Tron](https://tron.network/) (WIP)
 * [Waves](https://wavesplatform.com/)
 
