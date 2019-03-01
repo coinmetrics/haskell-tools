@@ -26,6 +26,7 @@ newtype WebCache = WebCache
 initWebCache :: H.Manager -> IO WebCache
 initWebCache httpManager = do
   maybeVar <- lookupEnv "WEB_CACHE"
+  rewrite <- maybe False (const True) <$> lookupEnv "WEB_CACHE_REWRITE"
   offline <- maybe False (const True) <$> lookupEnv "WEB_CACHE_OFFLINE"
   debug <- maybe False (const True) <$> lookupEnv "WEB_CACHE_DEBUG"
   case maybeVar of
@@ -57,7 +58,9 @@ initWebCache httpManager = do
             in if skipCache
               then snd <$> (f . Right =<< doRequest)
               else do
-                eitherCachedResponse <- try $ BL.readFile fileName <|> BL.readFile fileName2 -- try both files
+                eitherCachedResponse <- if rewrite
+                  then return $ Left $ SomeException (undefined :: SomeException)
+                  else try $ BL.readFile fileName <|> BL.readFile fileName2 -- try both files
                 case eitherCachedResponse of
                   Right cachedResponse -> do
                     when debug $ hPutStrLn stderr $ "using cached response: " <> fileName
