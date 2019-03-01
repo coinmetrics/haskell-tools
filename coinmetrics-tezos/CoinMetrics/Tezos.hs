@@ -119,7 +119,7 @@ instance J.FromJSON TezosOperationItemWrapper where
       <*> (fields J..:? "public_key")
       <*> (fields J..:? "managerPubkey")
       <*> (traverse decodeReadStr =<< fields J..:? "balance")
-      <*> (V.map unwrapTezosBalanceUpdate <$> metadata J..: "balance_updates")
+      <*> (V.map unwrapTezosBalanceUpdate . fromMaybe V.empty <$> metadata J..:? "balance_updates")
       <*> (traverse (J..: "status") maybeResult)
       <*> (V.map unwrapTezosBalanceUpdate . fromMaybe V.empty . join <$> traverse (J..:? "balance_updates") maybeResult)
       <*> (traverse decodeReadStr . join =<< traverse (J..:? "consumed_gas") maybeResult)
