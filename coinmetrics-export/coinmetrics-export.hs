@@ -21,6 +21,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.IO as TL
 import qualified Data.Text.Lazy.Builder as TL
 import qualified Data.Vector as V
 import qualified Database.PostgreSQL.LibPQ as PQ
@@ -78,6 +79,12 @@ main = do
               <> O.value 0
               <> O.metavar "END_BLOCK"
               <> O.help "End block number if positive (exclusive), offset to top block if negative, default offset to top block if zero"
+              )
+            <*> O.option (O.maybeReader (Just . Just))
+              (  O.long "blocks-file"
+              <> O.metavar "BLOCKS_FILE"
+              <> O.value Nothing
+              <> O.help "File name with block numbers to export"
               )
             <*> O.switch
               (  O.long "continue"
@@ -267,6 +274,7 @@ data OptionCommand
     , options_blockchain :: !T.Text
     , options_beginBlock :: !BlockHeight
     , options_endBlock :: !BlockHeight
+    , options_blocksFile :: !(Maybe String)
     , options_continue :: !Bool
     , options_trace :: !Bool
     , options_excludeUnaccountedActions :: !Bool
@@ -321,6 +329,7 @@ run Options
     , options_blockchain = blockchainType
     , options_beginBlock = maybeBeginBlock
     , options_endBlock = maybeEndBlock
+    , options_blocksFile = maybeBlocksFile
     , options_continue = continue
     , options_trace = trace
     , options_excludeUnaccountedActions = excludeUnaccountedActions
@@ -393,23 +402,23 @@ run Options
 
     -- simple multithreaded pipeline
     let queueSize = apisCount * threadsCount * 2
-    blockIndexQueue <- newTBQueueIO $ fromIntegral queueSize
+    blockIndexQueue <- newTBQueueIO $ fromIntegral queueSize -- queue of (index, nextIndex) items
     blockIndexQueueEndedVar <- newTVarIO False
-    nextBlockIndexVar <- newTVarIO beginBlock
-    blockQueue <- newTBQueueIO $ fromIntegral queueSize
 
     -- upper limits of blockchains
     blockchainsLimitVars <- forM blockchains $ \_ -> newTVarIO 0
 
-    -- threads adding indices to index queue
-    nextIndexToAddVar <- newTVarIO beginBlock
-    -- if end block is fixed, just add indices without checking for blockchains limits
+    -- if end block is fixed, or blocks file is specified, just add indices without checking for blockchains limits
     if endBlock > 0
       then void $ forkIO $ do
-        mapM_ (atomically . writeTBQueue blockIndexQueue) [beginBlock..(endBlock - 1)]
+        blocksIndices <- case maybeBlocksFile of
+          Just blocksFile -> map (read . TL.unpack) . TL.lines <$> TL.readFile blocksFile
+          Nothing -> return [beginBlock..(endBlock - 1)]
+        mapM_ (atomically . writeTBQueue blockIndexQueue) $ zip blocksIndices (tail blocksIndices ++ [-1])
         atomically $ writeTVar blockIndexQueueEndedVar True
     -- else blockchains add indices concurrently (but every index still can be added only once)
-    else
+    else do
+      nextIndexToAddVar <- newTVarIO beginBlock
       forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) -> forkIO $ let
         step = do
           -- determine current (known) block index
@@ -425,7 +434,7 @@ run Options
                   nextIndexToAdd <- readTVar nextIndexToAddVar
                   if nextIndexToAdd < endIndex
                     then do
-                      writeTBQueue blockIndexQueue nextIndexToAdd
+                      writeTBQueue blockIndexQueue (nextIndexToAdd, nextIndexToAdd + 1)
                       writeTVar nextIndexToAddVar (nextIndexToAdd + 1)
                       return f
                     else return $ return ()
@@ -437,6 +446,9 @@ run Options
           step
         in step
 
+    blockQueue <- newTBQueueIO $ fromIntegral queueSize
+    blockQueueNextBlockIndexVar <- newTVarIO (-1)
+
     -- work threads getting blocks from blockchain
     forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) ->
       forM_ [1..threadsCount] $ \_ -> let
@@ -444,10 +456,10 @@ run Options
           maybeBlockIndex <- atomically $ do
             maybeBlockIndex <- tryReadTBQueue blockIndexQueue
             case maybeBlockIndex of
-              Just blockIndex -> do
+              Just (blockIndex, nextBlockIndex) -> do
                 blockchainLimit <- readTVar blockchainLimitVar
                 if blockIndex < blockchainLimit || endBlock > 0
-                  then return $ Just blockIndex
+                  then return $ Just (blockIndex, nextBlockIndex)
                   else retry
               Nothing -> do
                 blockIndexQueueEnded <- readTVar blockIndexQueueEndedVar
@@ -455,26 +467,26 @@ run Options
                   then return Nothing
                   else retry
           case maybeBlockIndex of
-            Just blockIndex -> do
+            Just (blockIndex, nextBlockIndex) -> do
               -- get block from blockchain
               eitherBlock <- try $ getBlockByHeight blockchain blockIndex
               case eitherBlock of
                 Right block ->
                   -- insert block into block queue ensuring order
                   atomically $ do
-                    nextBlockIndex <- readTVar nextBlockIndexVar
-                    if blockIndex == nextBlockIndex then do
+                    blockQueueNextBlockIndex <- readTVar blockQueueNextBlockIndexVar
+                    if blockQueueNextBlockIndex < 0 || blockIndex == blockQueueNextBlockIndex then do
                       writeTBQueue blockQueue (blockIndex, block)
-                      writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+                      writeTVar blockQueueNextBlockIndexVar nextBlockIndex
                     else retry
                 Left (SomeException err) -> do
                   logPrint err
                   -- if it's allowed to ignore errors, do that
                   if ignoreMissingBlocks
                     then atomically $ do
-                      nextBlockIndex <- readTVar nextBlockIndexVar
-                      if blockIndex == nextBlockIndex
-                        then writeTVar nextBlockIndexVar (nextBlockIndex + 1)
+                      blockQueueNextBlockIndex <- readTVar blockQueueNextBlockIndexVar
+                      if blockQueueNextBlockIndex < 0 || blockIndex == blockQueueNextBlockIndex
+                        then writeTVar blockQueueNextBlockIndexVar nextBlockIndex
                         else retry
                     -- otherwise rethrow error
                     else throwIO err
