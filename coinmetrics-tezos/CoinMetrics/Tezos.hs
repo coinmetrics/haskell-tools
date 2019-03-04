@@ -34,6 +34,7 @@ data TezosBlock = TezosBlock
   { tb_level :: {-# UNPACK #-} !Int64
   , tb_hash :: !T.Text
   , tb_timestamp :: {-# UNPACK #-} !Int64
+  , tb_baker :: !T.Text
   , tb_operations :: !(V.Vector TezosOperation)
   , tb_balanceUpdates :: !(V.Vector TezosBalanceUpdate)
   }
@@ -61,6 +62,7 @@ instance J.FromJSON TezosBlockWrapper where
       <$> (headerData J..: "level")
       <*> (fields J..: "hash")
       <*> (decodeDate =<< headerData J..: "timestamp")
+      <*> (metadata J..: "baker")
       <*> (V.map unwrapTezosOperation . V.concat <$> fields J..: "operations")
       <*> (V.map unwrapTezosBalanceUpdate . fromMaybe V.empty <$> metadata J..:? "balance_updates")
 
