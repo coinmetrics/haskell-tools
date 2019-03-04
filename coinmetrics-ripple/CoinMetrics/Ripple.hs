@@ -118,6 +118,7 @@ data RippleTransaction = RippleTransaction
   , rt_destination :: !(Maybe T.Text)
   , rt_result :: !T.Text
   , rt_deliveredAmount :: !(Maybe RippleCurrencyAmount)
+  , rt_raw :: !J.Value
   }
 
 newtype RippleTransactionWrapper = RippleTransactionWrapper
@@ -144,6 +145,7 @@ instance J.FromJSON RippleTransactionWrapper where
       <*> (tx J..:? "Destination")
       <*> (meta J..: "TransactionResult")
       <*> (maybe (return Nothing) decodeDeliveredAmount =<< maybe (meta J..:? "DeliveredAmount") (return . Just) =<< meta J..:? "delivered_amount")
+      <*> (return $ J.Object fields)
 
 data RippleCurrencyAmount = RippleCurrencyAmount
   { rca_amount :: {-# UNPACK #-} !Scientific
@@ -240,7 +242,7 @@ instance BlockChain Ripple where
         ]
     case eitherLedger of
       Right ledger -> return $ unwrapRippleLedgerWithCorrection ripple ledger
-      Left e -> do
+      Left _e -> do
         -- fallback to retrieving transactions individually
         preLedger <- either fail return
           . J.parseEither (J..: "ledger")
