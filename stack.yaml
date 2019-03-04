@@ -24,7 +24,7 @@ packages:
 extra-deps:
 - diskhash-0.0.4.0
 - git: https://github.com/quyse/hanalytics.git
-  commit: d79ecb442fb5ecc84b684272f69fca78d9031eb2
+  commit: 01e7a68d35b45359aeb7b7f700eab5c4b9cc908b
   subdirs:
   - hanalytics-avro
   - hanalytics-base
