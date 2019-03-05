@@ -447,7 +447,7 @@ run Options
         in step
 
     blockQueue <- newTBQueueIO $ fromIntegral queueSize
-    blockQueueNextBlockIndexVar <- newTVarIO (-1)
+    blockQueueNextBlockIndexVar <- newTVarIO beginBlock
 
     -- work threads getting blocks from blockchain
     forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) ->
@@ -475,7 +475,7 @@ run Options
                   -- insert block into block queue ensuring order
                   atomically $ do
                     blockQueueNextBlockIndex <- readTVar blockQueueNextBlockIndexVar
-                    if blockQueueNextBlockIndex < 0 || blockIndex == blockQueueNextBlockIndex then do
+                    if blockIndex == blockQueueNextBlockIndex then do
                       writeTBQueue blockQueue (blockIndex, block)
                       writeTVar blockQueueNextBlockIndexVar nextBlockIndex
                     else retry
@@ -485,7 +485,7 @@ run Options
                   if ignoreMissingBlocks
                     then atomically $ do
                       blockQueueNextBlockIndex <- readTVar blockQueueNextBlockIndexVar
-                      if blockQueueNextBlockIndex < 0 || blockIndex == blockQueueNextBlockIndex
+                      if blockIndex == blockQueueNextBlockIndex
                         then writeTVar blockQueueNextBlockIndexVar nextBlockIndex
                         else retry
                     -- otherwise rethrow error
