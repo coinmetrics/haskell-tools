@@ -17,6 +17,7 @@ library
   build-depends:
     aeson
     , base
+    , bytestring
     , coinmetrics
     , hanalytics-base
     , http-client

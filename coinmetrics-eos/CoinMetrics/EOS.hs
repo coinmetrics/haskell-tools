@@ -10,9 +10,12 @@ module CoinMetrics.EOS
 
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
+import qualified Data.ByteString.Lazy as BL
 import Data.Int
 import Data.Proxy
 import qualified Data.Text as T
+import qualified Data.Text.Encoding.Error as T
+import qualified Data.Text.Lazy.Encoding as TL
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
@@ -168,7 +171,7 @@ instance BlockChain Eos where
     response <- tryWithRepeat $ H.httpLbs httpRequest
       { H.path = "/v1/chain/get_info"
       } httpManager
-    either fail return $ J.parseEither (J..: "last_irreversible_block_num") =<< J.eitherDecode' (H.responseBody response)
+    either fail return $ J.parseEither (J..: "last_irreversible_block_num") =<< J.eitherDecode' (fixUtf8 $ H.responseBody response)
 
   getBlockByHeight Eos
     { eos_httpManager = httpManager
@@ -180,4 +183,7 @@ instance BlockChain Eos where
         [ ("block_num_or_id", J.Number $ fromIntegral blockHeight)
         ]
       } httpManager
-    either fail (return . unwrapEosBlock) $ J.eitherDecode' $ H.responseBody response
+    either fail (return . unwrapEosBlock) $ J.eitherDecode' $ fixUtf8 $ H.responseBody response
+
+fixUtf8 :: BL.ByteString -> BL.ByteString
+fixUtf8 = TL.encodeUtf8 . TL.decodeUtf8With T.lenientDecode
