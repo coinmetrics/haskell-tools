@@ -61,6 +61,12 @@ main = run =<< O.execParser parser where
       <> O.value "blockchain_node_sync_time" <> O.showDefault
       <> O.help "Name of time metric"
       )
+    <*> O.strOption
+      (  O.long "up-metric"
+      <> O.metavar "UP_METRIC"
+      <> O.value "blockchain_node_up" <> O.showDefault
+      <> O.help "Name of up metric"
+      )
     <*> O.many (O.strOption
       (  O.long "global-label"
       <> O.metavar "GLOBAL_LABEL"
@@ -108,6 +114,7 @@ data Options = Options
   , options_interval :: {-# UNPACK #-} !Int
   , options_heightMetric :: !T.Text
   , options_timeMetric :: !T.Text
+  , options_upMetric :: !T.Text
   , options_labels :: [T.Text]
   , options_blockchains :: [OptionBlockchain]
   }
@@ -132,6 +139,7 @@ run Options
   , options_interval = interval
   , options_heightMetric = heightMetricName
   , options_timeMetric = timeMetricName
+  , options_upMetric = upMetricName
   , options_labels = parseLabels -> globalLabels
   , options_blockchains = blockchains
   } = do
@@ -152,13 +160,18 @@ run Options
     , optionBlockchain_apis = apisByUser
     } -> do
     -- register metrics
-    heightMetric <- P.register $ P.vector (ArrayLabel $ "blockchain" : "url" : map fst labels) $ P.gauge P.Info
+    let register = P.register . P.vector (ArrayLabel $ "blockchain" : "url" : map fst labels)
+    heightMetric <- register $ P.gauge P.Info
       { P.metricName = heightMetricName
       , P.metricHelp = "Blockchain node's sync height"
       }
-    timeMetric <- P.register $ P.vector (ArrayLabel $ "blockchain" : "url" : map fst labels) $ P.gauge P.Info
+    timeMetric <- register $ P.gauge P.Info
       { P.metricName = timeMetricName
       , P.metricHelp = "Blockchain node's sync time"
+      }
+    upMetric <- register $ P.gauge P.Info
+      { P.metricName = upMetricName
+      , P.metricHelp = "Blockchain node's up state"
       }
 
     -- get blockchain info by name
@@ -207,8 +220,10 @@ run Options
           Nothing -> fail "height is not known"
 
         -- update metrics
-        setGauge heightMetric (ArrayLabel $ blockchainType : T.pack apiUrl : map snd labels) $ fromIntegral <$> maybeBlockHeight
-        setGauge timeMetric (ArrayLabel $ blockchainType : T.pack apiUrl : map snd labels) $ realToFrac <$> maybeBlockTimestamp
+        let label = ArrayLabel $ blockchainType : T.pack apiUrl : map snd labels
+        setGauge heightMetric label $ fromIntegral <$> maybeBlockHeight
+        setGauge timeMetric label $ realToFrac <$> maybeBlockTimestamp
+        setGauge upMetric label $ Just $ if isJust maybeBlockHeight && isJust maybeBlockTimestamp then 1 else 0
 
         -- pause
         threadDelay $ interval * 1000000
