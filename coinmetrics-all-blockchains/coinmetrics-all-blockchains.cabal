@@ -16,6 +16,11 @@ flag bitcoin
   default:             True
   manual:              True
 
+flag bitcoincash
+  description:         Support BitcoinCash
+  default:             True
+  manual:              True
+
 flag cardano
   description:         Support Cardano
   default:             True
@@ -88,6 +93,10 @@ library
   if flag(bitcoin)
     build-depends:       coinmetrics-bitcoin
     cpp-options:         -DCM_SUPPORT_BITCOIN
+
+  if flag(bitcoincash)
+    build-depends:       coinmetrics-bitcoin
+    cpp-options:         -DCM_SUPPORT_BITCOINCASH
 
   if flag(cardano)
     build-depends:       coinmetrics-cardano

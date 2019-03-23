@@ -33,6 +33,9 @@ class (HasBlockHeader (Block a), Schemable (Block a), A.ToAvro (Block a), ToPost
 
   getBlockChainInfo :: Proxy a -> BlockChainInfo a
 
+  getBlockChainInfoByFork :: Proxy a -> Maybe String -> BlockChainInfo a
+  getBlockChainInfoByFork p _ = getBlockChainInfo p
+
   getCurrentBlockHeight :: a -> IO BlockHeight
 
   getBlockHeaderByHeight :: a -> BlockHeight -> IO BlockHeader

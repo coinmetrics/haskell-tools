@@ -162,7 +162,9 @@ genFlattenedTypes "height" [| bb_height |] [("block", ''BitcoinBlock), ("transac
 instance BlockChain Bitcoin where
   type Block Bitcoin = BitcoinBlock
 
-  getBlockChainInfo _ = BlockChainInfo
+  getBlockChainInfo p = getBlockChainInfoByFork p Nothing
+
+  getBlockChainInfoByFork _ forkName = BlockChainInfo
     { bci_init = \BlockChainParams
       { bcp_httpManager = httpManager
       , bcp_httpRequest = httpRequest
@@ -177,7 +179,11 @@ instance BlockChain Bitcoin where
       , schemaOf (Proxy :: Proxy BitcoinVout)
       , schemaOf (Proxy :: Proxy BitcoinTransaction)
       ]
-      "CREATE TABLE \"bitcoin\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
+      ( case forkName of 
+          Just "bitcoincash" -> "CREATE TABLE \"bitcoincash\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
+          Just _ -> undefined
+          Nothing -> "CREATE TABLE \"bitcoin\" OF \"BitcoinBlock\" (PRIMARY KEY (\"height\"));"
+      )
     , bci_flattenSuffixes = ["blocks", "transactions", "vins", "vouts"]
     , bci_flattenPack = let
       f (blocks, (transactions, vins, vouts)) =

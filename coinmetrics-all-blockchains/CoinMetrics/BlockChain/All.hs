@@ -12,7 +12,7 @@ import qualified Data.Text as T
 
 import CoinMetrics.BlockChain
 
-#if defined(CM_SUPPORT_BITCOIN)
+#if defined(CM_SUPPORT_BITCOIN) || defined(CM_SUPPORT_BITCOINCASH)
 import CoinMetrics.Bitcoin
 #endif
 #if defined(CM_SUPPORT_CARDANO)
@@ -58,6 +58,10 @@ allBlockChainInfos = HM.fromList infos
     infos =
 #if defined(CM_SUPPORT_BITCOIN)
       ("bitcoin",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Bitcoin)) :
+#endif
+
+#if defined(CM_SUPPORT_BITCOINCASH)
+      ("bitcoincash",  SomeBlockChainInfo $ getBlockChainInfoByFork (Proxy :: Proxy Bitcoin) (Just "bitcoincash")) :
 #endif
 
 #if defined(CM_SUPPORT_CARDANO)
