@@ -98,6 +98,7 @@ data TezosOperationItem = TezosOperationItem
   , toi_resultStatus :: !(Maybe T.Text)
   , toi_resultBalanceUpdates :: !(V.Vector TezosBalanceUpdate)
   , toi_resultConsumedGas :: !(Maybe Int64)
+  , toi_raw :: !J.Value
   }
 
 newtype TezosOperationItemWrapper = TezosOperationItemWrapper
@@ -125,6 +126,7 @@ instance J.FromJSON TezosOperationItemWrapper where
       <*> (traverse (J..: "status") maybeResult)
       <*> (V.map unwrapTezosBalanceUpdate . fromMaybe V.empty . join <$> traverse (J..:? "balance_updates") maybeResult)
       <*> (traverse decodeReadStr . join =<< traverse (J..:? "consumed_gas") maybeResult)
+      <*> (return $ J.Object fields)
 
 data TezosBalanceUpdate = TezosBalanceUpdate
   { tbu_kind :: !T.Text
