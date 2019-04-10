@@ -212,6 +212,8 @@ data EthereumAction = EthereumAction
   , ea_gas :: !(Maybe Int64)
   -- | "gas_used" for "call" and "create"
   , ea_gasUsed :: !(Maybe Int64)
+  -- | Raw action JSON.
+  , ea_raw :: !J.Value
   }
 
 newtype EthereumActionWrapper = EthereumActionWrapper
@@ -234,24 +236,28 @@ instance J.FromJSON EthereumActionWrapper where
         <*> (traverse decode0xHexNumber =<< action J..:? "value")
         <*> (traverse decode0xHexNumber =<< action J..:? "gas")
         <*> traverse (decode0xHexNumber <=< (J..: "gasUsed")) maybeResult
+        <*> (return $ J.Object fields)
       "create" -> EthereumAction 1 stack valid succeeded accounted
         <$> (traverse decode0xHexBytes =<< action J..:? "from")
         <*> maybe (return Nothing) (traverse decode0xHexBytes <=< (J..:? "address")) maybeResult
         <*> (traverse decode0xHexNumber =<< action J..:? "value")
         <*> (traverse decode0xHexNumber =<< action J..:? "gas")
         <*> traverse (decode0xHexNumber <=< (J..: "gasUsed")) maybeResult
+        <*> (return $ J.Object fields)
       "reward" -> EthereumAction 2 stack valid succeeded accounted
         <$> return Nothing
         <*> (traverse decode0xHexBytes =<< action J..:? "author")
         <*> (traverse decode0xHexNumber =<< action J..:? "value")
         <*> return Nothing
         <*> return Nothing
+        <*> (return $ J.Object fields)
       "suicide" -> EthereumAction 3 stack valid succeeded accounted
         <$> (traverse decode0xHexBytes =<< action J..:? "address")
         <*> (traverse decode0xHexBytes =<< action J..:? "refundAddress")
         <*> (traverse decode0xHexNumber =<< action J..:? "balance")
         <*> return Nothing
         <*> return Nothing
+        <*> (return $ J.Object fields)
       _ -> fail $ "unknown ethereum action: " <> T.unpack actionType
 
 genSchemaInstances [''EthereumBlock, ''EthereumTransaction, ''EthereumLog, ''EthereumAction, ''EthereumUncleBlock]
