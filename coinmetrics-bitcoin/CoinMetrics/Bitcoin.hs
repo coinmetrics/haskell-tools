@@ -135,6 +135,7 @@ data BitcoinVout = BitcoinVout
   { bvo_type :: !T.Text
   , bvo_value :: {-# UNPACK #-} !Scientific
   , bvo_addresses :: !(V.Vector T.Text)
+  , bvo_asm :: !T.Text
   }
 
 newtype BitcoinVoutWrapper = BitcoinVoutWrapper
@@ -148,6 +149,7 @@ instance J.FromJSON BitcoinVoutWrapper where
       <$> (scriptPubKey J..: "type")
       <*> (fields J..: "value")
       <*> fmap (fromMaybe V.empty) (scriptPubKey J..:? "addresses")
+      <*> (scriptPubKey J..: "asm")
 
 parseNonce :: J.Value -> J.Parser Int64
 parseNonce = \case
