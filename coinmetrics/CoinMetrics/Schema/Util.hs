@@ -3,6 +3,7 @@
 module CoinMetrics.Schema.Util
   ( genSchemaInstances
   , schemaInstancesDecs
+  , schemaJsonOptions
   ) where
 
 import qualified Data.Aeson as J

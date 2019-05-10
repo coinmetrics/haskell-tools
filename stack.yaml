@@ -17,6 +17,7 @@ packages:
 - coinmetrics-ripple
 - coinmetrics-stellar
 - coinmetrics-storage
+- coinmetrics-tendermint
 - coinmetrics-tezos
 - coinmetrics-tron
 - coinmetrics-waves

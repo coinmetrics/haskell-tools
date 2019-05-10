@@ -42,6 +42,9 @@ import CoinMetrics.Ripple
 #if defined(CM_SUPPORT_STELLAR)
 import CoinMetrics.Stellar
 #endif
+#if defined(CM_SUPPORT_TENDERMINT)
+import CoinMetrics.Tendermint
+#endif
 #if defined(CM_SUPPORT_TEZOS)
 import CoinMetrics.Tezos
 #endif
@@ -94,6 +97,10 @@ allBlockChainInfos = HM.fromList infos
 
 #if defined(CM_SUPPORT_STELLAR)
       ("stellar",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Stellar)) :
+#endif
+
+#if defined(CM_SUPPORT_TENDERMINT)
+      ("tendermint",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Tendermint)) :
 #endif
 
 #if defined(CM_SUPPORT_TEZOS)

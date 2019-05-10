@@ -61,6 +61,11 @@ flag stellar
   default:             True
   manual:              True
 
+flag tendermint
+  description:         Support Tendermint
+  default:             True
+  manual:              True
+
 flag tezos
   description:         Support Tezos
   default:             True
@@ -124,6 +129,10 @@ library
   if flag(stellar)
     build-depends:       coinmetrics-stellar
     cpp-options:         -DCM_SUPPORT_STELLAR
+
+  if flag(tendermint)
+    build-depends:       coinmetrics-tendermint
+    cpp-options:         -DCM_SUPPORT_TENDERMINT
 
   if flag(tezos)
     build-depends:       coinmetrics-tezos
