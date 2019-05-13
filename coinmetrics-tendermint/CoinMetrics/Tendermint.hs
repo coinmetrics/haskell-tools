@@ -6,12 +6,14 @@ module CoinMetrics.Tendermint
   ) where
 
 import qualified Data.Aeson as J
-import qualified Data.Aeson.Types as J
 import Data.Int
+import Data.Maybe
 import Data.Proxy
 import Data.String
+import qualified Data.Text as T
 import Data.Time.Clock.POSIX
 import Data.Time.ISO8601
+import qualified Data.Vector as V
 import GHC.Generics(Generic)
 import qualified Network.HTTP.Client as H
 
@@ -30,6 +32,7 @@ data TendermintBlock = TendermintBlock
   { tb_height :: {-# UNPACK #-} !Int64
   , tb_hash :: {-# UNPACK #-} !HexString
   , tb_time :: {-# UNPACK #-} !Int64
+  , tb_transactions :: !(V.Vector T.Text)
   }
 
 instance HasBlockHeader TendermintBlock where
@@ -55,6 +58,7 @@ instance J.FromJSON TendermintBlockWrapper where
       <$> (read <$> blockMetaHeader J..: "height")
       <*> ((J..: "hash") =<< (blockMeta J..: "block_id"))
       <*> (maybe (fail "wrong time") (return . floor . (* 1000) . utcTimeToPOSIXSeconds) . parseISO8601 =<< blockMetaHeader J..: "time")
+      <*> (fmap (fromMaybe V.empty) . (J..:? "txs") =<< (J..: "data") =<< (fields J..: "block"))
 
 data TendermintResult a = TendermintResult
   { tr_result :: !a
