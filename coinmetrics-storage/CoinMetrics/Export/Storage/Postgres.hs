@@ -4,6 +4,7 @@ module CoinMetrics.Export.Storage.Postgres
   ( PostgresExportStorage()
   ) where
 
+import Control.Exception
 import Control.Monad
 import qualified Database.PostgreSQL.LibPQ as PQ
 import qualified Data.Text as T
@@ -24,8 +25,7 @@ instance ExportStorage PostgresExportStorage where
     , eso_primaryField = primaryField
     }) ExportStorageParams
     { esp_destination = destination
-    } = Just $ do
-    connection <- connectDestination destination
+    } = Just $ withConnection destination $ \connection -> do
     let query = "SELECT MAX(\"" <> primaryField <> "\") FROM \"" <> table <> "\""
     result <- maybe (fail "cannot get latest block from postgres") return =<< PQ.execParams connection (T.encodeUtf8 query) [] PQ.Text
     resultStatus <- PQ.resultStatus result
@@ -33,17 +33,17 @@ instance ExportStorage PostgresExportStorage where
     tuplesCount <- PQ.ntuples result
     unless (tuplesCount == 1) $ fail "cannot decode tuples from postgres"
     maybeValue <- PQ.getvalue result 0 0
-    PQ.finish connection
     return $ read . T.unpack . T.decodeUtf8 <$> maybeValue
 
   writeExportStorageSomeBlocks (PostgresExportStorage options) ExportStorageParams
     { esp_destination = destination
-    } = mapM_ $ \pack -> do
-    connection <- connectDestination destination
+    } = mapM_ $ \pack -> withConnection destination $ \connection -> do
     let query = TL.toStrict $ TL.toLazyText $ postgresExportStorageSql options pack
     resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus =<< PQ.exec connection (T.encodeUtf8 query)
     unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus
-    PQ.finish connection
+
+withConnection :: String -> (PQ.Connection -> IO a) -> IO a
+withConnection destination = bracket (connectDestination destination) PQ.finish
 
 connectDestination :: String -> IO PQ.Connection
 connectDestination destination = do
