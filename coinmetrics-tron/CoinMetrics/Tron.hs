@@ -71,6 +71,7 @@ data TronTransaction = TronTransaction
   , tt_expiration :: !(Maybe Int64)
   , tt_timestamp :: !(Maybe Int64)
   , tt_contracts :: !(V.Vector TronContract)
+  , tt_withdrawAmount :: !(Maybe Int64)
   }
 
 newtype TronTransactionWrapper = TronTransactionWrapper
@@ -88,6 +89,7 @@ instance J.FromJSON TronTransactionWrapper where
       <*> (rawData J..:? "expiration")
       <*> (rawData J..:? "timestamp")
       <*> (V.map unwrapTronContract <$> rawData J..: "contract")
+      <*> (return Nothing)
 
 {-
 Fields noted for:
@@ -203,4 +205,24 @@ instance BlockChain Tron where
         ]
       , H.method = "POST"
       } httpManager
-    either fail (return . unwrapTronBlock) $ J.eitherDecode' $ H.responseBody response
+    block <- either fail (return . unwrapTronBlock) $ J.eitherDecode' $ H.responseBody response
+    transactions <- forM (tb_transactions block) $ \transaction@TronTransaction
+      { tt_hash = txid
+      , tt_contracts = contracts
+      } -> if any ((== "WithdrawBalanceContract") . tc_type) contracts
+      then do
+        txInfoResponse <- tryWithRepeat $ H.httpLbs httpRequest
+          { H.path = "/walletsolidity/gettransactioninfobyid"
+          , H.requestBody = H.RequestBodyLBS $ J.encode $ J.Object
+            [ ("value", J.toJSON txid)
+            ]
+          , H.method = "POST"
+          } httpManager
+        txWithdrawAmount <- either fail return $ J.parseEither (J..: "withdraw_amount") =<< J.eitherDecode' (H.responseBody txInfoResponse)
+        return transaction
+          { tt_withdrawAmount = Just txWithdrawAmount
+          }
+      else return transaction
+    return block
+      { tb_transactions = transactions
+      }
