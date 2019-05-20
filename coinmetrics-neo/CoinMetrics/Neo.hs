@@ -41,6 +41,7 @@ instance HasBlockHeader NeoBlock where
     } = BlockHeader
     { bh_height = index
     , bh_hash = hash
+    , bh_prevHash = Nothing
     , bh_timestamp = posixSecondsToUTCTime $ fromIntegral time
     }
 

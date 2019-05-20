@@ -58,6 +58,7 @@ instance HasBlockHeader NemBlock where
     } = BlockHeader
     { bh_height = height
     , bh_hash = mempty
+    , bh_prevHash = Nothing
     , bh_timestamp = fromIntegral timeStamp `addUTCTime` nemBlockGenesisTimestamp
     }
 

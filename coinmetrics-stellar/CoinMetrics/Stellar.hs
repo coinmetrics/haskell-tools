@@ -70,6 +70,7 @@ instance HasBlockHeader StellarLedger where
     } = BlockHeader
     { bh_height = height
     , bh_hash = hash
+    , bh_prevHash = Nothing
     , bh_timestamp = posixSecondsToUTCTime $ fromIntegral closeTime
     }
 

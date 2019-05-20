@@ -74,7 +74,8 @@ data BlockChainInfo a = BlockChainInfo
 -- | Information about block.
 data BlockHeader = BlockHeader
   { bh_height :: {-# UNPACK #-} !BlockHeight
-  , bh_hash :: {-# UNPACK #-} !HexString
+  , bh_hash :: {-# UNPACK #-} !BlockHash
+  , bh_prevHash :: !(Maybe BlockHash)
   , bh_timestamp :: !UTCTime
   }
 

@@ -47,6 +47,7 @@ instance HasBlockHeader TezosBlock where
     } = BlockHeader
     { bh_height = level
     , bh_hash = HexString $ BS.toShort $ T.encodeUtf8 hash
+    , bh_prevHash = Nothing
     , bh_timestamp = Time.posixSecondsToUTCTime $ fromIntegral timestamp
     }
 

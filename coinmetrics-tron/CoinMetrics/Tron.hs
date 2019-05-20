@@ -46,6 +46,7 @@ instance HasBlockHeader TronBlock where
     } = BlockHeader
     { bh_height = number
     , bh_hash = hash
+    , bh_prevHash = Nothing
     , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp * 0.001
     }
 

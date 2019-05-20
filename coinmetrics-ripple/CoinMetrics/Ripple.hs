@@ -87,6 +87,7 @@ instance HasBlockHeader RippleLedger where
     } = BlockHeader
     { bh_height = index
     , bh_hash = hash
+    , bh_prevHash = Nothing
     , bh_timestamp = Time.posixSecondsToUTCTime $ fromIntegral closeTime
     }
 

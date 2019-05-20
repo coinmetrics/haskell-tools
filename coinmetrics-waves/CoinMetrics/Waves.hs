@@ -46,6 +46,7 @@ instance HasBlockHeader WavesBlock where
     } = BlockHeader
     { bh_height = height
     , bh_hash = mempty
+    , bh_prevHash = Nothing
     , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp * 0.001
     }
 
