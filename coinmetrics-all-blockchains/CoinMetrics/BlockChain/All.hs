@@ -12,6 +12,9 @@ import qualified Data.Text as T
 
 import CoinMetrics.BlockChain
 
+#if defined(CM_SUPPORT_BINANCE)
+import CoinMetrics.Binance
+#endif
 #if defined(CM_SUPPORT_BITCOIN)
 import CoinMetrics.Bitcoin
 #endif
@@ -59,6 +62,10 @@ allBlockChainInfos :: HM.HashMap T.Text SomeBlockChainInfo
 allBlockChainInfos = HM.fromList infos
   where
     infos =
+#if defined(CM_SUPPORT_BINANCE)
+      ("binance",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Binance)) :
+#endif
+
 #if defined(CM_SUPPORT_BITCOIN)
       ("bitcoin",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Bitcoin)) :
 #endif
@@ -100,7 +107,7 @@ allBlockChainInfos = HM.fromList infos
 #endif
 
 #if defined(CM_SUPPORT_TENDERMINT)
-      ("tendermint",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Tendermint)) :
+      ("tendermint",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy (Tendermint T.Text))) :
 #endif
 
 #if defined(CM_SUPPORT_TEZOS)

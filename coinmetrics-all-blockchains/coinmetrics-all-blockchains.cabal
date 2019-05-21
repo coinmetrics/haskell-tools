@@ -11,6 +11,11 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
+flag binance
+  description:         Support Binance
+  default:             True
+  manual:              True
+
 flag bitcoin
   description:         Support Bitcoin
   default:             True
@@ -89,6 +94,10 @@ library
     , coinmetrics
     , text
     , unordered-containers
+
+  if flag(binance)
+    build-depends:       coinmetrics-binance
+    cpp-options:         -DCM_SUPPORT_BINANCE
 
   if flag(bitcoin)
     build-depends:       coinmetrics-bitcoin

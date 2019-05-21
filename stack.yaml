@@ -3,6 +3,7 @@ resolver: lts-13.20
 packages:
 - coinmetrics
 - coinmetrics-all-blockchains
+- coinmetrics-binance
 - coinmetrics-bitcoin
 - coinmetrics-cardano
 - coinmetrics-eos

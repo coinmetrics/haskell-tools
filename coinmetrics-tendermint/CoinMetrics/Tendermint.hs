@@ -1,11 +1,20 @@
-{-# LANGUAGE DeriveGeneric, LambdaCase, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-|
+Module: CoinMetrics.Tendermint
+Description: Generic Tendermint structures useful for implementing derived blockchains, as well as Blockchain instance for generic non-decoded export.
+License: MIT
+-}
+
+{-# LANGUAGE DeriveGeneric, FlexibleInstances, LambdaCase, OverloadedLists, OverloadedStrings, ScopedTypeVariables, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Tendermint
   ( Tendermint(..)
   , TendermintBlock(..)
+  , TendermintTx(..)
   ) where
 
+import Control.Monad.Fail(MonadFail)
 import qualified Data.Aeson as J
+import qualified Data.Avro as A
 import Data.Int
 import Data.Maybe
 import Data.Proxy
@@ -15,27 +24,28 @@ import Data.Time.Clock.POSIX
 import Data.Time.ISO8601
 import qualified Data.Vector as V
 import GHC.Generics(Generic)
+import Language.Haskell.TH
 import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
-import CoinMetrics.Schema.Flatten
 import CoinMetrics.Schema.Util
 import CoinMetrics.Util
 import Hanalytics.Schema
+import Hanalytics.Schema.Postgres
 
-data Tendermint = Tendermint
+data Tendermint tx = Tendermint
   { tendermint_httpManager :: !H.Manager
   , tendermint_httpRequest :: !H.Request
   }
 
-data TendermintBlock = TendermintBlock
+data TendermintBlock tx = TendermintBlock
   { tb_height :: {-# UNPACK #-} !Int64
   , tb_hash :: {-# UNPACK #-} !HexString
   , tb_time :: {-# UNPACK #-} !Int64
-  , tb_transactions :: !(V.Vector T.Text)
+  , tb_transactions :: !(V.Vector tx)
   }
 
-instance HasBlockHeader TendermintBlock where
+instance HasBlockHeader (TendermintBlock tx) where
   getBlockHeader TendermintBlock
     { tb_height = height
     , tb_hash = hash
@@ -47,11 +57,11 @@ instance HasBlockHeader TendermintBlock where
     , bh_timestamp = posixSecondsToUTCTime $ fromIntegral timestamp * 0.001
     }
 
-newtype TendermintBlockWrapper = TendermintBlockWrapper
-  { unwrapTendermintBlock :: TendermintBlock
+newtype TendermintBlockWrapper tx = TendermintBlockWrapper
+  { unwrapTendermintBlock :: TendermintBlock tx
   }
 
-instance J.FromJSON TendermintBlockWrapper where
+instance TendermintTx tx => J.FromJSON (TendermintBlockWrapper tx) where
   parseJSON = J.withObject "tendermint block" $ \fields -> do
     blockMeta <- fields J..: "block_meta"
     blockMetaHeader <- blockMeta J..: "header"
@@ -59,7 +69,7 @@ instance J.FromJSON TendermintBlockWrapper where
       <$> (read <$> blockMetaHeader J..: "height")
       <*> ((J..: "hash") =<< (blockMeta J..: "block_id"))
       <*> (maybe (fail "wrong time") (return . floor . (* 1000) . utcTimeToPOSIXSeconds) . parseISO8601 =<< blockMetaHeader J..: "time")
-      <*> (fmap (fromMaybe V.empty) . (J..:? "txs") =<< (J..: "data") =<< (fields J..: "block"))
+      <*> (mapM decodeTendermintTx . fromMaybe V.empty =<< (J..:? "txs") =<< (J..: "data") =<< (fields J..: "block"))
 
 data TendermintResult a = TendermintResult
   { tr_result :: !a
@@ -67,11 +77,22 @@ data TendermintResult a = TendermintResult
 instance J.FromJSON a => J.FromJSON (TendermintResult a) where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
-genSchemaInstances [''TendermintBlock]
-genFlattenedTypes "height" [| tb_height |] [("block", ''TendermintBlock)]
+-- | Typeclass for Tendermint transaction types.
+class (SchemableField tx, A.ToAvro tx, ToPostgresText tx, J.ToJSON tx) => TendermintTx tx where
+  -- | Decode tendermint transaction.
+  decodeTendermintTx :: MonadFail m => T.Text -> m tx
 
-instance BlockChain Tendermint where
-  type Block Tendermint = TendermintBlock
+-- | Instance for Text, doing nothing.
+instance TendermintTx T.Text where
+  decodeTendermintTx = return
+
+-- | Instances for tendermint block.
+do
+  tx <- newName "tx"
+  schemaInstancesCtxDecs [varT tx] [t| TendermintBlock $(varT tx) |]
+
+instance TendermintTx tx => BlockChain (Tendermint tx) where
+  type Block (Tendermint tx) = TendermintBlock tx
 
   getBlockChainInfo _ = BlockChainInfo
     { bci_init = \BlockChainParams
@@ -86,16 +107,10 @@ instance BlockChain Tendermint where
     , bci_defaultEndBlock = 0
     , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
-      (schemaOf (Proxy :: Proxy TendermintBlock))
+      (schemaOf (Proxy :: Proxy (TendermintBlock tx)))
       [
       ]
       "CREATE TABLE \"tendermint\" OF \"TendermintBlock\" (PRIMARY KEY (\"height\"));"
-    , bci_flattenSuffixes = ["blocks"]
-    , bci_flattenPack = let
-      f blocks =
-        [ SomeBlocks (blocks :: [TendermintBlock_flattened])
-        ]
-      in f . mconcat . map flatten
     }
 
   getCurrentBlockHeight Tendermint
@@ -105,7 +120,7 @@ instance BlockChain Tendermint where
     response <- tryWithRepeat $ H.httpLbs httpRequest
       { H.path = "/block"
       } httpManager
-    either fail (return . tb_height . unwrapTendermintBlock . tr_result) $ J.eitherDecode' $ H.responseBody response
+    either fail (return . tb_height . (id :: TendermintBlock tx -> TendermintBlock tx) . unwrapTendermintBlock . tr_result) $ J.eitherDecode' $ H.responseBody response
 
   getBlockByHeight Tendermint
     { tendermint_httpManager = httpManager

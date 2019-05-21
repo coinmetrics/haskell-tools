@@ -117,7 +117,7 @@ genFlattenedTypes rootKeyName rootKeyExp types@(map snd -> typesNames) = do
           (appT listT (conT flattenedTypeName) : childrenFlattenedTypes)
 
       -- our declarations
-      instancesDecs <- schemaInstancesDecs flattenedTypeName
+      instancesDecs <- schemaInstancesDecs (conT flattenedTypeName)
       decs <- sequence $
         [ dataD (pure []) flattenedTypeName [] Nothing
           [ recC flattenedTypeName

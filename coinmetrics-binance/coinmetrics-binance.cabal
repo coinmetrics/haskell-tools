@@ -1,4 +1,4 @@
-name:                coinmetrics-tendermint
+name:                coinmetrics-binance
 version:             0.1.0.0
 -- synopsis:            
 -- description:         
@@ -13,8 +13,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-    CoinMetrics.Tendermint
-    CoinMetrics.Tendermint.Amino
+    CoinMetrics.Binance
   build-depends:
     aeson
     , avro
@@ -22,15 +21,13 @@ library
     , bytestring
     , cereal
     , coinmetrics
+    , coinmetrics-tendermint
     , hanalytics-base
     , hanalytics-postgres
     , http-client
-    , iso8601-time
+    , memory
     , protobuf
-    , template-haskell
     , text
-    , time
-    , unordered-containers
     , vector
   ghc-options:         -Wall
   default-language:    Haskell2010
