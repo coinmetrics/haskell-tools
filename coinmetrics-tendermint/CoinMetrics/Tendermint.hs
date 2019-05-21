@@ -43,6 +43,7 @@ data TendermintBlock tx = TendermintBlock
   , tb_hash :: {-# UNPACK #-} !HexString
   , tb_time :: {-# UNPACK #-} !Int64
   , tb_transactions :: !(V.Vector tx)
+  , tb_header :: !J.Value
   }
 
 instance HasBlockHeader (TendermintBlock tx) where
@@ -70,6 +71,7 @@ instance TendermintTx tx => J.FromJSON (TendermintBlockWrapper tx) where
       <*> ((J..: "hash") =<< (blockMeta J..: "block_id"))
       <*> (maybe (fail "wrong time") (return . floor . (* 1000) . utcTimeToPOSIXSeconds) . parseISO8601 =<< blockMetaHeader J..: "time")
       <*> (mapM decodeTendermintTx . fromMaybe V.empty =<< (J..:? "txs") =<< (J..: "data") =<< (fields J..: "block"))
+      <*> (return $ J.Object blockMetaHeader)
 
 data TendermintResult a = TendermintResult
   { tr_result :: !a
