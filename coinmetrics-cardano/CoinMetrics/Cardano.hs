@@ -111,6 +111,8 @@ instance J.FromJSON CardanoTransactionWrapper where
 data CardanoInput = CardanoInput
   { ci_address :: !T.Text
   , ci_value :: !Integer
+  , ci_txid :: !(Maybe HexString)
+  , ci_output :: !(Maybe Int64)
   }
 
 newtype CardanoInputWrapper = CardanoInputWrapper
@@ -118,11 +120,20 @@ newtype CardanoInputWrapper = CardanoInputWrapper
   }
 
 instance J.FromJSON CardanoInputWrapper where
-  parseJSON = J.withArray "cardano input" $ \fields -> do
-    unless (V.length fields == 2) $ fail "wrong cardano input array"
-    fmap CardanoInputWrapper $ CardanoInput
+  parseJSON = J.withArray "cardano input" $ \fields -> fmap CardanoInputWrapper $ case V.length fields of
+    -- official node
+    2 -> CardanoInput
       <$> J.parseJSON (fields V.! 0)
       <*> decodeValue (fields V.! 1)
+      <*> return Nothing
+      <*> return Nothing
+    -- forked node
+    4 -> CardanoInput
+      <$> J.parseJSON (fields V.! 2)
+      <*> decodeValue (fields V.! 3)
+      <*> (Just <$> J.parseJSON (fields V.! 0))
+      <*> (Just <$> J.parseJSON (fields V.! 1))
+    _ -> fail "wrong cardano input array"
 
 data CardanoOutput = CardanoOutput
   { co_address :: !T.Text
@@ -201,7 +212,11 @@ instance BlockChain Cardano where
     blockTxsBriefObjects <- either fail return =<< cardanoRequest cardano ("/api/blocks/txs/" <> blockHashText) [("limit", Just "1000000000000000000")]
     blockTxs <- forM blockTxsBriefObjects $ \txBriefObject -> do
       txIdText <- either fail return $ J.parseEither (J..: "ctbId") txBriefObject
-      either fail return =<< cardanoRequest cardano ("/api/txs/summary/" <> txIdText) []
+      txInputs <- either fail return $ J.parseEither (J..: "ctbInputs") txBriefObject
+      -- forked node has more information about inputs, so replace them
+      either fail return . J.parseEither J.parseJSON . J.Object
+        =<< either fail (return . HM.insert "ctsInputs" txInputs)
+        =<< cardanoRequest cardano ("/api/txs/summary/" <> txIdText) []
     either fail (return . unwrapCardanoBlock) $ J.parseEither (J.parseJSON . J.Object)
       $ HM.insert "height" (J.Number $ fromIntegral blockHeight)
       $ HM.insert "transactions" (J.Array blockTxs)
