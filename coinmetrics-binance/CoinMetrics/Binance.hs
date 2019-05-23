@@ -9,6 +9,7 @@ module CoinMetrics.Binance
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.ByteArray.Encoding as BA
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Short as BS
 import Data.Int
 import qualified Data.ProtocolBuffers.Internal as P
@@ -144,9 +145,10 @@ data BinanceMessage
     }
   | BinanceMessage_SubmitProposal
     { bm_title :: !T.Text
-    , bm_description :: !T.Text
-    , bm_proposal_type :: !T.Text
+    , bm_description :: !J.Value
+    , bm_proposal_type :: !Int64
     , bm_proposer :: {-# UNPACK #-} !HexString
+    , bm_initial_deposit :: !(V.Vector BinanceToken)
     , bm_voting_period :: {-# UNPACK #-} !Int64
     }
   | BinanceMessage_Deposit
@@ -206,12 +208,13 @@ instance ReadMsg BinanceMessage where
         <*> readRequired P.decodeWire 3 h
         <*> readRequired P.decodeWire 4 h
         <*> readRequired P.decodeWire 5 h
-      0xACCBA2DE -> BinanceMessage_SubmitProposal
+      0xB42D614E -> BinanceMessage_SubmitProposal
         <$> readRequired P.decodeWire 1 h
-        <*> readRequired P.decodeWire 2 h
+        <*> (either fail return . J.eitherDecode . BL.fromStrict . T.encodeUtf8 =<< readRequired P.decodeWire 2 h)
         <*> readRequired P.decodeWire 3 h
         <*> readRequired P.decodeWire 4 h
-        <*> readRequired P.decodeWire 5 h
+        <*> readRepeated readSubStruct 5 h
+        <*> readRequired P.decodeWire 6 h
       0xA18A56E5 -> BinanceMessage_Deposit
         <$> readRequired P.decodeWire 1 h
         <*> readRequired P.decodeWire 2 h
