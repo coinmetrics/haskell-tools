@@ -6,6 +6,7 @@ packages:
 - coinmetrics-binance
 - coinmetrics-bitcoin
 - coinmetrics-cardano
+- coinmetrics-cosmos
 - coinmetrics-eos
 - coinmetrics-ethereum
 - coinmetrics-export
