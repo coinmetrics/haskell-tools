@@ -108,12 +108,12 @@ data CosmosMessage
   | CosmosMessage_Delegate
     { cm_delegatorAddress :: {-# UNPACK #-} !HexString
     , cm_validatorAddress :: {-# UNPACK #-} !HexString
-    , cm_amount :: !CosmosCoin
+    , cm_amount :: !(V.Vector CosmosCoin)
     }
   | CosmosMessage_Undelegate
     { cm_delegatorAddress :: {-# UNPACK #-} !HexString
     , cm_validatorAddress :: {-# UNPACK #-} !HexString
-    , cm_amount :: !CosmosCoin
+    , cm_amount :: !(V.Vector CosmosCoin)
     }
   | CosmosMessage_CreateValidator
     { cm_description :: !CosmosDescription
@@ -134,7 +134,7 @@ data CosmosMessage
     { cm_delegatorAddress :: {-# UNPACK #-} !HexString
     , cm_validatorSrcAddress :: {-# UNPACK #-} !HexString
     , cm_validatorDstAddress :: {-# UNPACK #-} !HexString
-    , cm_amount :: !CosmosCoin
+    , cm_amount :: !(V.Vector CosmosCoin)
     }
   | CosmosMessage_Vote
     { cm_proposalID :: {-# UNPACK #-} !Int64
@@ -145,6 +145,22 @@ data CosmosMessage
     { cm_delegatorAddress :: {-# UNPACK #-} !HexString
     , cm_withdrawADdress :: {-# UNPACK #-} !HexString
     }
+  | CosmosMessage_Unjail
+    { cm_validatorAddress :: {-# UNPACK #-} !HexString
+    }
+  | CosmosMessage_SubmitProposal
+    { cm_title :: !T.Text
+    , cm_desc :: !T.Text
+    , cm_proposalRoute :: {-# UNPACK #-} !Int64
+    , cm_proposer :: {-# UNPACK #-} !HexString
+    , cm_initialDeposit :: !(V.Vector CosmosCoin)
+    }
+  | CosmosMessage_Deposit
+    { cm_proposalID :: {-# UNPACK #-} !Int64
+    , cm_depositor :: {-# UNPACK #-} !HexString
+    , cm_amount :: !(V.Vector CosmosCoin)
+    }
+
 
 instance ReadMsg CosmosMessage where
   readMsg = do
@@ -165,11 +181,11 @@ instance ReadMsg CosmosMessage where
       0x921d2e4e -> CosmosMessage_Delegate
         <$> readRequired P.decodeWire 1 h
         <*> readRequired P.decodeWire 2 h
-        <*> readRequired readSubStruct 3 h
+        <*> readRepeated readSubStruct 3 h
       0x5c80810d -> CosmosMessage_Undelegate
         <$> readRequired P.decodeWire 1 h
         <*> readRequired P.decodeWire 2 h
-        <*> readRequired readSubStruct 3 h
+        <*> readRepeated readSubStruct 3 h
       0xeb361d01 -> CosmosMessage_CreateValidator
         <$> readRequired readSubStruct 1 h
         <*> readRequired readSubStruct 2 h
@@ -187,7 +203,7 @@ instance ReadMsg CosmosMessage where
         <$> readRequired P.decodeWire 1 h
         <*> readRequired P.decodeWire 2 h
         <*> readRequired P.decodeWire 3 h
-        <*> readRequired readSubStruct 4 h
+        <*> readRepeated readSubStruct 4 h
       0xa1cadd36 -> CosmosMessage_Vote
         <$> readRequired P.decodeWire 1 h
         <*> readRequired P.decodeWire 2 h
@@ -195,6 +211,18 @@ instance ReadMsg CosmosMessage where
       0x536070b8 -> CosmosMessage_SetWithdrawAddress
         <$> readRequired P.decodeWire 1 h
         <*> readRequired P.decodeWire 2 h
+      0x543aec70 -> CosmosMessage_Unjail
+        <$> readRequired P.decodeWire 1 h
+      0xb42d614e -> CosmosMessage_SubmitProposal
+        <$> readRequired P.decodeWire 1 h
+        <*> readRequired P.decodeWire 2 h
+        <*> readRequired P.decodeWire 3 h
+        <*> readRequired P.decodeWire 4 h
+        <*> readRepeated readSubStruct 5 h
+      0xa18a56e5 -> CosmosMessage_Deposit
+        <$> readRequired P.decodeWire 1 h
+        <*> readRequired P.decodeWire 2 h
+        <*> readRepeated readSubStruct 3 h
       _ -> return $ CosmosMessage_Unknown $ T.pack $ showHex msgType ""
 
 
