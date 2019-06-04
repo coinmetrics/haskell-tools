@@ -14,6 +14,7 @@ cabal-version:       >=1.10
 executable coinmetrics-export
   main-is:           coinmetrics-export.hs
   other-modules:
+    Actors
   build-depends:
     aeson
     , avro
@@ -34,12 +35,14 @@ executable coinmetrics-export
     , http-client
     , http-client-tls
     , memory
+    , nqe
     , optparse-applicative
     , postgresql-libpq
     , process
     , stm
     , text
     , unordered-containers
+    , unliftio
     , vector
   -- -O0 added temporarily to avoid space leak
   ghc-options:         -threaded -Wall -O0

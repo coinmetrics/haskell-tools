@@ -43,7 +43,7 @@ import Hanalytics.Schema.Postgres
 -- | ByteString which serializes to JSON as hex string.
 newtype HexString = HexString
   { unHexString :: BS.ShortByteString
-  } deriving (Eq, Ord, Semigroup, Monoid, Hashable)
+  } deriving (Eq, Ord, Semigroup, Monoid, Hashable, Show)
 instance SchemableField HexString where
   schemaFieldTypeOf _ = SchemaFieldType_bytes
 instance A.HasAvroSchema HexString where

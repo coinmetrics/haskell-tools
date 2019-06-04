@@ -2,50 +2,53 @@
 
 module Main(main) where
 
-import Control.Concurrent
-import Control.Concurrent.STM
-import Control.Exception
-import Control.Monad
-import qualified Data.Aeson as J
-import qualified Data.Avro as A
-import qualified Data.ByteString.Lazy as BL
-import Data.Default
-import qualified Data.DiskHash as DH
-import Data.Either
-import qualified Data.HashMap.Strict as HM
-import Data.Maybe
-import Data.Proxy
-import qualified Data.Serialize as S
-import Data.String
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Text.IO as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.IO as TL
-import qualified Data.Text.Lazy.Builder as TL
-import qualified Data.Vector as V
-import qualified Database.PostgreSQL.LibPQ as PQ
-import qualified Network.Connection as NC
-import qualified Network.HTTP.Client as H
-import qualified Network.HTTP.Client.TLS as H
-import qualified Options.Applicative as O
-import System.Directory
-import System.IO
-import System.IO.Unsafe
-import qualified System.Process as P
+import           Control.Concurrent
+import           Control.Concurrent.STM
+import           Control.Exception
+import           Control.Monad
+import qualified Data.Aeson                              as J
+import qualified Data.Avro                               as A
+import qualified Data.ByteString.Lazy                    as BL
+import           Data.Default
+import qualified Data.DiskHash                           as DH
+import           Data.Either
+import qualified Data.HashMap.Strict                     as HM
+import           Data.Maybe
+import           Data.Proxy
+import qualified Data.Serialize                          as S
+import           Data.String
+import qualified Data.Text                               as T
+import qualified Data.Text.Encoding                      as T
+import qualified Data.Text.IO                            as T
+import qualified Data.Text.Lazy                          as TL
+import qualified Data.Text.Lazy.Builder                  as TL
+import qualified Data.Text.Lazy.IO                       as TL
+import qualified Data.Vector                             as V
+import qualified Database.PostgreSQL.LibPQ               as PQ
+import qualified Network.Connection                      as NC
+import qualified Network.HTTP.Client                     as H
+import qualified Network.HTTP.Client.TLS                 as H
+import           NQE
+import qualified Options.Applicative                     as O
+import           System.Directory
+import           System.IO
+import           System.IO.Unsafe
+import qualified System.Process                          as P
+import qualified UnliftIO                                as U
 
-import CoinMetrics.BlockChain
-import CoinMetrics.BlockChain.All
-import CoinMetrics.Export.Storage
-import CoinMetrics.Export.Storage.AvroFile
-import CoinMetrics.Export.Storage.Elastic
-import CoinMetrics.Export.Storage.Postgres
-import CoinMetrics.Export.Storage.PostgresFile
-import CoinMetrics.Export.Storage.RabbitMQ
-import CoinMetrics.Iota
-import Hanalytics.Schema
-import Hanalytics.Schema.BigQuery
-import Hanalytics.Schema.Postgres
+import           Actors 
+import           CoinMetrics.BlockChain
+import           CoinMetrics.BlockChain.All
+import           CoinMetrics.Export.Storage
+import           CoinMetrics.Export.Storage.AvroFile
+import           CoinMetrics.Export.Storage.Elastic
+import           CoinMetrics.Export.Storage.Postgres
+import           CoinMetrics.Export.Storage.PostgresFile
+import           CoinMetrics.Export.Storage.RabbitMQ
+import           CoinMetrics.Iota
+import           Hanalytics.Schema
+import           Hanalytics.Schema.BigQuery
+import           Hanalytics.Schema.Postgres
 
 main :: IO ()
 main = do
@@ -400,6 +403,46 @@ run Options
 
     let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
+    ----------------------------------------------------------------------------
+    print endBlock
+    -- I need to create bounded inboxes to avoid memory leaks
+    topInbox <- newInbox
+    fetchInbox <- newInbox
+    persistInbox <- newInbox
+    let persistMailbox = inboxToMailbox persistInbox
+    let topMailbox = inboxToMailbox topInbox
+    let fetchMailbox = inboxToMailbox fetchInbox
+
+    let nThreads = 4 -- number of threads per node to fetch blocks
+    let blockchainsI = zip [1..] blockchains
+    blockchainInboxes <- mapM createInbox blockchainsI
+    let blockchainMailboxes = map (\(inbox, b, i) -> (inboxToMailbox inbox, b, i)) blockchainInboxes
+    withSupervisor KillAll $ \sup -> do
+      mapM_ (addChild sup)
+        $  [globalTopManager topInbox]
+        <> [persistenceActor beginBlock persistInbox]
+        <> map (nodeManager endBlock topMailbox) blockchainInboxes
+        <> [nextBlockExplorer beginBlock endBlock topMailbox fetchMailbox]
+        <> join (map (replicate nThreads . fetchWorker fetchInbox persistMailbox) blockchainMailboxes)
+
+      print $ length blockchainMailboxes
+      print "all actors started"
+      blocker -- avoid supervisor killing everybody
+
+
+    blocker
+    print "SHIT"
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    ----------------------------------------------------------------------------
     -- simple multithreaded pipeline
     let queueSize = apisCount * threadsCount * 2
     blockIndexQueue <- newTBQueueIO $ fromIntegral queueSize -- queue of (index, nextIndex) items
