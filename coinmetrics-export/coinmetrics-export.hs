@@ -412,6 +412,7 @@ run Options
     let persistMailbox = inboxToMailbox persistInbox
     let topMailbox = inboxToMailbox topInbox
     let fetchMailbox = inboxToMailbox fetchInbox
+    let wo = writeToOutputStorages outputStorages flattenPack beginBlock
 
     let nThreads = 4 -- number of threads per node to fetch blocks
     let blockchainsI = zip [1..] blockchains
@@ -420,7 +421,7 @@ run Options
     withSupervisor KillAll $ \sup -> do
       mapM_ (addChild sup)
         $  [globalTopManager topInbox]
-        <> [persistenceActor beginBlock persistInbox]
+        <> [persistenceActor beginBlock endBlock persistInbox wo]
         <> map (nodeManager endBlock topMailbox) blockchainInboxes
         <> [nextBlockExplorer beginBlock endBlock topMailbox fetchMailbox]
         <> join (map (replicate nThreads . fetchWorker fetchInbox persistMailbox) blockchainMailboxes)

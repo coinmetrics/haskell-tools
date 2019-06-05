@@ -22,6 +22,7 @@ import           Control.Monad
 -- import           Data.Text          (Text)
 import           NQE
 import           UnliftIO
+import           System.IO.Unsafe
 
 import           CoinMetrics.BlockChain
 -- import           CoinMetrics.BlockChain.All
@@ -146,23 +147,52 @@ fetchWorker inbox persistM (localTopM, blockchain, i) = do
     selectIndex top (Fetch (current, next)) =
       if current <= top then Just (current, next) else Nothing
 
-persistenceActor :: HasBlockHeader a => BlockHeight -> Inbox (PersistBlockMsg a) -> IO ()
-persistenceActor firstBlock inbox = do
-  nextToSaveT <- newTVarIO firstBlock
+persistenceActor ::
+     HasBlockHeader a
+  => BlockHeight
+  -> BlockHeight
+  -> Inbox (PersistBlockMsg a)
+  -> ([a] -> IO ())
+  -> IO ()
+persistenceActor beginBlock endBlock inbox writeOutput = do
+  nextToSaveT <- newTVarIO beginBlock
   print "start persistence Actor"
-  forever $ do
-    block <- atomically $ do
-      nextToSave <- readTVar nextToSaveT
-      (_, next, b) <- receiveMatchSTM inbox (selectBlock nextToSave)
-      writeTVar nextToSaveT next
-      return b
-
-    let header = getBlockHeader block
-    putStr "Save: "
-    print (bh_height header)   
+  ------------------------------------------------------------------------------
+  let
+    step i =
+      if endBlock <= 0 || i < endBlock
+      then unsafeInterleaveIO $ do
+        (current, block) <- atomically $ do
+          nextToSave <- readTVar nextToSaveT
+          (c, next, b) <- receiveMatchSTM inbox (selectBlock nextToSave)
+          writeTVar nextToSaveT next
+          return (c, b)
+        when (current `rem` 100 == 0) $ print $ "synced up to " <> show current
+        (block :) <$> step (current + 1)
+      else return []
+  step beginBlock >>= writeOutput
   where
     selectBlock wanted (Persist b@(found, _, _)) =
-      if found == wanted then Just b else Nothing
+      if found == wanted
+        then Just b
+        else Nothing
+  ------------------------------------------------------------------------------
+  -- forever $ do
+  --   block <-
+  --     atomically $ do
+  --       nextToSave <- readTVar nextToSaveT
+  --       (_, next, b) <- receiveMatchSTM inbox (selectBlock nextToSave)
+  --       writeTVar nextToSaveT next
+  --       return b
+  --   let header = getBlockHeader block
+  --   putStr "Save: "
+  --   print (bh_height header)
+  -- where
+  --   selectBlock wanted (Persist b@(found, _, _)) =
+  --     if found == wanted
+  --       then Just b
+  --       else Nothing
+
 
 createInbox :: BlockChain a => (Int, a) -> IO (Inbox b, a, Int)
 createInbox (i, blockchain) = do
