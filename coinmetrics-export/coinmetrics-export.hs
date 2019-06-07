@@ -419,136 +419,22 @@ run Options
 
     -- TODO: implement --continue logic
 
-    withSupervisor KillAll $ \sup -> do
-      mapM_ (addChild sup)
-        $  [globalTopManager topInbox]
-        <> [persistenceActor persistInbox writeOuts]
-        <> map (nodeManager endBlock topMailbox) blockchainInboxes
-        <> [nextBlockExplorer beginBlock endBlock maybeBlocksFile topMailbox fetchMailbox persistMailbox]
-        <> join (map (replicate threadsCount . fetchWorker fetchInbox persistMailbox) blockchainMailboxes)
+    withSupervisor KillAll actorApp
+    -- withSupervisor KillAll $ \sup -> do
+    --   mapM_ (addChild sup)
+    --     $  [globalTopManager topInbox]
+    --     <> [persistenceActor persistInbox writeOuts]
+    --     <> map (nodeManager endBlock topMailbox) blockchainInboxes
+    --     <> [nextBlockExplorer beginBlock endBlock maybeBlocksFile topMailbox fetchMailbox persistMailbox] -- pot acabar en cas finit (aleshores ha de matar)
+    --     <> join (map (replicate threadsCount . fetchWorker fetchInbox persistMailbox) blockchainMailboxes) -- han de funcionar mentres persistence actor no acabi
 
-      print "all actors started"
-      blocker -- avoid supervisor killing everybody
+    --   print "all actors started"
+    --   blocker -- avoid supervisor killing everybody
 
-    blocker
-    print "something is wrong"
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    ----------------------------------------------------------------------------
-    -- simple multithreaded pipeline
-    let queueSize = apisCount * threadsCount * 2
-    blockIndexQueue <- newTBQueueIO $ fromIntegral queueSize -- queue of (index, nextIndex) items
-    blockIndexQueueEndedVar <- newTVarIO False
+    -- blocker
+    -- print "something is wrong"    
 
-    -- upper limits of blockchains
-    blockchainsLimitVars <- forM blockchains $ \_ -> newTVarIO 0
-
-    -- if end block is fixed, or blocks file is specified, just add indices without checking for blockchains limits
-    if endBlock > 0
-      then void $ forkIO $ do
-        blocksIndices <- case maybeBlocksFile of
-          Just blocksFile -> map (read . TL.unpack) . TL.lines <$> TL.readFile blocksFile
-          Nothing -> return [beginBlock..(endBlock - 1)]
-        mapM_ (atomically . writeTBQueue blockIndexQueue) $ zip blocksIndices (tail blocksIndices ++ [-1])
-        atomically $ writeTVar blockIndexQueueEndedVar True
-    -- else blockchains add indices concurrently (but every index still can be added only once)
-    else do
-      nextIndexToAddVar <- newTVarIO beginBlock
-      forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) -> forkIO $ let
-        step = do
-          -- determine current (known) block index
-          eitherCurrentBlockIndex <- try $ getCurrentBlockHeight blockchain
-          case eitherCurrentBlockIndex of
-            Right currentBlockIndex -> do
-              -- insert indices up to this index minus offset
-              let endIndex = currentBlockIndex + endBlock + 1
-              atomically $ writeTVar blockchainLimitVar endIndex
-              logStrLn $ "continuously syncing blocks... up to " <> show (endIndex - 1)
-              let
-                f = join $ atomically $ do
-                  nextIndexToAdd <- readTVar nextIndexToAddVar
-                  if nextIndexToAdd < endIndex
-                    then do
-                      writeTBQueue blockIndexQueue (nextIndexToAdd, nextIndexToAdd + 1)
-                      writeTVar nextIndexToAddVar (nextIndexToAdd + 1)
-                      return f
-                    else return $ return ()
-                in f
-            Left (SomeException err) -> logPrint err
-          -- pause
-          threadDelay 10000000
-          -- repeat
-          step
-        in step
-
-    blockQueue <- newTBQueueIO $ fromIntegral queueSize
-    blockQueueNextBlockIndexVar <- newTVarIO beginBlock
-
-    -- work threads getting blocks from blockchain
-    forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) ->
-      forM_ [1..threadsCount] $ \_ -> let
-        step = do
-          maybeBlockIndex <- atomically $ do
-            maybeBlockIndex <- tryReadTBQueue blockIndexQueue
-            case maybeBlockIndex of
-              Just (blockIndex, nextBlockIndex) -> do
-                blockchainLimit <- readTVar blockchainLimitVar
-                if blockIndex < blockchainLimit || endBlock > 0
-                  then return $ Just (blockIndex, nextBlockIndex)
-                  else retry
-              Nothing -> do
-                blockIndexQueueEnded <- readTVar blockIndexQueueEndedVar
-                if blockIndexQueueEnded
-                  then return Nothing
-                  else retry
-          case maybeBlockIndex of
-            Just (blockIndex, nextBlockIndex) -> do
-              -- get block from blockchain
-              eitherBlock <- try $ getBlockByHeight blockchain blockIndex
-              case eitherBlock of
-                Right block ->
-                  -- insert block into block queue ensuring order
-                  atomically $ do
-                    blockQueueNextBlockIndex <- readTVar blockQueueNextBlockIndexVar
-                    if blockIndex == blockQueueNextBlockIndex then do
-                      writeTBQueue blockQueue (blockIndex, block)
-                      writeTVar blockQueueNextBlockIndexVar nextBlockIndex
-                    else retry
-                Left (SomeException err) -> do
-                  logPrint err
-                  -- if it's allowed to ignore errors, do that
-                  if ignoreMissingBlocks
-                    then atomically $ do
-                      blockQueueNextBlockIndex <- readTVar blockQueueNextBlockIndexVar
-                      if blockIndex == blockQueueNextBlockIndex
-                        then writeTVar blockQueueNextBlockIndexVar nextBlockIndex
-                        else retry
-                    -- otherwise rethrow error
-                    else throwIO err
-              -- repeat
-              step
-            Nothing -> return ()
-        in forkIO step
-
-    -- write blocks into outputs, using lazy IO
-    let
-      step i = if endBlock <= 0 || i < endBlock
-        then unsafeInterleaveIO $ do
-          (blockIndex, block) <- atomically $ readTBQueue blockQueue
-          when (blockIndex `rem` 100 == 0) $ logStrLn $ "synced up to " <> show blockIndex
-          (block :) <$> step (blockIndex + 1)
-        else return []
-    writeToOutputStorages outputStorages flattenPack beginBlock =<< step beginBlock
-    logStrLn $ "sync from " <> show beginBlock <> " to " <> show (endBlock - 1) <> " complete"
-
+  -- ---------------------------------------------------------------------------
   OptionExportIotaCommand
     { options_apiUrl = apiUrl
     , options_syncDbFile = syncDbFile

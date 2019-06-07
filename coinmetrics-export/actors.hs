@@ -15,6 +15,7 @@ module Actors
   , NodeMsg (..)
   , PersistBlockMsg (..)
   , assocInbox
+  , actorApp
   ) where
 
 import           Control.Concurrent (threadDelay)
@@ -70,6 +71,7 @@ topChainExplorer endBlock nodeM globalM blockchain = do
     threadDelay 10000000
 
 -- This actor will spawn a topChainExplorer that tracks the local BH
+-- we spawn a node manager per crypto node we talk
 -- it will be in charge to answer the local BH of the node he is connected 
 nodeManager ::
      BlockChain a
@@ -94,6 +96,7 @@ nodeManager endBlock globalM (nodeI, blockchain) = do
 -- is tracking the maximum block heigh of all of them
 globalTopManager :: Inbox GlobalTopMsg -> IO ()
 globalTopManager inbox = do
+  print "hello"
   upperLimit <- newTVarIO 0
   forever $ do
     msg <- receive inbox
@@ -161,7 +164,7 @@ fetchWorker inbox persistM (localTopM, blockchain) =
             -- there was this logic ignoreErrorsEnabled that I dont quite follow
       Nothing -> return ()
   where
-    timeOut = 4 -- 2 secs. This is needed in case you try to fetch a blockhigh non existend, like 0
+    timeOut = 4 -- 4 secs. This is needed in case you try to fetch a blockhigh non existend, like 0
     selectIndex top (Fetch current next) =
       if current <= top then Just (current, next) else Nothing
 
@@ -172,6 +175,7 @@ persistenceActor ::
 persistenceActor inbox writeOutput = do
     beginBlock <- atomically $ receiveMatchSTM inbox selectBegin
     listToWrite beginBlock >>= writeOutput
+    putStrLn "Sync complete"
   where
     selectBegin (Begin bh) = Just bh
     selectBegin _ = Nothing
@@ -194,3 +198,9 @@ readBlockFile file = map (read . TL.unpack) . TL.lines <$> TL.readFile file
 
 sendList :: (MonadIO m, OutChan mbox) => [msg] -> mbox msg -> m ()
 sendList xs mbox = mapM_ (`send` mbox) xs
+
+actorApp :: Supervisor -> IO ()
+actorApp sup = do
+  topInbox <- newInbox
+  mapM_ (addChild sup) $ [globalTopManager topInbox]
+  blocker
