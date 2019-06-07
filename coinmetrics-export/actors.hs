@@ -47,9 +47,9 @@ data PersistBlockMsg b = Persist BlockHeight BlockHeight b
 blocker :: IO ()
 blocker = forever $ threadDelay 1000000000
 
--- This actor is in charge to pull a single bitcoin node
+-- Constant pulling of BlockHeigh
 -- Notify the global BH tracker
--- Notify its parent, the local BH tracker
+-- Notify the local BH tracker
 topChainExplorer ::
      BlockChain a
   => BlockHeight
@@ -69,9 +69,8 @@ topChainExplorer endBlock globalM (nodeM, blockchain) = do
       Left (SomeException err) -> print err
     threadDelay 10000000
 
--- This actor will spawn a topChainExplorer that tracks the local BH
--- we spawn a node manager per crypto node we talk
--- it will be in charge to answer the local BH of the node he is connected 
+-- This is the local BH tracker (responding to whoever is asking:
+-- normally a worker connected to the same blockchain) 
 nodeManager :: Inbox NodeMsg -> IO ()
 nodeManager nodeI = do
   upperLimit <- newTVarIO 0
@@ -84,8 +83,8 @@ nodeManager nodeI = do
         when (found > limit) $ writeTVar upperLimit found
 
 
--- This actor get notified by all the explorers connected to all nodes and 
--- is tracking the maximum block heigh of all of them
+-- This is the global BH tracker. Next-block-explorer uses that 
+-- to know the limits no matter what node you could be connected
 globalTopManager :: Inbox GlobalTopMsg -> IO ()
 globalTopManager inbox = do
   upperLimit <- newTVarIO 0
@@ -97,8 +96,8 @@ globalTopManager inbox = do
         limit <- readTVar upperLimit
         when (found > limit) $ writeTVar upperLimit found
 
--- This actor is in charge to generate the list of events with all the blocks
--- that need to be fetched.
+-- This is in charge to create the list of block to download
+-- That might depend on the mode the program is running
 nextBlockExplorer :: HasBlockHeader a 
   => BlockHeight
   -> BlockHeight
@@ -133,7 +132,7 @@ nextBlockExplorer beginBlock endBlock blocksFileM globalM fetchM persistM = do
             modifyTVar currentBox (+ 1)
             Fetch current (current + 1) `sendSTM` fetchM
 
--- Those actors are in charge of downloading the actual blocks
+-- These are the actual workers downloading the blocks
 fetchWorker ::
      BlockChain a
   => Inbox FetchBlockMsg
