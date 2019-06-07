@@ -404,35 +404,34 @@ run Options
     let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
     ----------------------------------------------------------------------------
-    print endBlock
     -- I need to create bounded inboxes to avoid memory leaks
     topInbox <- newInbox
     fetchInbox <- newInbox
     persistInbox <- newInbox
+    blockchainInboxes <- mapM assocInbox blockchains
+
     let persistMailbox = inboxToMailbox persistInbox
     let topMailbox = inboxToMailbox topInbox
     let fetchMailbox = inboxToMailbox fetchInbox
-    let wo = writeToOutputStorages outputStorages flattenPack beginBlock
+    let blockchainMailboxes = map (\(i, b) -> (inboxToMailbox i, b)) blockchainInboxes
 
-    let nThreads = 4 -- number of threads per node to fetch blocks
-    let blockchainsI = zip [1..] blockchains
-    blockchainInboxes <- mapM createInbox blockchainsI
-    let blockchainMailboxes = map (\(inbox, b, i) -> (inboxToMailbox inbox, b, i)) blockchainInboxes
+    let writeOuts = writeToOutputStorages outputStorages flattenPack beginBlock
+
+    -- TODO: implement --continue logic
+
     withSupervisor KillAll $ \sup -> do
       mapM_ (addChild sup)
         $  [globalTopManager topInbox]
-        <> [persistenceActor beginBlock endBlock persistInbox wo]
+        <> [persistenceActor persistInbox writeOuts]
         <> map (nodeManager endBlock topMailbox) blockchainInboxes
-        <> [nextBlockExplorer beginBlock endBlock topMailbox fetchMailbox]
-        <> join (map (replicate nThreads . fetchWorker fetchInbox persistMailbox) blockchainMailboxes)
+        <> [nextBlockExplorer beginBlock endBlock maybeBlocksFile topMailbox fetchMailbox persistMailbox]
+        <> join (map (replicate threadsCount . fetchWorker fetchInbox persistMailbox) blockchainMailboxes)
 
-      print $ length blockchainMailboxes
       print "all actors started"
       blocker -- avoid supervisor killing everybody
 
-
     blocker
-    print "SHIT"
+    print "something is wrong"
     
     
     

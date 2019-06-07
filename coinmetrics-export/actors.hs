@@ -14,18 +14,17 @@ module Actors
   , FetchBlockMsg (..)
   , NodeMsg (..)
   , PersistBlockMsg (..)
-  , createInbox
+  , assocInbox
   ) where
 
 import           Control.Concurrent (threadDelay)
 import           Control.Monad
--- import           Data.Text          (Text)
 import           NQE
 import           UnliftIO
 import           System.IO.Unsafe
-
+import qualified Data.Text.Lazy         as TL
+import qualified Data.Text.Lazy.IO      as TL
 import           CoinMetrics.BlockChain
--- import           CoinMetrics.BlockChain.All
 
 -- logStrLn :: String -> IO ()
 -- logStrLn str = withMVar logStrMVar $ \_ -> hPutStrLn stderr str
@@ -39,50 +38,50 @@ data GlobalTopMsg = GetGlobalTop (Listen BlockHeight)
 data NodeMsg = GetLocalTop (Listen BlockHeight) 
              | SetLocalTop BlockHeight
 
-data FetchBlockMsg = Fetch (BlockHeight, BlockHeight)
+data FetchBlockMsg = Fetch BlockHeight BlockHeight
 
-data PersistBlockMsg b = Persist (BlockHeight, BlockHeight, b)
+data PersistBlockMsg b = Persist BlockHeight BlockHeight b
+                       | Begin BlockHeight
 
 blocker :: IO ()
 blocker = forever $ threadDelay 1000000000
 
+-- This actor is in charge to pull a single bitcoin node
+-- Notify the global BH tracker
+-- Notify its parent, the local BH tracker
 topChainExplorer ::
      BlockChain a
   => BlockHeight
   -> Mailbox NodeMsg
   -> Mailbox GlobalTopMsg
   -> a
-  -> Int
   -> IO ()
-topChainExplorer endBlock nodeM globalM blockchain i = do
-  print $ "start topChainExplorer: " <> show i
+topChainExplorer endBlock nodeM globalM blockchain = do
+  let lowerLimit = if endBlock < 0 then endBlock + 1 else 0
   forever $ do
-    -- print $ "bucle topchainexplorer: " <> show i
     eBlockIndex <- try $ getCurrentBlockHeight blockchain
     case eBlockIndex of
-      Right current -> do
-        -- print "TOPCE: going to obtain BH"
+      Right current ->
         atomically $ do
-          let limit = current + endBlock + 1
+          let limit = current + lowerLimit
           SetLocalTop limit `sendSTM` nodeM
           SetGlobalTop limit `sendSTM` globalM
-        -- print "TOPCE: send shit"
       Left (SomeException err) -> print err
     threadDelay 10000000
 
+-- This actor will spawn a topChainExplorer that tracks the local BH
+-- it will be in charge to answer the local BH of the node he is connected 
 nodeManager ::
      BlockChain a
   => BlockHeight
   -> Mailbox GlobalTopMsg
-  -> (Inbox NodeMsg, a, Int)
+  -> (Inbox NodeMsg, a)
   -> IO ()
-nodeManager endBlock globalM (nodeI, blockchain, i) = do
-  print $ "node manager start: " <> show i
+nodeManager endBlock globalM (nodeI, blockchain) = do
   upperLimit <- newTVarIO 0
   let nodeM = inboxToMailbox nodeI
-  _ <- async $ topChainExplorer endBlock nodeM globalM blockchain i
+  _ <- async $ topChainExplorer endBlock nodeM globalM blockchain
   forever $ do
-    -- print $ "bucle nodemanager: " <> show i
     msg <- receive nodeI
     case msg of
       GetLocalTop reply -> atomically $ readTVar upperLimit >>= reply
@@ -91,12 +90,12 @@ nodeManager endBlock globalM (nodeI, blockchain, i) = do
         when (found > limit) $ writeTVar upperLimit found
 
 
+-- This actor get notified by all the explorers connected to all nodes and 
+-- is tracking the maximum block heigh of all of them
 globalTopManager :: Inbox GlobalTopMsg -> IO ()
 globalTopManager inbox = do
-  print "start topChainManager"
   upperLimit <- newTVarIO 0
   forever $ do
-    -- print "bucle topChainManager"
     msg <- receive inbox
     case msg of
       GetGlobalTop reply -> atomically $ readTVar upperLimit >>= reply
@@ -104,31 +103,50 @@ globalTopManager inbox = do
         limit <- readTVar upperLimit
         when (found > limit) $ writeTVar upperLimit found
 
-nextBlockExplorer :: BlockHeight
-                  -> BlockHeight
-                  -> Mailbox GlobalTopMsg
-                  -> Mailbox FetchBlockMsg
-                  -> IO ()
-nextBlockExplorer beginBlock endBlock globalM fetchM = do
-  print "start nextBlockExplorer"
-  currentBox <- newTVarIO beginBlock
-  forever $ do
-    -- print "bucle nextBlockExplorer"
-    top <- GetGlobalTop `query` globalM
-    atomically $ do
-      current <- readTVar currentBox
-      when (current < top) $ do
-        modifyTVar currentBox (+1)
-        Fetch (current, current + 1) `sendSTM` fetchM
+-- This actor is in charge to generate the list of events with all the blocks
+-- that need to be fetched.
+nextBlockExplorer :: HasBlockHeader a 
+  => BlockHeight
+  -> BlockHeight
+  -> Maybe String
+  -> Mailbox GlobalTopMsg
+  -> Mailbox FetchBlockMsg
+  -> Mailbox (PersistBlockMsg a)
+  -> IO ()
+nextBlockExplorer beginBlock endBlock blocksFileM globalM fetchM persistM = do
+  blocksM <- case blocksFileM of
+    Just f -> withAsync (readBlockFile f) (fmap Just . wait)
+    Nothing -> if endBlock >= 0 && endBlock > beginBlock
+               then return $ Just [beginBlock..(endBlock - 1)]
+               else return Nothing
+  case blocksM of
+    -- finite list of blocks to download
+    Just blocks -> do
+      Begin (head blocks) `send` persistM
+      let pairs = zip blocks (tail blocks ++ [-1])
+      (uncurry Fetch <$> pairs) `sendList` fetchM
+      blocker
 
+    -- never ending mode
+    Nothing -> do
+      Begin beginBlock `send` persistM
+      currentBox <- newTVarIO beginBlock
+      forever $ do
+        top <- GetGlobalTop `query` globalM
+        atomically $ do
+          current <- readTVar currentBox
+          when (current < top) $ do
+            modifyTVar currentBox (+ 1)
+            Fetch current (current + 1) `sendSTM` fetchM
+
+-- We spawns lots of this actor to fetch blocks
 fetchWorker ::
      BlockChain a
   => Inbox FetchBlockMsg
   -> Mailbox (PersistBlockMsg (Block a))
-  -> (Mailbox NodeMsg, a, Int)
+  -> (Mailbox NodeMsg, a)
   -> IO ()
-fetchWorker inbox persistM (localTopM, blockchain, i) = do
-  print $ "start worker: " <> show i
+fetchWorker inbox persistM (localTopM, blockchain) =
   forever $ do
     localTop <- GetLocalTop `query` localTopM
     blockM <- receiveMatchS timeOut inbox (selectIndex localTop)
@@ -136,65 +154,43 @@ fetchWorker inbox persistM (localTopM, blockchain, i) = do
       Just (current, next) -> do
         eitherBlock <- try $ getBlockByHeight blockchain current
         case eitherBlock of
-          Right block -> Persist (current, next, block) `send` persistM
+          Right block -> Persist current next block `send` persistM
           Left (SomeException err) -> do
             print err  -- somebody else will try again
-            Fetch (current, next) `send` inbox
+            Fetch current next `send` inbox
             -- there was this logic ignoreErrorsEnabled that I dont quite follow
       Nothing -> return ()
   where
-    timeOut = 2 -- 2 secs
-    selectIndex top (Fetch (current, next)) =
+    timeOut = 4 -- 2 secs. This is needed in case you try to fetch a blockhigh non existend, like 0
+    selectIndex top (Fetch current next) =
       if current <= top then Just (current, next) else Nothing
 
+-- This actor is in charge to write the fetched blocks to the database
+-- it keeps waiting for more blocks unless the next block is -1
 persistenceActor ::
-     HasBlockHeader a
-  => BlockHeight
-  -> BlockHeight
-  -> Inbox (PersistBlockMsg a)
-  -> ([a] -> IO ())
-  -> IO ()
-persistenceActor beginBlock endBlock inbox writeOutput = do
-  nextToSaveT <- newTVarIO beginBlock
-  print "start persistence Actor"
-  ------------------------------------------------------------------------------
-  let
-    step i =
-      if endBlock <= 0 || i < endBlock
-      then unsafeInterleaveIO $ do
-        (current, block) <- atomically $ do
-          nextToSave <- readTVar nextToSaveT
-          (c, next, b) <- receiveMatchSTM inbox (selectBlock nextToSave)
-          writeTVar nextToSaveT next
-          return (c, b)
-        when (current `rem` 100 == 0) $ print $ "synced up to " <> show current
-        (block :) <$> step (current + 1)
-      else return []
-  step beginBlock >>= writeOutput
+     HasBlockHeader a => Inbox (PersistBlockMsg a) -> ([a] -> IO ()) -> IO ()
+persistenceActor inbox writeOutput = do
+    beginBlock <- atomically $ receiveMatchSTM inbox selectBegin
+    listToWrite beginBlock >>= writeOutput
   where
-    selectBlock wanted (Persist b@(found, _, _)) =
-      if found == wanted
-        then Just b
-        else Nothing
-  ------------------------------------------------------------------------------
-  -- forever $ do
-  --   block <-
-  --     atomically $ do
-  --       nextToSave <- readTVar nextToSaveT
-  --       (_, next, b) <- receiveMatchSTM inbox (selectBlock nextToSave)
-  --       writeTVar nextToSaveT next
-  --       return b
-  --   let header = getBlockHeader block
-  --   putStr "Save: "
-  --   print (bh_height header)
-  -- where
-  --   selectBlock wanted (Persist b@(found, _, _)) =
-  --     if found == wanted
-  --       then Just b
-  --       else Nothing
+    selectBegin (Begin bh) = Just bh
+    selectBegin _ = Nothing
+    selectBlock wanted (Persist found next block) =
+      if found == wanted then Just (found, next, block) else Nothing
+    selectBlock _ _ = Nothing
+    listToWrite (-1) = return [] -- when (next = -1) -> signal for endblock
+    listToWrite i = unsafeInterleaveIO $ do
+      (current, next, block) <- atomically $ receiveMatchSTM inbox (selectBlock i)
+      when (current `rem` 100 == 0) $ print $ "synced up to " <> show current
+      (block :) <$> listToWrite next
 
-
-createInbox :: BlockChain a => (Int, a) -> IO (Inbox b, a, Int)
-createInbox (i, blockchain) = do
+assocInbox :: BlockChain a => a -> IO (Inbox b, a)
+assocInbox blockchain = do
   inbox <- newInbox
-  return (inbox, blockchain, i)
+  return (inbox, blockchain)
+
+readBlockFile :: String -> IO [BlockHeight]
+readBlockFile file = map (read . TL.unpack) . TL.lines <$> TL.readFile file
+
+sendList :: (MonadIO m, OutChan mbox) => [msg] -> mbox msg -> m ()
+sendList xs mbox = mapM_ (`send` mbox) xs
