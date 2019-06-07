@@ -26,6 +26,7 @@ import           System.IO.Unsafe
 import qualified Data.Text.Lazy         as TL
 import qualified Data.Text.Lazy.IO      as TL
 import           CoinMetrics.BlockChain
+import           Control.Concurrent.STM (retry)
 
 -- logStrLn :: String -> IO ()
 -- logStrLn str = withMVar logStrMVar $ \_ -> hPutStrLn stderr str
@@ -61,27 +62,29 @@ topChainExplorer endBlock globalM (nodeM, blockchain) = do
   forever $ do
     eBlockIndex <- try $ getCurrentBlockHeight blockchain
     case eBlockIndex of
-      Right current ->
+      Right current -> do
+        let limit = current + lowerLimit
         atomically $ do
-          let limit = current + lowerLimit
           SetLocalTop limit `sendSTM` nodeM
           SetGlobalTop limit `sendSTM` globalM
       Left (SomeException err) -> print err
     threadDelay 10000000
 
--- This is the local BH tracker (responding to whoever is asking:
--- normally a worker connected to the same blockchain) 
 nodeManager :: Inbox NodeMsg -> IO ()
 nodeManager nodeI = do
-  upperLimit <- newTVarIO 0
+  upperLimit <- newTVarIO (-1)
   forever $ do
     msg <- receive nodeI
     case msg of
-      GetLocalTop reply -> atomically $ readTVar upperLimit >>= reply
-      SetLocalTop found -> atomically $ do
-        limit <- readTVar upperLimit
-        when (found > limit) $ writeTVar upperLimit found
-
+      GetLocalTop reply -> atomically $ do
+        l <- readTVar upperLimit
+        if l < 0
+          then GetLocalTop reply `sendSTM` nodeI
+          else reply l
+      SetLocalTop found ->
+        atomically $ do
+          limit <- readTVar upperLimit
+          when (found > limit) $ writeTVar upperLimit found
 
 -- This is the global BH tracker. Next-block-explorer uses that 
 -- to know the limits no matter what node you could be connected
@@ -137,32 +140,39 @@ fetchWorker ::
      BlockChain a
   => Inbox FetchBlockMsg
   -> Mailbox (PersistBlockMsg (Block a))
+  -> TVar Int
+  -> Int
   -> (Mailbox NodeMsg, a)
   -> IO ()
-fetchWorker inbox persistM (localTopM, blockchain) =
+fetchWorker inbox persistM unsavedT buffer (localTopM, blockchain) =
   forever $ do
     localTop <- GetLocalTop `query` localTopM
-    blockM <- receiveMatchS timeOut inbox (selectIndex localTop)
-    case blockM of
-      Just (current, next) -> do
-        eitherBlock <- try $ getBlockByHeight blockchain current
-        case eitherBlock of
-          Right block -> Persist current next block `send` persistM
-          Left (SomeException err) -> do
-            print err  -- somebody else will try again
-            Fetch current next `send` inbox
-            -- there was this logic ignoreErrorsEnabled that I dont quite follow
-      Nothing -> return ()
+    (current, next) <- atomically $ do
+      p <- receiveMatchSTM inbox (selectIndex localTop)
+      modifyTVar unsavedT (+ 1)
+      unsaved <- readTVar unsavedT
+      when (unsaved > buffer) retry
+      return p
+
+    eitherBlock <- try $ getBlockByHeight blockchain current
+    case eitherBlock of
+      Right block -> Persist current next block `send` persistM
+      Left (SomeException err) -> do
+        print err  -- somebody else will try again
+        Fetch current next `send` inbox
   where
-    timeOut = 4 -- 4 secs. This is needed in case you try to fetch a blockhigh non existend, like 0
     selectIndex top (Fetch current next) =
       if current <= top then Just (current, next) else Nothing
 
 -- This actor is in charge to write the fetched blocks to the database
 -- it keeps waiting for more blocks unless the next block is -1
 persistenceActor ::
-     HasBlockHeader a => Inbox (PersistBlockMsg a) -> ([a] -> IO ()) -> IO ()
-persistenceActor inbox writeOutput = do
+     HasBlockHeader a
+  => Inbox (PersistBlockMsg a)
+  -> ([a] -> IO ())
+  -> TVar Int
+  -> IO ()
+persistenceActor inbox writeOutput unsavedT = do
     beginBlock <- atomically $ receiveMatchSTM inbox selectBegin
     listToWrite beginBlock >>= writeOutput
     putStrLn "Sync complete"
@@ -174,7 +184,9 @@ persistenceActor inbox writeOutput = do
     selectBlock _ _ = Nothing
     listToWrite (-1) = return [] -- when (next = -1) -> signal for endblock
     listToWrite i = unsafeInterleaveIO $ do
-      (current, next, block) <- atomically $ receiveMatchSTM inbox (selectBlock i)
+      (current, next, block) <- atomically $ do
+        modifyTVar unsavedT (subtract 1)
+        receiveMatchSTM inbox (selectBlock i)
       when (current `rem` 100 == 0) $ print $ "synced up to " <> show current
       (block :) <$> listToWrite next
 
@@ -201,8 +213,9 @@ actorApp ::
   -> IO ()
 actorApp blockchains beginBlock endBlock fileB threadsC writeOuts sup
  = do
+  unsavedT <- newTVarIO 0
   let nodesCount = length blockchains
-  let bound = fromIntegral (nodesCount * threadsC * 10)
+  let bound = fromIntegral (nodesCount * threadsC * 2)
   topInbox <- newBoundedInbox bound
   fetchInbox <- newBoundedInbox bound
   persistInbox <- newBoundedInbox bound
@@ -215,7 +228,7 @@ actorApp blockchains beginBlock endBlock fileB threadsC writeOuts sup
         map (\(i, b) -> (inboxToMailbox i, b)) blockchainInboxes
 
   _gtm <- addChild sup $ globalTopManager topInbox
-  _pa <- addChild sup $ persistenceActor persistInbox writeOuts
+  _pa <- addChild sup $ persistenceActor persistInbox writeOuts unsavedT
   let explorers = map (topChainExplorer endBlock topMailbox) blockchainMailboxes
   _es <- mapM (addChild sup) explorers
   let localManagers = map (nodeManager . fst) blockchainInboxes
@@ -229,7 +242,7 @@ actorApp blockchains beginBlock endBlock fileB threadsC writeOuts sup
         fetchMailbox
         persistMailbox
 
-  let worker = fetchWorker fetchInbox persistMailbox
+  let worker = fetchWorker fetchInbox persistMailbox unsavedT (fromIntegral bound)
   let workers = join $ map (replicate threadsC . worker) blockchainMailboxes
   _ws <- mapM (addChild sup) workers
   wait _pa -- wait for persistence actor
