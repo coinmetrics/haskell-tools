@@ -402,37 +402,10 @@ run Options
         else return (outputStorages, specifiedBeginBlock)
 
     let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
+    let writer = writeToOutputStorages outputStorages flattenPack beginBlock
 
-    ----------------------------------------------------------------------------
-    -- I need to create bounded inboxes to avoid memory leaks
-    topInbox <- newInbox
-    fetchInbox <- newInbox
-    persistInbox <- newInbox
-    blockchainInboxes <- mapM assocInbox blockchains
-
-    let persistMailbox = inboxToMailbox persistInbox
-    let topMailbox = inboxToMailbox topInbox
-    let fetchMailbox = inboxToMailbox fetchInbox
-    let blockchainMailboxes = map (\(i, b) -> (inboxToMailbox i, b)) blockchainInboxes
-
-    let writeOuts = writeToOutputStorages outputStorages flattenPack beginBlock
-
-    -- TODO: implement --continue logic
-
-    withSupervisor KillAll actorApp
-    -- withSupervisor KillAll $ \sup -> do
-    --   mapM_ (addChild sup)
-    --     $  [globalTopManager topInbox]
-    --     <> [persistenceActor persistInbox writeOuts]
-    --     <> map (nodeManager endBlock topMailbox) blockchainInboxes
-    --     <> [nextBlockExplorer beginBlock endBlock maybeBlocksFile topMailbox fetchMailbox persistMailbox] -- pot acabar en cas finit (aleshores ha de matar)
-    --     <> join (map (replicate threadsCount . fetchWorker fetchInbox persistMailbox) blockchainMailboxes) -- han de funcionar mentres persistence actor no acabi
-
-    --   print "all actors started"
-    --   blocker -- avoid supervisor killing everybody
-
-    -- blocker
-    -- print "something is wrong"    
+    withSupervisor KillAll
+      $ actorApp blockchains beginBlock endBlock maybeBlocksFile threadsCount writer
 
   -- ---------------------------------------------------------------------------
   OptionExportIotaCommand

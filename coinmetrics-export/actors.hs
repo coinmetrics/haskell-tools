@@ -53,11 +53,10 @@ blocker = forever $ threadDelay 1000000000
 topChainExplorer ::
      BlockChain a
   => BlockHeight
-  -> Mailbox NodeMsg
   -> Mailbox GlobalTopMsg
-  -> a
+  -> (Mailbox NodeMsg, a)
   -> IO ()
-topChainExplorer endBlock nodeM globalM blockchain = do
+topChainExplorer endBlock globalM (nodeM, blockchain) = do
   let lowerLimit = if endBlock < 0 then endBlock + 1 else 0
   forever $ do
     eBlockIndex <- try $ getCurrentBlockHeight blockchain
@@ -73,16 +72,9 @@ topChainExplorer endBlock nodeM globalM blockchain = do
 -- This actor will spawn a topChainExplorer that tracks the local BH
 -- we spawn a node manager per crypto node we talk
 -- it will be in charge to answer the local BH of the node he is connected 
-nodeManager ::
-     BlockChain a
-  => BlockHeight
-  -> Mailbox GlobalTopMsg
-  -> (Inbox NodeMsg, a)
-  -> IO ()
-nodeManager endBlock globalM (nodeI, blockchain) = do
+nodeManager :: Inbox NodeMsg -> IO ()
+nodeManager nodeI = do
   upperLimit <- newTVarIO 0
-  let nodeM = inboxToMailbox nodeI
-  _ <- async $ topChainExplorer endBlock nodeM globalM blockchain
   forever $ do
     msg <- receive nodeI
     case msg of
@@ -96,7 +88,6 @@ nodeManager endBlock globalM (nodeI, blockchain) = do
 -- is tracking the maximum block heigh of all of them
 globalTopManager :: Inbox GlobalTopMsg -> IO ()
 globalTopManager inbox = do
-  print "hello"
   upperLimit <- newTVarIO 0
   forever $ do
     msg <- receive inbox
@@ -128,7 +119,7 @@ nextBlockExplorer beginBlock endBlock blocksFileM globalM fetchM persistM = do
       Begin (head blocks) `send` persistM
       let pairs = zip blocks (tail blocks ++ [-1])
       (uncurry Fetch <$> pairs) `sendList` fetchM
-      blocker
+      blocker -- I should have a better supervisor policy
 
     -- never ending mode
     Nothing -> do
@@ -142,7 +133,7 @@ nextBlockExplorer beginBlock endBlock blocksFileM globalM fetchM persistM = do
             modifyTVar currentBox (+ 1)
             Fetch current (current + 1) `sendSTM` fetchM
 
--- We spawns lots of this actor to fetch blocks
+-- Those actors are in charge of downloading the actual blocks
 fetchWorker ::
      BlockChain a
   => Inbox FetchBlockMsg
@@ -199,8 +190,47 @@ readBlockFile file = map (read . TL.unpack) . TL.lines <$> TL.readFile file
 sendList :: (MonadIO m, OutChan mbox) => [msg] -> mbox msg -> m ()
 sendList xs mbox = mapM_ (`send` mbox) xs
 
-actorApp :: Supervisor -> IO ()
-actorApp sup = do
-  topInbox <- newInbox
-  mapM_ (addChild sup) $ [globalTopManager topInbox]
-  blocker
+actorApp ::
+     BlockChain a
+  => [a]
+  -> BlockHeight
+  -> BlockHeight
+  -> Maybe String
+  -> Int
+  -> ([Block a] -> IO ())
+  -> Supervisor
+  -> IO ()
+actorApp blockchains beginBlock endBlock fileB threadsC writeOuts sup
+ = do
+  let nodesCount = length blockchains
+  let bound = fromIntegral (nodesCount * threadsC * 10)
+  topInbox <- newBoundedInbox bound
+  fetchInbox <- newBoundedInbox bound
+  persistInbox <- newBoundedInbox bound
+  blockchainInboxes <- mapM assocInbox blockchains
+  
+  let persistMailbox = inboxToMailbox persistInbox
+  let topMailbox = inboxToMailbox topInbox
+  let fetchMailbox = inboxToMailbox fetchInbox
+  let blockchainMailboxes =
+        map (\(i, b) -> (inboxToMailbox i, b)) blockchainInboxes
+
+  _gtm <- addChild sup $ globalTopManager topInbox
+  _pa <- addChild sup $ persistenceActor persistInbox writeOuts
+  let explorers = map (topChainExplorer endBlock topMailbox) blockchainMailboxes
+  _es <- mapM (addChild sup) explorers
+  let localManagers = map (nodeManager . fst) blockchainInboxes
+  _lms <- mapM (addChild sup) localManagers
+  _nbe <- addChild sup
+    $ nextBlockExplorer
+        beginBlock
+        endBlock
+        fileB
+        topMailbox
+        fetchMailbox
+        persistMailbox
+
+  let worker = fetchWorker fetchInbox persistMailbox
+  let workers = join $ map (replicate threadsC . worker) blockchainMailboxes
+  _ws <- mapM (addChild sup) workers
+  wait _pa -- wait for persistence actor
