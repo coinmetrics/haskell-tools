@@ -24,15 +24,18 @@ import qualified Data.ByteString.Short as BS
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import Data.Int
+import Data.Maybe
 import Data.Proxy
 import qualified Data.Serialize as S
+import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 import Numeric
-import System.IO.Unsafe(unsafeInterleaveIO)
+import System.Environment
+import System.IO.Unsafe(unsafeInterleaveIO, unsafePerformIO)
 
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
@@ -937,7 +940,7 @@ stellarRequest Stellar
   { stellar_webCache = webCache
   , stellar_httpRequest = httpRequest
   } skipCache path = either fail return <=< tryWithRepeat $ requestWebCache webCache skipCache httpRequest
-  { H.path = H.path httpRequest <> T.encodeUtf8 path
+  { H.path = (if H.path httpRequest == "/" then "" else H.path httpRequest) <> T.encodeUtf8 path
   } $ \body -> return (True, body)
 
 withCheckpointCache :: Stellar -> Int64 -> IO [StellarLedger]
@@ -1017,6 +1020,9 @@ instance BlockChain Stellar where
       _ -> fail "ledger cache error"
 
 
--- Only mainnet is supported for now.
+-- | Network id. Defines how to calculate hashes of transactions.
+{-# NOINLINE productionNetworkId #-}
 productionNetworkId :: B.ByteString
-productionNetworkId = BA.convert (C.hash ("Public Global Stellar Network ; September 2015" :: B.ByteString) :: C.Digest C.SHA256)
+productionNetworkId = unsafePerformIO $ hash . fromString . fromMaybe "Public Global Stellar Network ; September 2015" <$> lookupEnv "STELLAR_NETWORK_ID"
+  where
+    hash networkId = BA.convert (C.hash (networkId :: B.ByteString) :: C.Digest C.SHA256)
