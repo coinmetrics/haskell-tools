@@ -171,6 +171,7 @@ pattern SOT_ACCOUNT_MERGE = 8
 pattern SOT_INFLATION = 9
 pattern SOT_MANAGE_DATA = 10
 pattern SOT_BUMP_SEQUENCE = 11
+pattern SOT_MANAGE_BUY_OFFER = 12
 
 pattern ASSET_TYPE_NATIVE = 0
 pattern ASSET_TYPE_CREDIT_ALPHANUM4 = 1
@@ -236,6 +237,8 @@ pattern INFLATION_SUCCESS = 0
 pattern MANAGE_OFFER_CREATED = 0
 pattern MANAGE_OFFER_UPDATED = 1
 -- pattern MANAGE_OFFER_DELETED = 2
+
+pattern MANAGE_BUY_OFFER_SUCCESS = 0
 
 -- pattern ENVELOPE_TYPE_SCP = 1
 pattern ENVELOPE_TYPE_TX = 2
@@ -484,7 +487,8 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         SOT_INFLATION -> return def
         SOT_MANAGE_DATA -> getManageDataOp
         SOT_BUMP_SEQUENCE -> getBumpSequenceOp
-        _ -> fail "wrong op type"
+        SOT_MANAGE_BUY_OFFER -> getManageBuyOfferOp
+        _ -> fail $ "wrong op type: " <> show opType
       return op
         { so_type = opType
         , so_sourceAccount = sourceAccount
@@ -620,6 +624,21 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         { so_bumpTo = Just bumpTo
         }
 
+    getManageBuyOfferOp :: S.Get StellarOperation
+    getManageBuyOfferOp = do
+      selling <- getAsset
+      buying <- getAsset
+      amount <- S.getInt64be
+      price <- getPrice
+      offerID <- S.getInt64be
+      return def
+        { so_selling = Just selling
+        , so_buying = Just buying
+        , so_amount = Just amount
+        , so_price = Just price
+        , so_offerID = Just offerID
+        }
+
     getOperationResult :: S.Get OperationResult
     getOperationResult = do
       code <- S.getInt32be
@@ -639,6 +658,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
             SOT_INFLATION -> getInflationResult
             SOT_MANAGE_DATA -> getManageDataResult
             SOT_BUMP_SEQUENCE -> getBumpSequenceResult
+            SOT_MANAGE_BUY_OFFER -> getManageBuyOfferResult
             _ -> fail "wrong op type"
           return opResult
             { or_code = fromIntegral code
@@ -722,6 +742,15 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
 
     getBumpSequenceResult :: S.Get OperationResult
     getBumpSequenceResult = getOpResult
+
+    getManageBuyOfferResult :: S.Get OperationResult
+    getManageBuyOfferResult = do
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
+      case resultCode of
+        MANAGE_BUY_OFFER_SUCCESS -> getManageOfferSuccessResult opResult
+        _ -> return opResult
 
 
     getManageOfferSuccessResult :: OperationResult -> S.Get OperationResult
