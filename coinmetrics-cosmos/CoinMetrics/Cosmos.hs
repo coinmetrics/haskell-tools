@@ -227,13 +227,13 @@ instance ReadMsg CosmosMessage where
 
 
 data CosmosCoin = CosmosCoin
-  { bt_denom :: !T.Text
+  { bt_denom :: !(Maybe T.Text)
   , bt_amount :: !Integer
   }
 
 instance ReadMsg CosmosCoin where
   readMsg = withFields "CosmosCoin" $ \h -> CosmosCoin
-    <$> readRequired P.decodeWire 1 h
+    <$> readOptional P.decodeWire 1 h
     <*> (read <$> readRequired P.decodeWire 2 h)
 
 
