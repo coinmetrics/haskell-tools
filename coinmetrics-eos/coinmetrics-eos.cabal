@@ -14,15 +14,20 @@ cabal-version:       >=1.10
 library
   exposed-modules:
     CoinMetrics.EOS
+    CoinMetrics.EOSArchive
   build-depends:
     aeson
     , base
     , bytestring
+    , cereal
     , coinmetrics
     , hanalytics-base
     , http-client
+    , stm
     , text
     , time
+    , unordered-containers
     , vector
+    , websockets
   ghc-options:         -Wall
   default-language:    Haskell2010

@@ -26,6 +26,7 @@ import CoinMetrics.Cosmos
 #endif
 #if defined(CM_SUPPORT_EOS)
 import CoinMetrics.EOS
+import CoinMetrics.EOSArchive
 #endif
 #if defined(CM_SUPPORT_ETHEREUM)
 import CoinMetrics.Ethereum
@@ -83,6 +84,7 @@ allBlockChainInfos = HM.fromList infos
 
 #if defined(CM_SUPPORT_EOS)
       ("eos",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Eos)) :
+      ("eos-archive", SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy EosArchive)) :
 #endif
 
 #if defined(CM_SUPPORT_ETHEREUM)
