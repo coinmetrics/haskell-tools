@@ -4,11 +4,12 @@ stages:
 
 binaries:
   stage: build
-  image: haskell:8.6.5
+  image: gcc:latest
   script:
   - mkdir -p bin cache
   - export PATH=$HOME/.local/bin:$PATH
-  - apt-get update && apt-get install -y --no-install-recommends libpq-dev
+  - apt-get install -y --no-install-recommends libpq-dev
+  - curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C /usr/bin '*/stack'
   - stack --stack-root $(readlink -f cache/.stack) --no-terminal --install-ghc test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
   cache:
     key: haskell-tools
