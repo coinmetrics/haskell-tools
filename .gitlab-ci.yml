@@ -4,7 +4,7 @@ stages:
 
 binaries:
   stage: build
-  image: haskell:8.6.3
+  image: haskell:8.6.5
   script:
   - mkdir -p bin cache
   - export PATH=$HOME/.local/bin:$PATH
