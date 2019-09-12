@@ -100,6 +100,10 @@ instance Abi Int64 where
   fromAbiBinary = S.getInt64le
   toAbiBinary = S.putInt64le
 
+instance Abi Double where
+  fromAbiBinary = S.get
+  toAbiBinary = S.put
+
 instance Abi Bool where
   fromAbiBinary = (> 0) <$> S.getWord8
   toAbiBinary f = S.putWord8 (if f then 1 else 0)
@@ -222,6 +226,7 @@ initSchema SchemaInit
     , ("uint64", J.toJSON <$> (fromAbiBinary :: S.Get Word64))
     , ("int64", J.toJSON <$> (fromAbiBinary :: S.Get Int64))
     , ("uint128", J.toJSON <$> (fromAbiBinary :: S.Get Word128))
+    , ("float64", J.toJSON <$> (fromAbiBinary :: S.Get Double))
     , ("bool", J.toJSON <$> (fromAbiBinary :: S.Get Bool))
     , ("varuint32", J.toJSON <$> varIntFromAbiBinary)
     , ("bytes", J.toJSON <$> (fromAbiBinary :: S.Get HexString))
