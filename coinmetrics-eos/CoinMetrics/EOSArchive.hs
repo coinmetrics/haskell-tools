@@ -306,7 +306,7 @@ data SchemaInit = SchemaInit
   , schemaInit_types :: !(V.Vector SchemaTypeInit)
   , schemaInit_variants :: !(V.Vector SchemaVariantInit)
   , schemaInit_tables :: !(V.Vector SchemaTableInit)
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.FromJSON SchemaInit where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
@@ -314,21 +314,21 @@ data SchemaStructInit = SchemaStructInit
   { schemaStructInit_name :: !T.Text
   , schemaStructInit_base :: !(Maybe T.Text)
   , schemaStructInit_fields :: !(V.Vector SchemaField)
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.FromJSON SchemaStructInit where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
 data SchemaTypeInit = SchemaTypeInit
   { schemaTypeInit_new_type_name :: !T.Text
   , schemaTypeInit_type :: !T.Text
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.FromJSON SchemaTypeInit where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
 data SchemaVariantInit = SchemaVariantInit
   { schemaVariantInit_name :: !T.Text
   , schemaVariantInit_types :: !(V.Vector T.Text)
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.FromJSON SchemaVariantInit where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
@@ -336,14 +336,14 @@ data SchemaTableInit = SchemaTableInit
   { schemaTableInit_name :: !T.Text
   , schemaTableInit_type :: !T.Text
   , schemaTableInit_key_names :: !(V.Vector T.Text)
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.FromJSON SchemaTableInit where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
 data SchemaField = SchemaField
   { schemaField_name :: !T.Text
   , schemaField_type :: !T.Text
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.FromJSON SchemaField where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
@@ -414,7 +414,7 @@ data StatusResult = StatusResult -- get_status_result_v0
   , sres_chain_state_begin_block :: {-# UNPACK #-} !Word32
   , sres_chain_state_end_block :: {-# UNPACK #-} !Word32
   }
-  deriving (Show, G.Generic)
+  deriving G.Generic
 instance Abi StatusResult
 
 data BlocksResult = BlocksResult -- get_blocks_result_v0
@@ -426,13 +426,12 @@ data BlocksResult = BlocksResult -- get_blocks_result_v0
   , bres_traces :: !(Maybe HexString)
   , bres_deltas :: !(Maybe HexString)
   }
-  deriving (Show, G.Generic)
+  deriving G.Generic
 instance Abi BlocksResult
 
 data Result
   = Result_status StatusResult
   | Result_blocks BlocksResult
-  deriving Show
 instance Abi Result where
   fromAbiBinary = do
     variantIndex <- varIntFromAbiBinary
@@ -451,13 +450,13 @@ instance Abi Result where
 data BlockPosition = BlockPosition
   { bp_block_num :: {-# UNPACK #-} !Word32
   , bp_block_id :: !Checksum256
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.ToJSON BlockPosition where
   toJSON = J.genericToJSON schemaJsonOptions
   toEncoding = J.genericToEncoding schemaJsonOptions
 instance Abi BlockPosition
 
-newtype Name = Name Word64 deriving (Abi, Show)
+newtype Name = Name Word64 deriving Abi
 instance J.ToJSON Name where
   toJSON = J.toJSON . nameToString
   toEncoding = J.toEncoding . nameToString
@@ -468,7 +467,7 @@ nameToString (Name name) = step (0 :: Int) name "" where
     else T.dropWhileEnd (== '.') (T.pack s)
   alphabet = ".12345abcdefghijklmnopqrstuvwxyz"
 
-newtype Word128 = Word128 Integer deriving (J.FromJSON, J.ToJSON, Show)
+newtype Word128 = Word128 Integer deriving (J.FromJSON, J.ToJSON)
 instance Abi Word128 where
   fromAbiBinary = do
     a <- S.getWord64le
@@ -478,7 +477,7 @@ instance Abi Word128 where
     S.putWord64le $ fromIntegral (n .&. 0xFFFFFFFF)
     S.putWord64le $ fromIntegral (n `shiftR` 64)
 
-newtype Checksum256 = Checksum256 HexString deriving (J.FromJSON, J.ToJSON, Show)
+newtype Checksum256 = Checksum256 HexString deriving (J.FromJSON, J.ToJSON)
 instance Abi Checksum256 where
   fromAbiBinary = Checksum256 . HexString . BS.toShort <$> S.getBytes 32
   toAbiBinary (Checksum256 (HexString bytes)) = S.putByteString $ BS.fromShort bytes
@@ -486,7 +485,7 @@ instance Abi Checksum256 where
 data PublicKey = PublicKey
   { pubk_type :: {-# UNPACK #-} !Word8
   , pubk_data :: !HexString
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.ToJSON PublicKey where
   toJSON = J.genericToJSON schemaJsonOptions
   toEncoding = J.genericToEncoding schemaJsonOptions
@@ -501,7 +500,7 @@ instance Abi PublicKey where
 data Signature = Signature
   { s_type :: {-# UNPACK #-} !Word8
   , s_data :: !HexString
-  } deriving (Show, G.Generic)
+  } deriving G.Generic
 instance J.ToJSON Signature where
   toJSON = J.genericToJSON schemaJsonOptions
   toEncoding = J.genericToEncoding schemaJsonOptions
