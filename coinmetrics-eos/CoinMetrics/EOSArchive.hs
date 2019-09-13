@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -348,10 +349,16 @@ instance J.FromJSON SchemaField where
   parseJSON = J.genericParseJSON schemaJsonOptions
 
 data EosArchive = EosArchive
-  { eosArchive_connection :: !WS.Connection
-  , eosArchive_schema :: !Schema
-  , eosArchive_receiveQueue :: !(TQueue (TVar (Maybe Result)))
-  , eosArchive_exceptionVar :: !(TVar (Maybe SomeException))
+  { ea_httpRequest :: !H.Request
+  , ea_clientsVar :: {-# UNPACK #-} !(TVar [EosArchiveClient])
+  }
+
+data EosArchiveClient = EosArchiveClient
+  { eac_connection :: !WS.Connection
+  , eac_schema :: !Schema
+  , eac_statusResultVarVar :: {-# UNPACK #-} !(TVar (Maybe (TVar (Maybe StatusResult))))
+  , eac_blockResultsVarsVar :: {-# UNPACK #-} !(TVar (HM.HashMap BlockHeight (TVar (Maybe BlocksResult))))
+  , eac_exceptionVar :: {-# UNPACK #-} !(TVar (Maybe SomeException))
   }
 
 data EosArchiveBlock = EosArchiveBlock
@@ -520,7 +527,12 @@ instance BlockChain EosArchive where
   getBlockChainInfo _ = BlockChainInfo
     { bci_init = \BlockChainParams
       { bcp_httpRequest = httpRequest
-      } -> startEosArchiveClient httpRequest
+      } -> do
+      clientsVar <- newTVarIO []
+      return EosArchive
+        { ea_httpRequest = httpRequest
+        , ea_clientsVar = clientsVar
+        }
     , bci_defaultApiUrls = ["http://127.0.0.1:8080/"]
     , bci_defaultBeginBlock = 2
     , bci_defaultEndBlock = 0 -- no need in a gap, as it uses irreversible block number
@@ -530,32 +542,22 @@ instance BlockChain EosArchive where
     }
 
   getCurrentBlockHeight archive = do
-    Result_status StatusResult
+    StatusResult
       { sres_last_irreversible = BlockPosition irreversibleBlock _
       , sres_trace_end_block = traceEndBlock
       , sres_chain_state_end_block = chainStateEndBlock
-      } <- requestEosArchive archive (Request_status StatusRequest) 
+      } <- withEosArchiveClient archive requestEosArchiveStatus
     return $ fromIntegral $ min irreversibleBlock $ min traceEndBlock chainStateEndBlock
 
-  getBlockByHeight archive@EosArchive
-    { eosArchive_schema = schema
-    } blockHeight = do
-    result <- requestEosArchive archive (Request_blocks BlocksRequest
-      { req_start_block_num = fromIntegral blockHeight
-      , req_end_block_num = fromIntegral blockHeight + 1
-      , req_max_messages_in_flight = 1
-      , req_have_positions = V.empty
-      , req_irreversible_only = True
-      , req_fetch_block = True
-      , req_fetch_traces = True
-      , req_fetch_deltas = True
-      })
-    Result_blocks BlocksResult
+  getBlockByHeight archive blockHeight = do
+    (BlocksResult
       { bres_this_block = Just (BlockPosition ((== blockHeight) . fromIntegral -> True) _)
       , bres_block = Just (HexString (BS.fromShort -> blockBytes))
       , bres_traces = Just (HexString (BS.fromShort -> tracesBytes))
       , bres_deltas = Just (HexString (BS.fromShort -> deltasBytes))
-      } <- return result
+      }, schema) <- withEosArchiveClient archive $ \archiveClient@EosArchiveClient
+      { eac_schema = schema
+      } -> (, schema) <$> requestEosArchiveBlock archiveClient blockHeight
     block <- either fail return $ flip S.runGet blockBytes $ do
       r <- dynamicFromAbiBinary schema "signed_block"
       isEmpty <- S.isEmpty
@@ -580,12 +582,13 @@ instance BlockChain EosArchive where
       , eab_deltas = deltas
       }
 
-startEosArchiveClient :: H.Request -> IO EosArchive
+startEosArchiveClient :: H.Request -> IO EosArchiveClient
 startEosArchiveClient httpRequest = do
   initVar <- newTVarIO Nothing
   exceptionVar <- newTVarIO Nothing
   timedOutVar <- registerDelay networkTimeout
-  receiveQueue <- newTQueueIO
+  statusResultVarVar <- newTVarIO Nothing
+  blockResultsVarsVar <- newTVarIO HM.empty
 
   -- start thread
   void $ forkIO $ handle (atomically . writeTVar exceptionVar . Just) $
@@ -600,11 +603,26 @@ startEosArchiveClient httpRequest = do
         result <- either fail return $ flip S.runGet message $ do
           r <- fromAbiBinary
           isEmpty <- S.isEmpty
-          unless isEmpty $ fail "not all input consumed"
+          unless isEmpty $ fail "not all result input consumed"
           return r
-        atomically $ do
-          resultVar <- readTQueue receiveQueue
-          writeTVar resultVar $ Just result
+        case result of
+          Result_status statusResult -> atomically $ do
+            maybeStatusResultVar <- readTVar statusResultVarVar
+            case maybeStatusResultVar of
+              Just statusResultVar -> do
+                writeTVar statusResultVar $ Just statusResult
+                writeTVar statusResultVarVar Nothing
+              Nothing -> return ()
+          Result_blocks blockResult@BlocksResult
+            { bres_this_block = Just (BlockPosition (fromIntegral -> blockHeight) _)
+            } -> atomically $ do
+            blockResultsVars <- readTVar blockResultsVarsVar
+            case HM.lookup blockHeight blockResultsVars of
+              Just blockResultVar -> do
+                writeTVar blockResultVar $ Just blockResult
+                writeTVar blockResultsVarsVar $ HM.delete blockHeight blockResultsVars
+              Nothing -> return ()
+          _ -> return ()
 
   -- wait for initialization
   (connection, schema) <- atomically $ do
@@ -613,25 +631,50 @@ startEosArchiveClient httpRequest = do
     when timedOut $ throwSTM EosArchiveTimeout
     maybe retry return =<< readTVar initVar
 
-  return EosArchive
-    { eosArchive_connection = connection
-    , eosArchive_schema = schema
-    , eosArchive_receiveQueue = receiveQueue
-    , eosArchive_exceptionVar = exceptionVar
+  return EosArchiveClient
+    { eac_connection = connection
+    , eac_schema = schema
+    , eac_statusResultVarVar = statusResultVarVar
+    , eac_blockResultsVarsVar = blockResultsVarsVar
+    , eac_exceptionVar = exceptionVar
     }
 
-requestEosArchive :: EosArchive -> Request -> IO Result
-requestEosArchive EosArchive
-  { eosArchive_connection = connection
-  , eosArchive_receiveQueue = receiveQueue
-  , eosArchive_exceptionVar = exceptionVar
-  } request = do
-  -- put result var into queue
-  resultVar <- newTVarIO Nothing
-  atomically $ writeTQueue receiveQueue resultVar
+withEosArchiveClient :: EosArchive -> (EosArchiveClient -> IO a) -> IO a
+withEosArchiveClient EosArchive
+  { ea_httpRequest = httpRequest
+  , ea_clientsVar = clientsVar
+  } = bracket acquire release where
+  acquire = do
+    -- get existing client if possible
+    maybeClient <- atomically $ do
+      clients <- readTVar clientsVar
+      case clients of
+        client : restClients -> do
+          writeTVar clientsVar restClients
+          return $ Just client
+        [] -> return Nothing
+    -- create new client if needed
+    maybe (startEosArchiveClient httpRequest) return maybeClient
+  release client = atomically $ modifyTVar clientsVar (client :)
 
-  -- send message
-  WS.sendBinaryData connection $ S.runPut $ toAbiBinary request
+requestEosArchiveStatus :: EosArchiveClient -> IO StatusResult
+requestEosArchiveStatus EosArchiveClient
+  { eac_connection = connection
+  , eac_statusResultVarVar = statusResultVarVar
+  , eac_exceptionVar = exceptionVar
+  } = do
+  -- check that status has not been requested already
+  (statusResultVar, needRequest) <- atomically $ do
+    maybeStatusResultVar <- readTVar statusResultVarVar
+    case maybeStatusResultVar of
+      Just statusResultVar -> return (statusResultVar, False)
+      Nothing -> do
+        statusResultVar <- newTVar Nothing
+        writeTVar statusResultVarVar $ Just statusResultVar
+        return (statusResultVar, True)
+
+  -- send request if needed
+  when needRequest $ WS.sendBinaryData connection $ S.runPut $ toAbiBinary $ Request_status StatusRequest
 
   -- wait for result
   timedOutVar <- registerDelay networkTimeout
@@ -639,7 +682,43 @@ requestEosArchive EosArchive
     mapM_ throwSTM =<< readTVar (exceptionVar :: TVar (Maybe SomeException))
     timedOut <- readTVar timedOutVar
     when timedOut $ throwSTM EosArchiveTimeout
-    maybe retry return =<< readTVar resultVar
+    maybe retry return =<< readTVar statusResultVar
+
+requestEosArchiveBlock :: EosArchiveClient -> BlockHeight -> IO BlocksResult
+requestEosArchiveBlock EosArchiveClient
+  { eac_connection = connection
+  , eac_blockResultsVarsVar = blockResultsVarsVar
+  , eac_exceptionVar = exceptionVar
+  } blockHeight = do
+  -- check that block has not been requested already
+  (blockResultVar, needRequest) <- atomically $ do
+    blockResultsVars <- readTVar blockResultsVarsVar
+    case HM.lookup blockHeight blockResultsVars of
+      Just blockResultVar -> return (blockResultVar, False)
+      Nothing -> do
+        blockResultVar <- newTVar Nothing
+        writeTVar blockResultsVarsVar $ HM.insert blockHeight blockResultVar blockResultsVars
+        return (blockResultVar, True)
+
+  -- send request if needed
+  when needRequest $ WS.sendBinaryData connection $ S.runPut $ toAbiBinary $ Request_blocks BlocksRequest
+    { req_start_block_num = fromIntegral blockHeight
+    , req_end_block_num = fromIntegral blockHeight + 1
+    , req_max_messages_in_flight = maxBound
+    , req_have_positions = V.empty
+    , req_irreversible_only = True
+    , req_fetch_block = True
+    , req_fetch_traces = True
+    , req_fetch_deltas = True
+    }
+
+  -- wait for result
+  timedOutVar <- registerDelay networkTimeout
+  atomically $ do
+    mapM_ throwSTM =<< readTVar (exceptionVar :: TVar (Maybe SomeException))
+    timedOut <- readTVar timedOutVar
+    when timedOut $ throwSTM EosArchiveTimeout
+    maybe retry return =<< readTVar blockResultVar
 
 -- | Just an arbitrary timeout (in microseconds).
 networkTimeout :: Int
