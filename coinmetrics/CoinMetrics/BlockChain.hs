@@ -40,6 +40,15 @@ class (HasBlockHeader (Block a), Schemable (Block a), A.ToAvro (Block a), ToPost
 
   getBlockByHeight :: a -> BlockHeight -> IO (Block a)
 
+  getBestBlock :: a -> IO (Block a)
+  getBestBlock blockchain =
+    getCurrentBlockHeight blockchain >>= getBlockByHeight blockchain
+
+  getBestBlockHeader :: a -> IO BlockHeader
+  getBestBlockHeader blockchain =
+    getCurrentBlockHeight blockchain >>= getBlockHeaderByHeight blockchain
+  
+  getBlockByHash :: a -> BlockHash -> IO (Block a)
 
 class HasBlockHeader a where
   getBlockHeader :: a -> BlockHeader
@@ -63,6 +72,7 @@ data BlockChainInfo a = BlockChainInfo
   , bci_defaultBeginBlock :: {-# UNPACK #-} !BlockHeight
   , bci_defaultEndBlock :: {-# UNPACK #-} !BlockHeight
   , bci_heightFieldName :: !T.Text
+  , bci_hashFieldName :: !T.Text
   -- | Schemas referenced by storage type.
   , bci_schemas :: !(HM.HashMap T.Text T.Text)
   -- | Table suffixes for flattened blocks.

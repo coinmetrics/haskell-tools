@@ -127,6 +127,7 @@ instance BlockChain Neo where
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -1000 -- very conservative rewrite limit
     , bci_heightFieldName = "index"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy NeoBlock))
       [ schemaOf (Proxy :: Proxy NeoTransactionInput)

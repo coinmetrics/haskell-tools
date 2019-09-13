@@ -94,6 +94,10 @@ main = do
               <> O.help "Get BEGIN_BLOCK from output, to continue after latest written block. Works with --output-postgres only"
               )
             <*> O.switch
+              (  O.long "realtime"
+              <> O.help "Continue exporting handling reorgs for realtime. Works with --output-postgres only"
+              )
+            <*> O.switch
               (  O.long "trace"
               <> O.help "Perform tracing of actions performed by transactions"
               )
@@ -279,6 +283,7 @@ data OptionCommand
     , options_endBlock :: !BlockHeight
     , options_blocksFile :: !(Maybe String)
     , options_continue :: !Bool
+    , options_realtime :: !Bool
     , options_trace :: !Bool
     , options_excludeUnaccountedActions :: !Bool
     , options_output :: !Output
@@ -334,6 +339,7 @@ run Options
     , options_endBlock = maybeEndBlock
     , options_blocksFile = maybeBlocksFile
     , options_continue = continue
+    , options_realtime = realtime
     , options_trace = trace
     , options_excludeUnaccountedActions = excludeUnaccountedActions
     , options_output = output
@@ -347,6 +353,7 @@ run Options
       , bci_defaultBeginBlock = defaultBeginBlock
       , bci_defaultEndBlock = defaultEndBlock
       , bci_heightFieldName = heightFieldName
+      , bci_hashFieldName = hashFieldName
       , bci_flattenSuffixes = flattenSuffixes
       , bci_flattenPack = flattenPack
       } <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
@@ -395,17 +402,24 @@ run Options
 
     -- init output storages and begin block
     (outputStorages, beginBlock) <- do
-      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName flattenSuffixes
+      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName hashFieldName flattenSuffixes
       let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
-      if continue
+      if continue || realtime
         then initContinuingOutputStorages outputStorages specifiedBeginBlock
         else return (outputStorages, specifiedBeginBlock)
 
     let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
-    let writer = writeToOutputStorages outputStorages flattenPack beginBlock
+    let subChainWriter = writeToOutputStorages outputStorages flattenPack
+    let writer = subChainWriter beginBlock
+    let isBlockSaved = head $ map os_isBlockStored $ oss_storages outputStorages
 
-    withSupervisor KillAll
-      $ actorApp blockchains beginBlock endBlock maybeBlocksFile threadsCount writer
+    if realtime then
+      withSupervisor KillAll
+        $ blockHashExporterSingle blockchains isBlockSaved subChainWriter
+    else 
+      withSupervisor KillAll
+        $ blockHighExporter blockchains beginBlock endBlock maybeBlocksFile threadsCount writer
+
 
   -- ---------------------------------------------------------------------------
   OptionExportIotaCommand
@@ -424,7 +438,7 @@ run Options
     httpRequest <- H.parseRequest apiUrl
     let iota = newIota httpManager httpRequest
 
-    outputStorages <- initOutputStorages httpManager output "iota" "hash" []
+    outputStorages <- initOutputStorages httpManager output "iota" "hash" "hash" []
 
     -- simple multithreaded pipeline
     hashQueue <- newTQueueIO
@@ -579,6 +593,7 @@ data OutputStorage = OutputStorage
   , os_skipBlocks :: {-# UNPACK #-} !Int
   , os_destFunc :: !(BlockHeight -> String)
   , os_fileExec :: !(String -> IO ())
+  , os_isBlockStored :: !(BlockHash -> IO Bool)
   }
 
 -- | Helper struct for output storages.
@@ -589,7 +604,7 @@ data OutputStorages = OutputStorages
   , oss_flat :: !Bool
   }
 
-initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text -> [T.Text] -> IO OutputStorages
+initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text ->  T.Text -> [T.Text] -> IO OutputStorages
 initOutputStorages httpManager Output
   { output_avroFile = maybeOutputAvroFile
   , output_postgresFile = maybeOutputPostgresFile
@@ -606,7 +621,7 @@ initOutputStorages httpManager Output
   , output_fileExec = maybeFileExec
   , output_upsert = upsert
   , output_flat = flat
-  } defaultTableName primaryField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
+  } defaultTableName primaryField hashField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
   [ case maybeOutputAvroFile of
     Just outputAvroFile -> initStorage (Proxy @AvroFileExportStorage) mempty (mkFileDestFunc outputAvroFile)
     Nothing -> return []
@@ -638,6 +653,7 @@ initOutputStorages httpManager Output
             then map ((table <> "_") <>) flattenSuffixes
             else [table]
           , eso_primaryField = primaryField
+          , eso_hashField = hashField
           , eso_upsert = upsert
           }
         return [(SomeExportStorage storage, destFunc)]
@@ -649,6 +665,7 @@ initOutputStorages httpManager Output
       , os_fileExec = case maybeFileExec of
         Just fileExec -> \destination -> P.callCommand $ T.unpack $ T.replace "%F" (T.pack destination) (T.pack fileExec)
         Nothing -> const $ return ()
+      , os_isBlockStored = \_ -> return False
       }
 
     mkOutputStorages storages = OutputStorages
@@ -685,11 +702,19 @@ initContinuingOutputStorages outputStorages@OutputStorages
   beginBlocks <- sequence getBeginBlockFuncs
   logStrLn $ "continuing from blocks: " <> show beginBlocks
   let beginBlock = if null beginBlocks then defaultBeginBlock else minimum beginBlocks
+  isBlockStoredFuncs <- forM storages $ \OutputStorage
+    { os_storage = SomeExportStorage storage
+    , os_destFunc = destFunc
+    } -> maybe (fail "output storage does not support isBlockStored") return $ isBlockStored storage ExportStorageParams
+           { esp_destination = destFunc defaultBeginBlock }
+  let triple s b f = (s,b,f)
+  let triplets = zipWith3 triple storages beginBlocks isBlockStoredFuncs
   return
     ( outputStorages
-      { oss_storages = zipWith (\storage storageBeginBlock -> storage
+      { oss_storages = map (\(storage, storageBeginBlock, iBS) -> storage
         { os_skipBlocks = fromIntegral $ storageBeginBlock - beginBlock
-        }) storages beginBlocks
+        , os_isBlockStored = iBS
+        }) triplets
       }
     , beginBlock
     )

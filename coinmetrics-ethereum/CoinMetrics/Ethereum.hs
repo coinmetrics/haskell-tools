@@ -282,6 +282,7 @@ instance BlockChain Ethereum where
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -100 -- conservative rewrite limit
     , bci_heightFieldName = "number"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy EthereumBlock))
       [ schemaOf (Proxy :: Proxy EthereumAction)

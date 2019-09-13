@@ -10,6 +10,7 @@ module CoinMetrics.Util
   , tryWithRepeat
   , currentLocalTimeToUTC
   , standardBlockChainSchemas
+  , emptyHexString
   ) where
 
 import Control.Concurrent
@@ -43,7 +44,10 @@ import Hanalytics.Schema.Postgres
 -- | ByteString which serializes to JSON as hex string.
 newtype HexString = HexString
   { unHexString :: BS.ShortByteString
-  } deriving (Eq, Ord, Semigroup, Monoid, Hashable, Show)
+  } deriving (Eq, Ord, Semigroup, Monoid, Hashable)
+
+instance Show HexString where
+  show = T.unpack . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
 instance SchemableField HexString where
   schemaFieldTypeOf _ = SchemaFieldType_bytes
 instance A.HasAvroSchema HexString where
@@ -57,6 +61,9 @@ instance J.FromJSON HexString where
 instance J.ToJSON HexString where
   toJSON = J.toJSON . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
   toEncoding = J.toEncoding . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
+
+emptyHexString :: HexString  
+emptyHexString = HexString BS.empty
 
 decode0xHexBytes :: T.Text -> J.Parser HexString
 decode0xHexBytes = \case

@@ -168,6 +168,7 @@ instance BlockChain Tron where
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = 0 -- no need in gap with solidity node
     , bci_heightFieldName = "number"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy TronBlock))
       [ schemaOf (Proxy :: Proxy TronVote)

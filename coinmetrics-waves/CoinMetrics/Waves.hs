@@ -187,6 +187,7 @@ instance BlockChain Waves where
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- PoS
     , bci_heightFieldName = "height"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy WavesBlock))
       [ schemaOf (Proxy :: Proxy WavesTransfer)

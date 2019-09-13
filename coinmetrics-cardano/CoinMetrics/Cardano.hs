@@ -171,6 +171,7 @@ instance BlockChain Cardano where
     , bci_defaultApiUrls = ["http://127.0.0.1:8100/"]
     , bci_defaultBeginBlock = 2
     , bci_defaultEndBlock = 0
+    , bci_hashFieldName = "hash"
     , bci_heightFieldName = "height"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy CardanoBlock))

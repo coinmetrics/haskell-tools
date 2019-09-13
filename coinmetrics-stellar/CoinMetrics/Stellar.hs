@@ -993,6 +993,7 @@ instance BlockChain Stellar where
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- history data, no rewrites
     , bci_heightFieldName = "sequence"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy StellarLedger))
       [ schemaOf (Proxy :: Proxy StellarAsset)

@@ -23,6 +23,9 @@ class ExportStorage s where
   getExportStorageMaxBlock :: s -> ExportStorageParams -> Maybe (IO (Maybe BlockHeight))
   getExportStorageMaxBlock _ _ = Nothing
 
+  isBlockStored :: s -> ExportStorageParams -> Maybe (BlockHash -> IO Bool)
+  isBlockStored _ _ = Nothing
+
   writeExportStorage :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => s -> ExportStorageParams -> [[a]] -> IO ()
   writeExportStorage s params = writeExportStorageSomeBlocks s params . map (\pack -> [SomeBlocks pack])
 
@@ -36,6 +39,7 @@ data ExportStorageOptions = ExportStorageOptions
   { eso_httpManager :: !H.Manager
   , eso_tables :: [T.Text]
   , eso_primaryField :: !T.Text
+  , eso_hashField :: !T.Text
   , eso_upsert :: !Bool
   }
 

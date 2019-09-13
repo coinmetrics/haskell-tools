@@ -3,30 +3,24 @@
 {-# LANGUAGE TypeApplications  #-}
 
 module Actors
-  ( blocker
-  , nodeManager
-  , globalTopManager
-  , nextBlockExplorer
-  , fetchWorker
-  , topChainExplorer
-  , persistenceActor
-  , GlobalTopMsg (..)
-  , FetchBlockMsg (..)
-  , NodeMsg (..)
-  , PersistBlockMsg (..)
-  , assocInbox
-  , actorApp
+  ( blockHighExporter
+  , blockHashExporterSingle
   ) where
 
-import           Control.Concurrent (threadDelay)
-import           Control.Monad
-import           NQE
-import           UnliftIO
-import           System.IO.Unsafe
-import qualified Data.Text.Lazy         as TL
-import qualified Data.Text.Lazy.IO      as TL
 import           CoinMetrics.BlockChain
-import           Control.Concurrent.STM (retry)
+import           CoinMetrics.Util
+import           Control.Concurrent      (threadDelay)
+import           Control.Concurrent.STM  (retry)
+import           Control.Monad
+import qualified Data.ByteArray.Encoding as BA
+import qualified Data.ByteString.Short   as BSS
+import           Data.Maybe
+import qualified Data.Text.Encoding      as T
+import qualified Data.Text.Lazy          as TL
+import qualified Data.Text.Lazy.IO       as TL
+import           NQE
+import           System.IO.Unsafe
+import           UnliftIO
 
 -- logStrLn :: String -> IO ()
 -- logStrLn str = withMVar logStrMVar $ \_ -> hPutStrLn stderr str
@@ -201,7 +195,7 @@ readBlockFile file = map (read . TL.unpack) . TL.lines <$> TL.readFile file
 sendList :: (MonadIO m, OutChan mbox) => [msg] -> mbox msg -> m ()
 sendList xs mbox = mapM_ (`send` mbox) xs
 
-actorApp ::
+blockHighExporter ::
      BlockChain a
   => [a]
   -> BlockHeight
@@ -211,7 +205,7 @@ actorApp ::
   -> ([Block a] -> IO ())
   -> Supervisor
   -> IO ()
-actorApp blockchains beginBlock endBlock fileB threadsC writeOuts sup
+blockHighExporter blockchains beginBlock endBlock fileB threadsC writeOuts sup
  = do
   unsavedT <- newTVarIO 0
   let nodesCount = length blockchains
@@ -246,3 +240,67 @@ actorApp blockchains beginBlock endBlock fileB threadsC writeOuts sup
   let workers = join $ map (replicate threadsC . worker) blockchainMailboxes
   _ws <- mapM (addChild sup) workers
   wait _pa -- wait for persistence actor
+
+--------------------------------------------------------------------------------
+---------------------------- block hash exporter -------------------------------
+--------------------------------------------------------------------------------
+
+getBest :: BlockChain a => a -> IO (Maybe (Block a))
+getBest blockchain = do
+  eitherBlock <- try $ getBestBlock blockchain
+  case eitherBlock of
+    Right block -> return $ Just block
+    Left (SomeException err) -> do
+      print err
+      return Nothing
+
+getSubChain ::
+     BlockChain a
+  => [Block a]
+  -> a
+  -> Block a
+  -> (BlockHash -> IO Bool)
+  -> IO (BlockHeight, [Block a])
+getSubChain pending blockchain best isBlockStored = do
+  let hash = bh_hash $ getBlockHeader best
+  let prevHashM = bh_prevHash $ getBlockHeader best
+  let bh = bh_height $ getBlockHeader best
+  let prevHash = fromJust prevHashM
+  knownBlock <- isBlockStored hash
+  let isGenesis = prevHash == emptyHexString
+  if knownBlock || isGenesis
+  then return (bh, pending)
+  else do
+    eitherBlock <- try $ getBlockByHash blockchain prevHash
+    case eitherBlock of
+      Right block -> getSubChain (best : pending) blockchain block isBlockStored
+      Left (SomeException err) -> do
+        print err
+        return (0, []) -- if we fail we just ignore that node
+
+exploreBlockchain ::
+     BlockChain a
+  => (BlockHash -> IO Bool)
+  -> (BlockHeight -> [Block a] -> IO ())
+  -> a
+  -> IO ()
+exploreBlockchain isBlockStored writer blockchain = do
+  bestM <- getBest blockchain
+  case bestM of
+    Just best -> do
+      let hash = bh_hash $ getBlockHeader best
+      (bh, chain) <- getSubChain [] blockchain best isBlockStored
+      writer bh chain
+    Nothing -> return () -- if failed to get best block we ignore the node
+
+blockHashExporterSingle ::
+     BlockChain a
+  => [a]
+  -> (BlockHash -> IO Bool)
+  -> (BlockHeight -> [Block a] -> IO ())
+  -> Supervisor
+  -> IO ()
+blockHashExporterSingle blockchains isBlockStored writer sup = forever $ do
+  let blockchain = head blockchains
+  mapM_ (exploreBlockchain isBlockStored writer) blockchains
+  threadDelay 10000000 -- 10 secs

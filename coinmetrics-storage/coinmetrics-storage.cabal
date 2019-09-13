@@ -30,6 +30,7 @@ library
     , hanalytics-postgres
     , http-client
     , postgresql-libpq
+    , postgresql-simple
     , text
   ghc-options:         -Wall
   default-language:    Haskell2010

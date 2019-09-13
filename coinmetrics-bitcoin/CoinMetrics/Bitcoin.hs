@@ -10,6 +10,7 @@ module CoinMetrics.Bitcoin
 
 import Control.Exception
 import Control.Monad
+import Control.Monad.IO.Class
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.HashMap.Strict as HM
@@ -18,6 +19,8 @@ import Data.Maybe
 import Data.Proxy
 import Data.Scientific
 import qualified Data.Text as T
+import Data.Text.Lazy (toStrict)
+import qualified Data.Text.Lazy.Encoding as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import Numeric
@@ -43,7 +46,7 @@ data BitcoinBlock = BitcoinBlock
   , bb_nonce :: {-# UNPACK #-} !Int64
   , bb_difficulty :: {-# UNPACK #-} !Double
   , bb_prevHash :: {-# UNPACK #-} !HexString
-  }
+  } deriving Show
 
 instance HasBlockHeader BitcoinBlock where
   getBlockHeader BitcoinBlock
@@ -74,7 +77,7 @@ instance J.FromJSON BitcoinBlockWrapper where
     <*> (fields J..: "time")
     <*> (parseNonce =<< fields J..: "nonce")
     <*> (fields J..: "difficulty")
-    <*> (fields J..: "previousblockhash")
+    <*> (fields J..:? "previousblockhash" J..!= emptyHexString)
 
 data BitcoinBlockHeader = BitcoinBlockHeader
   { bbh_hash :: {-# UNPACK #-} !HexString
@@ -105,7 +108,7 @@ instance J.FromJSON BitcoinBlockHeaderWrapper where
     <$> (fields J..: "hash")
     <*> (fields J..: "height")
     <*> (fields J..: "time")
-    <*> (fields J..: "previousblockhash")
+    <*> (fields J..:? "previousblockhash" J..!= emptyHexString)
 
 data BitcoinTransaction = BitcoinTransaction
   { bt_txid :: {-# UNPACK #-} !HexString
@@ -116,7 +119,7 @@ data BitcoinTransaction = BitcoinTransaction
   , bt_locktime :: {-# UNPACK #-} !Int64
   , bt_vin :: !(V.Vector BitcoinVin)
   , bt_vout :: !(V.Vector BitcoinVout)
-  }
+  } deriving Show
 
 newtype BitcoinTransactionWrapper = BitcoinTransactionWrapper
   { unwrapBitcoinTransaction :: BitcoinTransaction
@@ -137,14 +140,14 @@ data BitcoinVin = BitcoinVin
   { bvi_txid :: !(Maybe HexString)
   , bvi_vout :: !(Maybe Int64)
   , bvi_coinbase :: !(Maybe HexString)
-  }
+  } deriving Show
 
 data BitcoinVout = BitcoinVout
   { bvo_type :: !T.Text
   , bvo_value :: {-# UNPACK #-} !Scientific
   , bvo_addresses :: !(V.Vector T.Text)
   , bvo_asm :: !T.Text
-  }
+  } deriving Show
 
 newtype BitcoinVoutWrapper = BitcoinVoutWrapper
   { unwrapBitcoinVout :: BitcoinVout
@@ -181,6 +184,7 @@ instance BlockChain Bitcoin where
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -100 -- conservative rewrite limit
     , bci_heightFieldName = "height"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy BitcoinBlock))
       [ schemaOf (Proxy :: Proxy BitcoinVin)
@@ -199,21 +203,27 @@ instance BlockChain Bitcoin where
       in f . mconcat . map flatten
     }
 
-  getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
+  getCurrentBlockHeight (Bitcoin jsonRpc) = jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 
   getBlockHeaderByHeight (Bitcoin jsonRpc) blockHeight = do
     blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
     getBlockHeader . unwrapBitcoinBlockHeader <$> jsonRpcRequest jsonRpc "getblock" ([blockHash] :: V.Vector J.Value)
 
-  getBlockByHeight (Bitcoin jsonRpc) blockHeight = do
-    blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
-    -- try get everything in one RPC call
-    eitherBlock <- try $ unwrapBitcoinBlock <$> jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Number 2] :: V.Vector J.Value)
+  getBlockByHeight (Bitcoin jsonRpc) blockHeight =
+    jsonRpcRequest
+      jsonRpc
+      "getblockhash"
+      ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value) >>=
+    getBlockByHash (Bitcoin jsonRpc)
+
+  getBlockByHash (Bitcoin jsonRpc) blockHash = do
+    let bh = J.toJSON blockHash
+    eitherBlock <- try $ unwrapBitcoinBlock <$> jsonRpcRequest jsonRpc "getblock" ([bh, J.Number 2] :: V.Vector J.Value)
     case eitherBlock of
       Right block -> return block
       Left SomeException {} -> do
         -- request block with transactions' hashes
-        blockJson <- jsonRpcRequest jsonRpc "getblock" ([blockHash, J.Bool True] :: V.Vector J.Value)
+        blockJson <- jsonRpcRequest jsonRpc "getblock" ([bh, J.Bool True] :: V.Vector J.Value)
         transactionsHashes <- either fail return $ J.parseEither (J..: "tx") blockJson
         transactions <- forM transactionsHashes $ \case
           -- some bitcoin clones return full transaction here anyhow, because fuck you

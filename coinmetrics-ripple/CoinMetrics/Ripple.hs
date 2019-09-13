@@ -208,6 +208,7 @@ instance BlockChain Ripple where
     , bci_defaultBeginBlock = 32570 -- genesis ledger
     , bci_defaultEndBlock = 0 -- history data, no rewrites
     , bci_heightFieldName = "index"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy RippleLedger))
       [ schemaOf (Proxy :: Proxy RippleCurrencyAmount)

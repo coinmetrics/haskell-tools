@@ -154,6 +154,7 @@ instance BlockChain Monero where
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -60 -- conservative rewrite limit
     , bci_heightFieldName = "height"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy MoneroBlock))
       [ schemaOf (Proxy :: Proxy MoneroTransactionInput)

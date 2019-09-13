@@ -175,6 +175,7 @@ instance BlockChain Tezos where
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = 0
     , bci_heightFieldName = "level"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy TezosBlock))
       [ schemaOf (Proxy :: Proxy TezosBalanceUpdate)

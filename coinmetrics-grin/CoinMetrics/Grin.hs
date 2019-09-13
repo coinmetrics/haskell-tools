@@ -142,6 +142,7 @@ instance BlockChain Grin where
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -60
     , bci_heightFieldName = "height"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy GrinBlock))
       [ schemaOf (Proxy :: Proxy GrinOutput)

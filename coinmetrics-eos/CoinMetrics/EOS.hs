@@ -156,6 +156,7 @@ instance BlockChain Eos where
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- no need in a gap, as it uses irreversible block number
     , bci_heightFieldName = "number"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy EosBlock))
       [ schemaOf (Proxy :: Proxy EosAuthorization)
