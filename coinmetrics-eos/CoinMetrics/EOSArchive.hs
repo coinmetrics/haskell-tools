@@ -537,6 +537,7 @@ instance BlockChain EosArchive where
     , bci_defaultBeginBlock = 2
     , bci_defaultEndBlock = 0 -- no need in a gap, as it uses irreversible block number
     , bci_heightFieldName = "number"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas (schemaOf (Proxy :: Proxy EosArchiveBlock)) []
       "CREATE TABLE \"eos_archive\" OF \"EosArchiveBlock\" (PRIMARY KEY (\"number\"));"
     }

@@ -297,6 +297,7 @@ instance BlockChain Cosmos where
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0
     , bci_heightFieldName = "height"
+    , bci_hashFieldName = "hash"
     , bci_schemas = standardBlockChainSchemas
       (schemaOf (Proxy :: Proxy CosmosBlock))
       [
