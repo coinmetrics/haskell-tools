@@ -24,15 +24,18 @@ import qualified Data.ByteString.Short as BS
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import Data.Int
+import Data.Maybe
 import Data.Proxy
 import qualified Data.Serialize as S
+import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
 import Numeric
-import System.IO.Unsafe(unsafeInterleaveIO)
+import System.Environment
+import System.IO.Unsafe(unsafeInterleaveIO, unsafePerformIO)
 
 import CoinMetrics.BlockChain
 import CoinMetrics.Schema.Util
@@ -168,6 +171,7 @@ pattern SOT_ACCOUNT_MERGE = 8
 pattern SOT_INFLATION = 9
 pattern SOT_MANAGE_DATA = 10
 pattern SOT_BUMP_SEQUENCE = 11
+pattern SOT_MANAGE_BUY_OFFER = 12
 
 pattern ASSET_TYPE_NATIVE = 0
 pattern ASSET_TYPE_CREDIT_ALPHANUM4 = 1
@@ -233,6 +237,8 @@ pattern INFLATION_SUCCESS = 0
 pattern MANAGE_OFFER_CREATED = 0
 pattern MANAGE_OFFER_UPDATED = 1
 -- pattern MANAGE_OFFER_DELETED = 2
+
+pattern MANAGE_BUY_OFFER_SUCCESS = 0
 
 -- pattern ENVELOPE_TYPE_SCP = 1
 pattern ENVELOPE_TYPE_TX = 2
@@ -481,7 +487,8 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         SOT_INFLATION -> return def
         SOT_MANAGE_DATA -> getManageDataOp
         SOT_BUMP_SEQUENCE -> getBumpSequenceOp
-        _ -> fail "wrong op type"
+        SOT_MANAGE_BUY_OFFER -> getManageBuyOfferOp
+        _ -> fail $ "wrong op type: " <> show opType
       return op
         { so_type = opType
         , so_sourceAccount = sourceAccount
@@ -617,6 +624,21 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         { so_bumpTo = Just bumpTo
         }
 
+    getManageBuyOfferOp :: S.Get StellarOperation
+    getManageBuyOfferOp = do
+      selling <- getAsset
+      buying <- getAsset
+      amount <- S.getInt64be
+      price <- getPrice
+      offerID <- S.getInt64be
+      return def
+        { so_selling = Just selling
+        , so_buying = Just buying
+        , so_amount = Just amount
+        , so_price = Just price
+        , so_offerID = Just offerID
+        }
+
     getOperationResult :: S.Get OperationResult
     getOperationResult = do
       code <- S.getInt32be
@@ -636,6 +658,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
             SOT_INFLATION -> getInflationResult
             SOT_MANAGE_DATA -> getManageDataResult
             SOT_BUMP_SEQUENCE -> getBumpSequenceResult
+            SOT_MANAGE_BUY_OFFER -> getManageBuyOfferResult
             _ -> fail "wrong op type"
           return opResult
             { or_code = fromIntegral code
@@ -719,6 +742,15 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
 
     getBumpSequenceResult :: S.Get OperationResult
     getBumpSequenceResult = getOpResult
+
+    getManageBuyOfferResult :: S.Get OperationResult
+    getManageBuyOfferResult = do
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
+      case resultCode of
+        MANAGE_BUY_OFFER_SUCCESS -> getManageOfferSuccessResult opResult
+        _ -> return opResult
 
 
     getManageOfferSuccessResult :: OperationResult -> S.Get OperationResult
@@ -937,7 +969,7 @@ stellarRequest Stellar
   { stellar_webCache = webCache
   , stellar_httpRequest = httpRequest
   } skipCache path = either fail return <=< tryWithRepeat $ requestWebCache webCache skipCache httpRequest
-  { H.path = H.path httpRequest <> T.encodeUtf8 path
+  { H.path = (if H.path httpRequest == "/" then "" else H.path httpRequest) <> T.encodeUtf8 path
   } $ \body -> return (True, body)
 
 withCheckpointCache :: Stellar -> Int64 -> IO [StellarLedger]
@@ -1018,6 +1050,9 @@ instance BlockChain Stellar where
       _ -> fail "ledger cache error"
 
 
--- Only mainnet is supported for now.
+-- | Network id. Defines how to calculate hashes of transactions.
+{-# NOINLINE productionNetworkId #-}
 productionNetworkId :: B.ByteString
-productionNetworkId = BA.convert (C.hash ("Public Global Stellar Network ; September 2015" :: B.ByteString) :: C.Digest C.SHA256)
+productionNetworkId = unsafePerformIO $ hash . fromString . fromMaybe "Public Global Stellar Network ; September 2015" <$> lookupEnv "STELLAR_NETWORK_ID"
+  where
+    hash networkId = BA.convert (C.hash (networkId :: B.ByteString) :: C.Digest C.SHA256)

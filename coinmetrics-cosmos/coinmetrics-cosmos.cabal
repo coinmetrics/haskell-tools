@@ -1,4 +1,4 @@
-name:                coinmetrics-eos
+name:                coinmetrics-cosmos
 version:             0.1.0.0
 -- synopsis:            
 -- description:         
@@ -13,21 +13,21 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-    CoinMetrics.EOS
-    CoinMetrics.EOSArchive
+    CoinMetrics.Cosmos
   build-depends:
     aeson
+    , avro
     , base
     , bytestring
     , cereal
     , coinmetrics
+    , coinmetrics-tendermint
     , hanalytics-base
+    , hanalytics-postgres
     , http-client
-    , stm
+    , memory
+    , protobuf
     , text
-    , time
-    , unordered-containers
     , vector
-    , websockets
   ghc-options:         -Wall
   default-language:    Haskell2010

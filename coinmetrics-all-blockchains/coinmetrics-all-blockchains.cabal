@@ -26,6 +26,11 @@ flag cardano
   default:             True
   manual:              True
 
+flag cosmos
+  description:         Support Cosmos
+  default:             True
+  manual:              True
+
 flag eos
   description:         Support Eos
   default:             True
@@ -106,6 +111,10 @@ library
   if flag(cardano)
     build-depends:       coinmetrics-cardano
     cpp-options:         -DCM_SUPPORT_CARDANO
+
+  if flag(cosmos)
+    build-depends:       coinmetrics-cosmos
+    cpp-options:         -DCM_SUPPORT_COSMOS
 
   if flag(eos)
     build-depends:       coinmetrics-eos

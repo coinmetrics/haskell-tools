@@ -21,8 +21,12 @@ import CoinMetrics.Bitcoin
 #if defined(CM_SUPPORT_CARDANO)
 import CoinMetrics.Cardano
 #endif
+#if defined(CM_SUPPORT_COSMOS)
+import CoinMetrics.Cosmos
+#endif
 #if defined(CM_SUPPORT_EOS)
 import CoinMetrics.EOS
+import CoinMetrics.EOSArchive
 #endif
 #if defined(CM_SUPPORT_ETHEREUM)
 import CoinMetrics.Ethereum
@@ -74,8 +78,13 @@ allBlockChainInfos = HM.fromList infos
       ("cardano",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Cardano)) :
 #endif
 
+#if defined(CM_SUPPORT_COSMOS)
+      ("cosmos",  SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Cosmos)) :
+#endif
+
 #if defined(CM_SUPPORT_EOS)
       ("eos",      SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Eos)) :
+      ("eos_archive", SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy EosArchive)) :
 #endif
 
 #if defined(CM_SUPPORT_ETHEREUM)

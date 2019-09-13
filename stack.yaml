@@ -1,4 +1,4 @@
-resolver: lts-13.20
+resolver: lts-14.5
 
 packages:
 - coinmetrics
@@ -6,6 +6,7 @@ packages:
 - coinmetrics-binance
 - coinmetrics-bitcoin
 - coinmetrics-cardano
+- coinmetrics-cosmos
 - coinmetrics-eos
 - coinmetrics-ethereum
 - coinmetrics-export
@@ -26,7 +27,7 @@ packages:
 extra-deps:
 - diskhash-0.0.4.0
 - git: https://github.com/quyse/hanalytics.git
-  commit: 01e7a68d35b45359aeb7b7f700eab5c4b9cc908b
+  commit: dbe294c4c1524268683764c3cd3ec947105359c9
   subdirs:
   - hanalytics-avro
   - hanalytics-base
