@@ -41,3 +41,22 @@ docker-image:
   - docker
   only:
   - master
+
+docker-image-actors:
+  stage: package
+  image: docker:latest
+  services:
+  - docker:dind
+  dependencies:
+  - binaries
+  script:
+  - cp Dockerfile bin/
+  - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA -t $CI_REGISTRY_IMAGE:actors bin
+  - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  - docker push $CI_REGISTRY_IMAGE:actors
+  tags:
+  - linux
+  - docker
+  only:
+  - actors
