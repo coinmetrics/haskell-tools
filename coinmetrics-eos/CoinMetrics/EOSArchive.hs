@@ -228,6 +228,7 @@ initSchema SchemaInit
     , ("int64", J.toJSON <$> (fromAbiBinary :: S.Get Int64))
     , ("uint128", J.toJSON <$> (fromAbiBinary :: S.Get Word128))
     , ("float64", J.toJSON <$> (fromAbiBinary :: S.Get Double))
+    , ("float128", J.toJSON <$> (fromAbiBinary :: S.Get Float128))
     , ("bool", J.toJSON <$> (fromAbiBinary :: S.Get Bool))
     , ("varuint32", J.toJSON <$> varIntFromAbiBinary)
     , ("bytes", J.toJSON <$> (fromAbiBinary :: S.Get HexString))
@@ -483,6 +484,11 @@ instance Abi Word128 where
   toAbiBinary (Word128 n) = do
     S.putWord64le $ fromIntegral (n .&. 0xFFFFFFFF)
     S.putWord64le $ fromIntegral (n `shiftR` 64)
+
+newtype Float128 = Float128 HexString deriving (J.FromJSON, J.ToJSON)
+instance Abi Float128 where
+  fromAbiBinary = Float128 . HexString . BS.toShort <$> S.getBytes 16
+  toAbiBinary (Float128 (HexString bytes)) = S.putByteString $ BS.fromShort bytes
 
 newtype Checksum256 = Checksum256 HexString deriving (J.FromJSON, J.ToJSON)
 instance Abi Checksum256 where
