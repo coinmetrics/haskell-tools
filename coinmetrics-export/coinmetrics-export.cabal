@@ -47,3 +47,40 @@ executable coinmetrics-export
   -- -O0 added temporarily to avoid space leak
   ghc-options:         -threaded -Wall -O0
   default-language:    Haskell2010
+
+executable coinmetrics-export-realtime
+  main-is:           coinmetrics-export-realtime.hs
+  other-modules:
+    Actors
+  build-depends:
+    aeson
+    , avro
+    , base
+    , bytestring
+    , cereal
+    , coinmetrics
+    , coinmetrics-all-blockchains
+    , coinmetrics-iota
+    , coinmetrics-storage
+    , connection
+    , data-default
+    , hanalytics-base
+    , hanalytics-bigquery
+    , hanalytics-postgres
+    , directory
+    , diskhash
+    , http-client
+    , http-client-tls
+    , memory
+    , nqe
+    , optparse-applicative
+    , postgresql-libpq
+    , process
+    , stm
+    , text
+    , unordered-containers
+    , unliftio
+    , vector
+  -- -O0 added temporarily to avoid space leak
+  ghc-options:         -threaded -Wall -O0
+  default-language:    Haskell2010

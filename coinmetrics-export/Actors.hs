@@ -8,14 +8,10 @@ module Actors
   ) where
 
 import           CoinMetrics.BlockChain
-import           CoinMetrics.Util
 import           Control.Concurrent      (threadDelay)
 import           Control.Concurrent.STM  (retry)
 import           Control.Monad
-import qualified Data.ByteArray.Encoding as BA
-import qualified Data.ByteString.Short   as BSS
 import           Data.Maybe
-import qualified Data.Text.Encoding      as T
 import qualified Data.Text.Lazy          as TL
 import qualified Data.Text.Lazy.IO       as TL
 import           NQE
@@ -267,7 +263,7 @@ getSubChain pending blockchain best isBlockStored = do
   let bh = bh_height $ getBlockHeader best
   let prevHash = fromJust prevHashM
   knownBlock <- isBlockStored hash
-  let isGenesis = prevHash == emptyHexString
+  let isGenesis = prevHash == mempty
   if knownBlock || isGenesis
   then return (bh, pending)
   else do
@@ -288,7 +284,6 @@ exploreBlockchain isBlockStored writer blockchain = do
   bestM <- getBest blockchain
   case bestM of
     Just best -> do
-      let hash = bh_hash $ getBlockHeader best
       (bh, chain) <- getSubChain [] blockchain best isBlockStored
       writer bh chain
     Nothing -> return () -- if failed to get best block we ignore the node
@@ -300,7 +295,6 @@ blockHashExporterSingle ::
   -> (BlockHeight -> [Block a] -> IO ())
   -> Supervisor
   -> IO ()
-blockHashExporterSingle blockchains isBlockStored writer sup = forever $ do
-  let blockchain = head blockchains
+blockHashExporterSingle blockchains isBlockStored writer _ = forever $ do
   mapM_ (exploreBlockchain isBlockStored writer) blockchains
   threadDelay 10000000 -- 10 secs

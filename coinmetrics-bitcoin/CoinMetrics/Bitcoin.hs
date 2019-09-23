@@ -77,7 +77,7 @@ instance J.FromJSON BitcoinBlockWrapper where
     <*> (fields J..: "time")
     <*> (parseNonce =<< fields J..: "nonce")
     <*> (fields J..: "difficulty")
-    <*> (fields J..:? "previousblockhash" J..!= emptyHexString)
+    <*> (fields J..:? "previousblockhash" J..!= mempty)
 
 data BitcoinBlockHeader = BitcoinBlockHeader
   { bbh_hash :: {-# UNPACK #-} !HexString
@@ -108,7 +108,7 @@ instance J.FromJSON BitcoinBlockHeaderWrapper where
     <$> (fields J..: "hash")
     <*> (fields J..: "height")
     <*> (fields J..: "time")
-    <*> (fields J..:? "previousblockhash" J..!= emptyHexString)
+    <*> (fields J..:? "previousblockhash" J..!= mempty)
 
 data BitcoinTransaction = BitcoinTransaction
   { bt_txid :: {-# UNPACK #-} !HexString

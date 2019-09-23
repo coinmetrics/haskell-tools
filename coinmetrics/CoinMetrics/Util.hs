@@ -10,7 +10,6 @@ module CoinMetrics.Util
   , tryWithRepeat
   , currentLocalTimeToUTC
   , standardBlockChainSchemas
-  , emptyHexString
   ) where
 
 import Control.Concurrent
@@ -61,9 +60,6 @@ instance J.FromJSON HexString where
 instance J.ToJSON HexString where
   toJSON = J.toJSON . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
   toEncoding = J.toEncoding . T.decodeUtf8 . BA.convertToBase BA.Base16 . BS.fromShort . unHexString
-
-emptyHexString :: HexString  
-emptyHexString = HexString BS.empty
 
 decode0xHexBytes :: T.Text -> J.Parser HexString
 decode0xHexBytes = \case
