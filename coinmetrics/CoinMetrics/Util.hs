@@ -2,6 +2,7 @@
 
 module CoinMetrics.Util
   ( HexString(..)
+  , encode0xHexBytes
   , decode0xHexBytes
   , encode0xHexNumber
   , decode0xHexNumber
@@ -66,6 +67,9 @@ decode0xHexBytes = \case
   (T.stripPrefix "0x" -> Just (BA.convertFromBase BA.Base16 . T.encodeUtf8 -> Right s)) -> return $ HexString $ BS.toShort s
   "" -> return mempty
   s -> fail $ "decode0xHexBytes error for: " ++ show s
+
+encode0xHexBytes :: HexString -> J.Value
+encode0xHexBytes = J.String . T.pack . ("0x" <>) . show
 
 encode0xHexNumber :: (Integral a, Show a) => a -> J.Value
 encode0xHexNumber = J.String . T.pack . ("0x" <>) . flip showHex ""
