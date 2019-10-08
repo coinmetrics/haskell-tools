@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeApplications  #-}
 
 module Actors
-  ( blockHighExporter
+  ( blockHeighExporter
   , blockHashExporterSingle
   ) where
 
@@ -191,7 +191,7 @@ readBlockFile file = map (read . TL.unpack) . TL.lines <$> TL.readFile file
 sendList :: (MonadIO m, OutChan mbox) => [msg] -> mbox msg -> m ()
 sendList xs mbox = mapM_ (`send` mbox) xs
 
-blockHighExporter ::
+blockHeighExporter ::
      BlockChain a
   => [a]
   -> BlockHeight
@@ -201,7 +201,7 @@ blockHighExporter ::
   -> ([Block a] -> IO ())
   -> Supervisor
   -> IO ()
-blockHighExporter blockchains beginBlock endBlock fileB threadsC writeOuts sup
+blockHeighExporter blockchains beginBlock endBlock fileB threadsC writeOuts sup
  = do
   unsavedT <- newTVarIO 0
   let nodesCount = length blockchains
