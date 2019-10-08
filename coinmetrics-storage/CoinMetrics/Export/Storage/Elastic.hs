@@ -82,7 +82,6 @@ elasticExportStoragePack ExportStorageOptions
       in J.encode (J.Object
         [ (if upsert then "index" else "create", J.Object
           [ ("_index", J.toJSON table)
-          , ("_type", "block")
           , ("_id", key)
           ])
         ]) <> "\n" <> J.encode block <> "\n"
