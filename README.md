@@ -11,13 +11,15 @@ These tools are used by CoinMetrics.io team for exporting data from blockchains 
 
 ## Status
 
-The project is in early alpha deep development seems-like-its-working-oh-crap state. Command line interface is more or less stable but may change. Please use with caution.
+The project is being used in production at Coin Metrics, but a lot of things are in flux or fragile. Command line interface is more or less stable but may change. Please use with caution.
 
 Supported blockchains:
 
+* Binance Chain
 * [Bitcoin](https://bitcoin.org/)
 * [Cardano](https://www.cardanohub.org/)
-* [EOS](https://eos.io/) (WIP)
+* [Cosmos](https://cosmos.network/)
+* [EOS](https://eos.io/)
 * [Ethereum](https://www.ethereum.org/)
 * [Grin](https://grin-tech.org/)
 * [IOTA](https://iota.org/)
@@ -26,6 +28,7 @@ Supported blockchains:
 * [NEO](https://neo.org/)
 * [Ripple](https://ripple.com/)
 * [Stellar](https://www.stellar.org/)
+* Generic [Tendermint](https://tendermint.com/)
 * [Tezos](https://tezos.com/)
 * [Tron](https://tron.network/) (WIP)
 * [Waves](https://wavesplatform.com/)
