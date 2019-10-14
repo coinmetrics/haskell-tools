@@ -33,6 +33,7 @@ import Data.Proxy
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Encoding.Error as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import Data.Word
@@ -118,7 +119,7 @@ instance Abi B.ByteString where
     S.putByteString bytes
 
 instance Abi T.Text where
-  fromAbiBinary = T.decodeUtf8 <$> fromAbiBinary
+  fromAbiBinary = T.decodeUtf8With T.lenientDecode <$> fromAbiBinary
   toAbiBinary = toAbiBinary . T.encodeUtf8
 
 instance Abi HexString where
