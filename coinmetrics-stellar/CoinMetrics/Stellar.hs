@@ -172,6 +172,7 @@ pattern SOT_INFLATION = 9
 pattern SOT_MANAGE_DATA = 10
 pattern SOT_BUMP_SEQUENCE = 11
 pattern SOT_MANAGE_BUY_OFFER = 12
+pattern SOT_PATH_PAYMENT_STRICT_SEND = 13
 
 pattern ASSET_TYPE_NATIVE = 0
 pattern ASSET_TYPE_CREDIT_ALPHANUM4 = 1
@@ -239,6 +240,20 @@ pattern MANAGE_OFFER_UPDATED = 1
 -- pattern MANAGE_OFFER_DELETED = 2
 
 pattern MANAGE_BUY_OFFER_SUCCESS = 0
+
+pattern PATH_PAYMENT_STRICT_SEND_SUCCESS = 0
+-- pattern PATH_PAYMENT_STRICT_SEND_MALFORMED = -1
+-- pattern PATH_PAYMENT_STRICT_SEND_UNDERFUNDED = -2
+-- pattern PATH_PAYMENT_STRICT_SEND_SRC_NO_TRUST = -3
+-- pattern PATH_PAYMENT_STRICT_SEND_SRC_NOT_AUTHORIZED = -4
+-- pattern PATH_PAYMENT_STRICT_SEND_NO_DESTINATION = -5
+-- pattern PATH_PAYMENT_STRICT_SEND_NO_TRUST = -6
+-- pattern PATH_PAYMENT_STRICT_SEND_NOT_AUTHORIZED = -7
+-- pattern PATH_PAYMENT_STRICT_SEND_LINE_FULL = -8
+pattern PATH_PAYMENT_STRICT_SEND_NO_ISSUER = -9
+-- pattern PATH_PAYMENT_STRICT_SEND_TOO_FEW_OFFERS = -10
+-- pattern PATH_PAYMENT_STRICT_SEND_OFFER_CROSS_SELF = -11
+-- pattern PATH_PAYMENT_STRICT_SEND_UNDER_DESTMIN = -12
 
 -- pattern ENVELOPE_TYPE_SCP = 1
 pattern ENVELOPE_TYPE_TX = 2
@@ -488,6 +503,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         SOT_MANAGE_DATA -> getManageDataOp
         SOT_BUMP_SEQUENCE -> getBumpSequenceOp
         SOT_MANAGE_BUY_OFFER -> getManageBuyOfferOp
+        SOT_PATH_PAYMENT_STRICT_SEND -> getPathPaymentStrictSendOp
         _ -> fail $ "wrong op type: " <> show opType
       return op
         { so_type = opType
@@ -639,6 +655,23 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         , so_offerID = Just offerID
         }
 
+    getPathPaymentStrictSendOp :: S.Get StellarOperation
+    getPathPaymentStrictSendOp = do
+      sendAsset <- getAsset
+      sendAmount <- S.getInt64be
+      destination <- getAccountID
+      destAsset <- getAsset
+      destMin <- S.getInt64be
+      path <- getArray getAsset
+      return def
+        { so_sendAsset = Just sendAsset
+        , so_amount = Just sendAmount
+        , so_destination = Just destination
+        , so_destAsset = Just destAsset
+        , so_destAmount = Just destMin
+        , so_path = path
+        }
+
     getOperationResult :: S.Get OperationResult
     getOperationResult = do
       code <- S.getInt32be
@@ -659,6 +692,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
             SOT_MANAGE_DATA -> getManageDataResult
             SOT_BUMP_SEQUENCE -> getBumpSequenceResult
             SOT_MANAGE_BUY_OFFER -> getManageBuyOfferResult
+            SOT_PATH_PAYMENT_STRICT_SEND -> getPathPaymentStrictSendResult
             _ -> fail "wrong op type"
           return opResult
             { or_code = fromIntegral code
@@ -752,6 +786,25 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         MANAGE_BUY_OFFER_SUCCESS -> getManageOfferSuccessResult opResult
         _ -> return opResult
 
+    getPathPaymentStrictSendResult :: S.Get OperationResult
+    getPathPaymentStrictSendResult = do
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
+      case resultCode of
+        PATH_PAYMENT_STRICT_SEND_SUCCESS -> do
+          claimOffers <- getArray getClaimOfferAtom
+          (destination, asset, amount) <- getSimplePaymentResult
+          return opResult
+            { or_destination = Just destination
+            , or_asset = Just asset
+            , or_amount = Just amount
+            , or_claimOffers = claimOffers
+            }
+        PATH_PAYMENT_STRICT_SEND_NO_ISSUER -> do
+          void getAsset
+          return opResult
+        _ -> return opResult
 
     getManageOfferSuccessResult :: OperationResult -> S.Get OperationResult
     getManageOfferSuccessResult opResult = do
