@@ -131,6 +131,8 @@ data StellarOperation = StellarOperation
   , so_resultClaimOffers :: !(V.Vector StellarClaimOfferAtom)
   , so_resultOffer :: !(Maybe StellarOfferEntry)
   , so_resultInflationPayouts :: !(V.Vector StellarInflationPayout)
+  , so_destMin :: !(Maybe Int64)
+  , so_sendAmount :: !(Maybe Int64)
   }
 
 data StellarClaimOfferAtom = StellarClaimOfferAtom
@@ -172,6 +174,7 @@ pattern SOT_INFLATION = 9
 pattern SOT_MANAGE_DATA = 10
 pattern SOT_BUMP_SEQUENCE = 11
 pattern SOT_MANAGE_BUY_OFFER = 12
+pattern SOT_PATH_PAYMENT_STRICT_SEND = 13 
 
 pattern ASSET_TYPE_NATIVE = 0
 pattern ASSET_TYPE_CREDIT_ALPHANUM4 = 1
@@ -488,6 +491,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         SOT_MANAGE_DATA -> getManageDataOp
         SOT_BUMP_SEQUENCE -> getBumpSequenceOp
         SOT_MANAGE_BUY_OFFER -> getManageBuyOfferOp
+        SOT_PATH_PAYMENT_STRICT_SEND  -> getPathPaymentStrictSendOp
         _ -> fail $ "wrong op type: " <> show opType
       return op
         { so_type = opType
@@ -639,6 +643,23 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         , so_offerID = Just offerID
         }
 
+    getPathPaymentStrictSendOp :: S.Get StellarOperation
+    getPathPaymentStrictSendOp = do
+      asset <- getAsset
+      sendAmount <- S.getInt64be
+      destination <- getAccountID
+      destAsset <- getAsset
+      destMin <- S.getInt64be
+      path <- getArray getAsset
+      return def
+        { so_asset = Just asset
+        , so_sendAmount = Just sendAmount
+        , so_destination = Just destination
+        , so_destAsset = Just destAsset
+        , so_destMin = Just destMin
+        , so_path = path
+        }
+
     getOperationResult :: S.Get OperationResult
     getOperationResult = do
       code <- S.getInt32be
@@ -659,6 +680,7 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
             SOT_MANAGE_DATA -> getManageDataResult
             SOT_BUMP_SEQUENCE -> getBumpSequenceResult
             SOT_MANAGE_BUY_OFFER -> getManageBuyOfferResult
+            SOT_PATH_PAYMENT_STRICT_SEND -> getPathPaymentStrictSendResult
             _ -> fail "wrong op type"
           return opResult
             { or_code = fromIntegral code
@@ -750,6 +772,26 @@ parseLedgers ledgersBytes transactionsBytes resultsBytes = do
         } <- getOpResult
       case resultCode of
         MANAGE_BUY_OFFER_SUCCESS -> getManageOfferSuccessResult opResult
+        _ -> return opResult
+
+    getPathPaymentStrictSendResult :: S.Get OperationResult
+    getPathPaymentStrictSendResult = do
+      opResult@OperationResult
+        { or_result = Just resultCode
+        } <- getOpResult
+      case resultCode of
+        PATH_PAYMENT_SUCCESS -> do
+          claimOffers <- getArray getClaimOfferAtom
+          (destination, asset, amount) <- getSimplePaymentResult
+          return opResult
+            { or_destination = Just destination
+            , or_asset = Just asset
+            , or_amount = Just amount
+            , or_claimOffers = claimOffers
+            }
+        PATH_PAYMENT_NO_ISSUER -> do
+          void getAsset
+          return opResult
         _ -> return opResult
 
 
