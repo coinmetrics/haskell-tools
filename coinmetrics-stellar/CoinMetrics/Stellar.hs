@@ -105,6 +105,7 @@ data StellarOperation = StellarOperation
   , so_destAmount :: !(Maybe Int64)
   , so_destAsset :: !(Maybe StellarAsset)
   , so_destination :: !(Maybe HexString)
+  , so_destMin :: !(Maybe Int64)
   , so_highThreshold :: !(Maybe Int64)
   , so_homeDomain :: !(Maybe T.Text)
   , so_inflationDest :: !(Maybe HexString)
@@ -117,6 +118,7 @@ data StellarOperation = StellarOperation
   , so_path :: !(V.Vector StellarAsset)
   , so_price :: !(Maybe Double)
   , so_selling :: !(Maybe StellarAsset)
+  , so_sendAmount :: !(Maybe Int64)
   , so_sendAsset :: !(Maybe StellarAsset)
   , so_sendMax :: !(Maybe Int64)
   , so_setFlags :: !(Maybe Int64)
@@ -131,8 +133,6 @@ data StellarOperation = StellarOperation
   , so_resultClaimOffers :: !(V.Vector StellarClaimOfferAtom)
   , so_resultOffer :: !(Maybe StellarOfferEntry)
   , so_resultInflationPayouts :: !(V.Vector StellarInflationPayout)
-  , so_destMin :: !(Maybe Int64)
-  , so_sendAmount :: !(Maybe Int64)
   }
 
 data StellarClaimOfferAtom = StellarClaimOfferAtom
