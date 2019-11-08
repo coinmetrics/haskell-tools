@@ -650,19 +650,30 @@ withEosArchiveClient :: EosArchive -> (EosArchiveClient -> IO a) -> IO a
 withEosArchiveClient EosArchive
   { ea_httpRequest = httpRequest
   , ea_clientsVar = clientsVar
-  } = bracket acquire release where
-  acquire = do
-    -- get existing client if possible
-    maybeClient <- atomically $ do
-      clients <- readTVar clientsVar
-      case clients of
-        client : restClients -> do
-          writeTVar clientsVar restClients
-          return $ Just client
-        [] -> return Nothing
-    -- create new client if needed
-    maybe (startEosArchiveClient httpRequest) return maybeClient
-  release client = atomically $ modifyTVar clientsVar (client :)
+  } action = do
+  -- get existing client if possible
+  maybeClient <- atomically $ do
+    clients <- readTVar clientsVar
+    case clients of
+      client : restClients -> do
+        writeTVar clientsVar restClients
+        return $ Just client
+      [] -> return Nothing
+  -- create new client if needed
+  client@EosArchiveClient
+    { eac_connection = connection
+    } <- maybe (startEosArchiveClient httpRequest) return maybeClient
+  -- run action
+  eitherResult <- try $ action client
+  case eitherResult of
+    Right result -> do
+      -- if we are here, there was no error and we can return client to the pool
+      atomically $ modifyTVar clientsVar (client :)
+      return result
+    Left (SomeException err) -> do
+      -- forcibly stop connection
+      void (try $ WS.sendClose connection B.empty :: IO (Either SomeException ()))
+      throwIO err
 
 requestEosArchiveStatus :: EosArchiveClient -> IO StatusResult
 requestEosArchiveStatus EosArchiveClient
