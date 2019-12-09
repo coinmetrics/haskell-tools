@@ -99,7 +99,7 @@ instance J.FromJSON EosTransactionWrapper where
           <*> (trxTrans J..: "max_net_usage_words")
           <*> (trxTrans J..: "max_cpu_usage_ms")
           <*> (trxTrans J..: "delay_sec")
-          <*> (trxTrans J..: "context_free_actions")
+          <*> (V.map unwrapEosAction <$> trxTrans J..: "context_free_actions")
           <*> (V.map unwrapEosAction <$> trxTrans J..: "actions")
       _ -> EosTransaction
         mempty -- id
