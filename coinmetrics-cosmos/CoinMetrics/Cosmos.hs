@@ -48,7 +48,7 @@ data CosmosStdTx = CosmosStdTx
   }
 
 instance ReadMsg CosmosStdTx where
-  readMsg = withLen $ withPrefix 0xf0625dee $ withFields "CosmosStdTx" $ \h -> CosmosStdTx
+  readMsg = withLen $ withPrefix 0x282816a9 $ withFields "CosmosStdTx" $ \h -> CosmosStdTx
     <$> readRepeated readSubStruct 1 h
     <*> readRequired readSubStruct 2 h
     -- <*> readRepeated readSubStruct 3 h
