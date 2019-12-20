@@ -19,14 +19,13 @@ library
     , avro
     , base
     , bytestring
-    , cereal
     , coinmetrics
     , coinmetrics-tendermint
+    , cryptonite
     , hanalytics-base
     , hanalytics-postgres
     , http-client
     , memory
-    , protobuf
     , text
     , vector
   ghc-options:         -Wall

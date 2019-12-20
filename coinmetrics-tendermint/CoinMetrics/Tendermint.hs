@@ -9,6 +9,7 @@ License: MIT
 module CoinMetrics.Tendermint
   ( Tendermint(..)
   , TendermintBlock(..)
+  , TendermintBlockWrapper(..)
   , TendermintTx(..)
   ) where
 
