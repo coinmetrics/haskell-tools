@@ -4,26 +4,18 @@ stages:
 
 binaries:
   stage: build
-  image: gcc:latest
   script:
-  - mkdir -p bin cache
-  - export PATH=$HOME/.local/bin:$PATH
-  - apt-get install -y --no-install-recommends libpq-dev
-  - curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C /usr/bin '*/stack'
-  - stack --stack-root $(readlink -f cache/.stack) --no-terminal --install-ghc test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
-  cache:
-    key: haskell-tools
-    paths:
-    - cache/
+  - nix-build
+  - cp -r result/bin bin
   artifacts:
     name: "haskell-tools-$CI_BUILD_ID"
     paths:
     - bin
   tags:
   - linux
-  - docker
+  - nix
 
-docker-image:
+.docker-image:
   stage: package
   image: docker:latest
   services:
