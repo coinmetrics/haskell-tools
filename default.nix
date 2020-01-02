@@ -9,8 +9,7 @@ let
 	};
 
 	packages = pkgs.haskellPackages.override {
-		# overrides = self: super: with super; {
-		overrides = pkgs.haskell.lib.packageSourceOverrides {
+		overrides = pkgs.lib.composeExtensions (pkgs.haskell.lib.packageSourceOverrides {
 			coinmetrics = ./coinmetrics;
 			coinmetrics-all-blockchains = ./coinmetrics-all-blockchains;
 			coinmetrics-binance = ./coinmetrics-binance;
@@ -40,7 +39,9 @@ let
 			hanalytics-postgres = hanalytics + "/hanalytics-postgres";
 
 			diskhash = "0.0.4.0";
-		};
+		}) (self: super: with pkgs.haskell.lib; {
+			diskhash = dontCheck super.diskhash;
+		});
 	};
 
 	bins = pkgs.buildEnv {
