@@ -12,6 +12,7 @@ binaries:
     paths:
     - bin
   tags:
+  - coinmetrics
   - linux
   - nix
 
