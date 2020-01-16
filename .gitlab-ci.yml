@@ -5,7 +5,7 @@ stages:
 binaries:
   stage: build
   script:
-  - nix-build
+  - nix build -L
   - cp -r result/bin bin
   artifacts:
     name: "haskell-tools-$CI_BUILD_ID"
