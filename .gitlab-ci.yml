@@ -5,8 +5,8 @@ stages:
 binaries:
   stage: build
   script:
-  - nix build -L -o $BUILDER_ROOTS_CACHE_DIR/haskell-tools
-  - cp -r $BUILDER_ROOTS_CACHE_DIR/haskell-tools/bin bin
+  - nix build -L
+  - cp -r result/bin bin
   artifacts:
     name: "haskell-tools-$CI_BUILD_ID"
     paths:
