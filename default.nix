@@ -1,6 +1,5 @@
-let
-	pkgs = import <nixpkgs> {};
-
+{ pkgs }:
+rec {
 	hanalytics = pkgs.fetchFromGitHub {
 		owner = "quyse";
 		repo = "hanalytics";
@@ -44,8 +43,16 @@ let
 		});
 	};
 
-	bins = pkgs.buildEnv {
+	bins = with packages; [ coinmetrics-export coinmetrics-monitor ];
+
+	env = pkgs.buildEnv {
 		name = "haskell-tools";
-		paths = with packages; [ coinmetrics-export coinmetrics-monitor ];
+		paths = bins;
 	};
-in bins
+
+	image = pkgs.dockerTools.buildImage {
+		name = "coinmetrics/haskell-tools";
+		tag = "latest";
+		contents = env;
+	};
+}
