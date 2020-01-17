@@ -6,7 +6,7 @@ binaries:
   stage: build
   script:
   - nix build -Lf ./release.nix image
-  - cp -r result image
+  - cp -Lr result image
   artifacts:
     name: "haskell-tools-$CI_BUILD_ID"
     paths:
