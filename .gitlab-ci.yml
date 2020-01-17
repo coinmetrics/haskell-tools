@@ -6,11 +6,11 @@ binaries:
   stage: build
   script:
   - nix build -Lf ./release.nix image
-  - cp -Lr result image
+  - cp -L --no-preserve=all result haskell-tools-image.tar.gz
   artifacts:
     name: "haskell-tools-$CI_BUILD_ID"
     paths:
-    - image
+    - haskell-tools-image.tar.gz
   tags:
   - coinmetrics-nix-build-runner
 
