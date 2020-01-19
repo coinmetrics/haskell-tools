@@ -2,7 +2,7 @@ stages:
 - build
 - package
 
-image:
+nix-image:
   stage: build
   script:
   - nix build -Lf ./release.nix --argstr name $CI_REGISTRY_IMAGE --argstr tag nix image
