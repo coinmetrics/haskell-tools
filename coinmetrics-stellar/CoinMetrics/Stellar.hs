@@ -1071,9 +1071,9 @@ instance BlockChain Stellar where
         , stellar_checkpointCacheSize = 2 + threadsCount `quot` 64
         }
     , bci_defaultApiUrls =
-      [ "http://history.stellar.org/prd/core-live/core_live_001"
-      , "http://history.stellar.org/prd/core-live/core_live_002"
-      , "http://history.stellar.org/prd/core-live/core_live_003"
+      [ "https://history.stellar.org/prd/core-live/core_live_001"
+      , "https://history.stellar.org/prd/core-live/core_live_002"
+      , "https://history.stellar.org/prd/core-live/core_live_003"
       ]
     , bci_defaultBeginBlock = 1
     , bci_defaultEndBlock = 0 -- history data, no rewrites
