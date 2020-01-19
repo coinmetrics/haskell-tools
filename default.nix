@@ -52,6 +52,7 @@ rec {
 
   image = { name, tag }: pkgs.dockerTools.buildImage {
     inherit name tag;
+    contents = [ pkgs.cacert ];
     config = {
       Env = [ "PATH=${env}/bin" ];
       User = "1000:1000";
