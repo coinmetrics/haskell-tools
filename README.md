@@ -1,5 +1,3 @@
-[![Travis CI Build Status](https://travis-ci.org/coinmetrics-io/haskell-tools.svg?branch=master)](https://travis-ci.org/coinmetrics-io/haskell-tools) [![Docker Repository on Quay](https://quay.io/repository/coinmetrics/haskell-tools/status "Docker Repository on Quay")](https://quay.io/repository/coinmetrics/haskell-tools)
-
 # Haskell-based CoinMetrics.io tools
 
 These tools are used by CoinMetrics.io team for exporting data from blockchains into analytical databases and monitoring full nodes synchronization state.
@@ -11,7 +9,7 @@ These tools are used by CoinMetrics.io team for exporting data from blockchains 
 
 ## Status
 
-The project is being used in production at Coin Metrics, but a lot of things are in flux or fragile. Command line interface is more or less stable but may change. Please use with caution.
+The project is being used in production at Coin Metrics, but many things are in flux or fragile, and docs may be outdated. Command line interface is more or less stable but may change. Please use with caution.
 
 Supported blockchains:
 
@@ -33,7 +31,7 @@ Supported blockchains:
 * [Tron](https://tron.network/) (WIP)
 * [Waves](https://wavesplatform.com/)
 
-## Binaries (experimental)
+## Binaries
 
 There're no stable releases yet. All binaries are "bleeding edge" ones built on Travis CI.
 
@@ -41,42 +39,17 @@ One easy way to run the tools is to use docker.
 
 Pull the latest version:
 ```bash
-docker pull quay.io/coinmetrics/haskell-tools
+docker pull registry.gitlab.com/coinmetrics/haskell-tools
 ```
 
 Run e.g. `coinmetrics-export` tool:
 ```bash
-docker run -it --rm --net host quay.io/coinmetrics/haskell-tools coinmetrics-export <arguments>
+docker run -it --rm --net host registry.gitlab.com/coinmetrics/haskell-tools coinmetrics-export <arguments>
 ```
-
-Alternatively you can download executables:
-
-* [generic Linux](https://bintray.com/coinmetrics/haskell-tools)
-
-Or packages:
-
-* [.deb packages](https://bintray.com/coinmetrics/haskell-tools-deb)
-* [.rpm packages](https://bintray.com/coinmetrics/haskell-tools-rpm)
-
-Or setup package repository to receive updates:
-
-For .deb:
-```bash
-echo 'deb https://dl.bintray.com/coinmetrics/haskell-tools-deb unstable main' > /etc/apt/sources.list.d/coinmetrics-haskell-tools.list
-curl 'https://bintray.com/user/downloadSubjectPublicKey?username=bintray' | apt-key add -
-apt update
-apt install coinmetrics-export
-```
-
-For .rpm:
-```bash
-(cd /etc/yum.repos.d/ && curl -JOL https://bintray.com/coinmetrics/haskell-tools-rpm/rpm)
-yum install coinmetrics-export
-```
-
-Packages have the advantage of providing bash completion support out of the box.
 
 ## Building from source
+
+### With Stack
 
 Get [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
 

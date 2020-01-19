@@ -10,7 +10,7 @@ The intention is to support multitude of blockchains with a single command-line 
 Output formats include:
 * textual series of PostgreSQL-compatible INSERT or UPSERT statements
 * binary Avro format (suitable for uploading data to Google BigQuery)
-* ElasticSearch JSON format (for `bulk` API)
+* ElasticSearch JSON format (for the ["bulk" API](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html))
 
 The smallest exportable unit is a blockchain's block. In case of SQL every source block is exported as a database row. Block's transactions are usually stored in `ARRAY`-typed field of block's row.
 
