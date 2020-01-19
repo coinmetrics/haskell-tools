@@ -4,6 +4,6 @@ let
   package = import ./default.nix {
     pkgs = nixpkgs;
   };
-in {
-  image = package.image;
+in with package; {
+  inherit bins image;
 }
