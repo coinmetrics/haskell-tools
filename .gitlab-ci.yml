@@ -33,6 +33,15 @@ nix-image:
   only:
   - master
 
+nix-image-mr:
+  stage: build
+  script:
+  - nix build -Lf ./release.nix --argstr name $CI_REGISTRY_IMAGE --argstr tag nix image
+  tags:
+  - coinmetrics-nix-build-runner
+  only:
+  - merge_requests
+
 docker-image:
   stage: package
   image: docker:latest
