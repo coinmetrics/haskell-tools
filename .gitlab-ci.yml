@@ -2,15 +2,11 @@ stages:
 - build
 - package
 
-binaries:
+image:
   stage: build
   script:
-  - nix build -Lf ./release.nix image
-  - cp -L --no-preserve=all result haskell-tools-image.tar.gz
-  artifacts:
-    name: "haskell-tools-$CI_BUILD_ID"
-    paths:
-    - haskell-tools-image.tar.gz
+  - nix build -Lf ./release.nix --argstr name $CI_REGISTRY_IMAGE --argstr tag nix image
+  - skopeo copy --dest-creds gitlab-ci-token:$CI_JOB_TOKEN docker-archive:result docker://$CI_REGISTRY_IMAGE:nix
   tags:
   - coinmetrics-nix-build-runner
 
