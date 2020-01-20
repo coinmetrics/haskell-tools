@@ -33,7 +33,7 @@ Supported blockchains:
 
 ## Binaries
 
-There're no stable releases yet. All binaries are "bleeding edge" ones built on Travis CI.
+There're no stable releases yet. All binaries are "bleeding edge".
 
 One easy way to run the tools is to use docker.
 
