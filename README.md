@@ -39,12 +39,12 @@ One easy way to run the tools is to use docker.
 
 Pull the latest version:
 ```bash
-docker pull registry.gitlab.com/coinmetrics/haskell-tools
+docker pull coinmetrics/haskell-tools
 ```
 
 Run e.g. `coinmetrics-export` tool:
 ```bash
-docker run -it --rm --net host registry.gitlab.com/coinmetrics/haskell-tools coinmetrics-export <arguments>
+docker run -it --rm --net host coinmetrics/haskell-tools coinmetrics-export <arguments>
 ```
 
 ## Building from source
