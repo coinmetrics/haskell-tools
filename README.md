@@ -4,8 +4,8 @@ These tools are used by CoinMetrics.io team for exporting data from blockchains 
 
 ## Utilities
 
-* [coinmetrics-export](coinmetrics-export/README.md) - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
-* [coinmetrics-monitor](coinmetrics-monitor/README.md) - utility for monitoring blockchain nodes and providing Prometheus-compatible metrics.
+* [coinmetrics-export](docs/coinmetrics-export.md) - utility for exporting data from blockchains in formats suitable for inserting into analytics databases (SQL, Avro).
+* [coinmetrics-monitor](docs/coinmetrics-monitor.md) - utility for monitoring blockchain nodes and providing Prometheus-compatible metrics.
 
 ## Status
 

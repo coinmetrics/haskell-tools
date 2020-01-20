@@ -5,12 +5,22 @@
 `coinmetrics-export` exports blockchain data into formats suitable for analysis by other tools (such as PostgreSQL and Google BigQuery).
 The intention is to support multitude of blockchains with a single command-line tool.
 
+## Supported blockchains
+
+See [Blockchains](blockchains.md) page.
+
 ## Output
 
 Output formats include:
-* textual series of PostgreSQL-compatible INSERT or UPSERT statements
-* binary Avro format (suitable for uploading data to Google BigQuery)
-* ElasticSearch JSON format (for the ["bulk" API](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html))
+
+|                 Option                |                                                                         Description                                                                         |
+|---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--output-postgres CONNECTION_STRING` | Directly insert into PostgreSQL database                                                                                                                    |
+| `--output-postgres-file FILE`         | Output textual series of PostgreSQL-compatible SQL statements into file                                                                                     |
+| `--output-elastic ENDPOINT`           | Directly insert into ElasticSearch cluster                                                                                                                  |
+| `--output-elastic-file FILE`          | Output textual series of JSON lines suitable for ElasticSearch ["bulk" API](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html) |
+| `--output-avro-file FILE`             | Output to file in AVRO format                                                                                                                               |
+| `--output-rabbitmq CONNECTION_STRING` | Output to RabbitMQ                                                                                                                                          |
 
 The smallest exportable unit is a blockchain's block. In case of SQL every source block is exported as a database row. Block's transactions are usually stored in `ARRAY`-typed field of block's row.
 
@@ -18,7 +28,7 @@ For efficiency the tool combines multiple rows into a single SQL statement or Av
 
 ## Tutorial
 
-Let's say we have full Ethereum node (we tested Geth and Parity) and we want to export Ethereum data continuously into PostgreSQL database for further analysis.
+Let's say we have full Ethereum Parity node and we want to export Ethereum data continuously into PostgreSQL database for further analysis.
 
 First of all, we need to create necessary tables in PostgreSQL (`coinmetrics-export` doesn't do that automatically). Run the following command:
 
@@ -49,8 +59,6 @@ Tip: try small block ranges and file output (`--output-postgres-file`) first to 
 ## Options
 
 The tool tries to have sane defaults for most parameters. Note that as the tool performs single pass only, in order to correctly fetch blockchain's main chain we have to keep distance from top block (usually called "rewrite limit") in case blockchain's daemon temporarly picked up wrong chain; this distance is specified as negative value of `--end-block` parameter.
-
-For Ethereum `--trace` option allows to gather transaction traces. Currently only works with Parity synchronized with `--tracing on` option ([Parity docs](https://wiki.parity.io/JSONRPC-trace-module)).
 
 `--ignore-missing-blocks` allows to ignore errors when trying to retrieve blocks from node. Mostly useful with Ripple, as their historical server has many gaps.
 
