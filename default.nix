@@ -43,11 +43,13 @@ rec {
     });
   };
 
-  bins = with packages; [ coinmetrics-export coinmetrics-monitor ];
+  bins = with packages; {
+    inherit coinmetrics-export coinmetrics-monitor;
+  };
 
   env = pkgs.buildEnv {
     name = "haskell-tools";
-    paths = bins;
+    paths = builtins.attrValues bins;
   };
 
   image = { name, tag }: pkgs.dockerTools.buildImage {
