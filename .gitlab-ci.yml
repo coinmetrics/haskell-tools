@@ -27,8 +27,9 @@ nix-image:
   stage: build
   script:
   - nix build -Lf ./release.nix --argstr name $CI_REGISTRY_IMAGE --argstr tag nix image
-  - skopeo copy --dest-creds $DOCKERHUB_USERNAME:$DOCKERHUB_PASSWORD docker-archive:result docker://$DOCKERHUB_IMAGE
-  - skopeo copy --dest-creds gitlab-ci-token:$CI_JOB_TOKEN docker-archive:result docker://$CI_REGISTRY_IMAGE:nix
+  - nix build -Lf '<nixpkgs>' -o skopeo skopeo
+  - ./skopeo-bin/bin/skopeo copy --dest-creds $DOCKERHUB_USERNAME:$DOCKERHUB_PASSWORD docker-archive:result docker://$DOCKERHUB_IMAGE
+  - ./skopeo-bin/bin/skopeo copy --dest-creds gitlab-ci-token:$CI_JOB_TOKEN docker-archive:result docker://$CI_REGISTRY_IMAGE:nix
   tags:
   - coinmetrics-nix-build-runner
   only:
