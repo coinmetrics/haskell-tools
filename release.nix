@@ -6,4 +6,5 @@ let
   };
 in with package; {
   inherit bins image;
+  touch = bins // { image = image {}; };
 }

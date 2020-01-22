@@ -52,7 +52,7 @@ rec {
     paths = builtins.attrValues bins;
   };
 
-  image = { name, tag }: pkgs.dockerTools.buildImage {
+  image = { name ? "coinmetrics/haskell-tools", tag ? "latest" }: pkgs.dockerTools.buildImage {
     inherit name tag;
     contents = [ pkgs.cacert ];
     config = {
