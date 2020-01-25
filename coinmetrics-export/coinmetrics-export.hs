@@ -107,7 +107,13 @@ main = do
               )
             <*> O.switch
               (  O.long "ignore-missing-blocks"
-              <> O.help "Ignore errors when getting blocks from daemon"
+              <> O.help "Ignore errors when getting blocks"
+              )
+            <*> O.option O.auto
+              (  O.long "request-timeout"
+              <> O.value 60 <> O.showDefault
+              <> O.metavar "REQUEST_TIMEOUT"
+              <> O.help "Timeout for requests to full nodes"
               )
           )) (O.fullDesc <> O.progDesc "Export blockchain")
         )
@@ -135,6 +141,12 @@ main = do
               <> O.value 1 <> O.showDefault
               <> O.metavar "THREADS"
               <> O.help "Threads count"
+              )
+            <*> O.option O.auto
+              (  O.long "request-timeout"
+              <> O.value 60 <> O.showDefault
+              <> O.metavar "REQUEST_TIMEOUT"
+              <> O.help "Timeout for requests to full nodes"
               )
           )) (O.fullDesc <> O.progDesc "Export IOTA data")
         )
@@ -281,6 +293,7 @@ data OptionCommand
     , options_output :: !Output
     , options_threadsCount :: !Int
     , options_ignoreMissingBlocks :: !Bool
+    , options_requestTimeout ::  !Int
     }
   | OptionExportIotaCommand
     { options_apiUrl :: !String
@@ -288,6 +301,7 @@ data OptionCommand
     , options_readDump :: !Bool
     , options_output :: !Output
     , options_threadsCount :: !Int
+    , options_requestTimeout ::  !Int
     }
   | OptionPrintSchemaCommand
     { options_schema :: !T.Text
@@ -336,6 +350,7 @@ run Options
     , options_output = output
     , options_threadsCount = threadsCount
     , options_ignoreMissingBlocks = ignoreMissingBlocks
+    , options_requestTimeout = requestTimeout
     } -> do
     -- get blockchain info by name
     SomeBlockChainInfo BlockChainInfo
@@ -363,11 +378,13 @@ run Options
     -- init http managers
     httpSecureManager <- H.newTlsManagerWith H.tlsManagerSettings
       { H.managerConnCount = httpManagerConnCount
+      , H.managerResponseTimeout = H.responseTimeoutMicro $ requestTimeout * 1000000
       }
     httpInsecureManager <- H.newTlsManagerWith (H.mkManagerSettings def
       { NC.settingDisableCertificateValidation = True
       } Nothing)
       { H.managerConnCount = httpManagerConnCount
+      , H.managerResponseTimeout = H.responseTimeoutMicro $ requestTimeout * 1000000
       }
 
     -- init blockchains
@@ -515,9 +532,11 @@ run Options
       , output_postgresTable = maybePostgresTable
       }
     , options_threadsCount = threadsCount
+    , options_requestTimeout = requestTimeout
     } -> do
     httpManager <- H.newTlsManagerWith H.tlsManagerSettings
       { H.managerConnCount = threadsCount * 2
+      , H.managerResponseTimeout = H.responseTimeoutMicro $ requestTimeout * 1000000
       }
     httpRequest <- H.parseRequest apiUrl
     let iota = newIota httpManager httpRequest
