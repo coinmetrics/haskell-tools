@@ -13,8 +13,10 @@ module CoinMetrics.Tendermint
   , TendermintTx(..)
   ) where
 
+import Control.Monad
 import Control.Monad.Fail(MonadFail)
 import qualified Data.Aeson as J
+import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
 import Data.Int
 import Data.Maybe
@@ -115,6 +117,19 @@ instance TendermintTx tx => BlockChain (Tendermint tx) where
       ]
       "CREATE TABLE \"tendermint\" OF \"TendermintBlock\" (PRIMARY KEY (\"height\"));"
     }
+
+  getBlockChainNodeInfo Tendermint
+    { tendermint_httpManager = httpManager
+    , tendermint_httpRequest = httpRequest
+    } = do
+    response <- tryWithRepeat $ H.httpLbs httpRequest
+      { H.path = "/status"
+      } httpManager
+    result <- either fail (return . tr_result) $ J.eitherDecode' $ H.responseBody response
+    version <- either fail return $ J.parseEither ((J..: "node_info") >=> (J..: "version")) result
+    return BlockChainNodeInfo
+      { bcni_version = version
+      }
 
   getCurrentBlockHeight Tendermint
     { tendermint_httpManager = httpManager

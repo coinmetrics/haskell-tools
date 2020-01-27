@@ -268,6 +268,9 @@ instance BlockChain Binance where
       "CREATE TABLE \"binance\" OF \"BinanceBlock\" (PRIMARY KEY (\"height\"));"
     }
 
+  -- that returns Tendermint SDK's version, not Binance's
+  -- getBlockChainNodeInfo (Binance tendermint) = getBlockChainNodeInfo tendermint
+
   getCurrentBlockHeight (Binance tendermint) = getCurrentBlockHeight tendermint
 
   getBlockByHeight (Binance tendermint) = getBlockByHeight tendermint

@@ -6,14 +6,15 @@ module CoinMetrics.Cosmos
   , CosmosTransaction(..)
   ) where
 
+import Control.Monad
 import qualified Crypto.Hash as C
 import qualified Data.Aeson as J
+import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
 import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import Data.Proxy
 import Data.String
-import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
@@ -54,6 +55,19 @@ instance BlockChain Cosmos where
       ]
       "CREATE TABLE \"cosmos\" OF \"CosmosBlock\" (PRIMARY KEY (\"height\"));"
     }
+
+  getBlockChainNodeInfo (Cosmos Tendermint
+    { tendermint_httpManager = httpManager
+    , tendermint_httpRequest = httpRequest
+    }) = do
+    response <- tryWithRepeat $ H.httpLbs httpRequest
+      { H.path = "/node_info"
+      } httpManager
+    result <- either fail return $ J.eitherDecode' $ H.responseBody response
+    version <- either fail return $ J.parseEither ((J..: "application_version") >=> (J..: "version")) result
+    return BlockChainNodeInfo
+      { bcni_version = version
+      }
 
   getCurrentBlockHeight (Cosmos Tendermint
     { tendermint_httpManager = httpManager
