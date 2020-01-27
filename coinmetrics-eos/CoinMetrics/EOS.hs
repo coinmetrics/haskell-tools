@@ -12,6 +12,7 @@ import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.ByteString.Lazy as BL
 import Data.Int
+import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
 import qualified Data.Text.Encoding.Error as T
@@ -164,6 +165,18 @@ instance BlockChain Eos where
       ]
       "CREATE TABLE \"eos\" OF \"EosBlock\" (PRIMARY KEY (\"number\"));"
     }
+
+  getBlockChainNodeInfo Eos
+    { eos_httpManager = httpManager
+    , eos_httpRequest = httpRequest
+    } = do
+    response <- tryWithRepeat $ H.httpLbs httpRequest
+      { H.path = "/v1/chain/get_info"
+      } httpManager
+    version <- either fail return $ J.parseEither (J..: "server_version_string") =<< J.eitherDecode' (fixUtf8 $ H.responseBody response)
+    return BlockChainNodeInfo
+      { bcni_version = fromMaybe version $ T.stripPrefix "v" version
+      }
 
   getCurrentBlockHeight Eos
     { eos_httpManager = httpManager
