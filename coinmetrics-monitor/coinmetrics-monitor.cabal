@@ -25,6 +25,7 @@ executable coinmetrics-monitor
     , http-types
     , optparse-applicative
     , prometheus-client
+    , stm
     , text
     , time
     , wai

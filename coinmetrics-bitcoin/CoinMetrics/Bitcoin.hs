@@ -199,6 +199,13 @@ instance BlockChain Bitcoin where
       in f . mconcat . map flatten
     }
 
+  getBlockChainNodeInfo (Bitcoin jsonRpc) = do
+    networkInfoJson <- jsonRpcRequest jsonRpc "getnetworkinfo" ([] :: V.Vector J.Value)
+    codedVersion <- either fail return $ J.parseEither (J..: "version") networkInfoJson
+    return BlockChainNodeInfo
+      { bcni_version = getVersionString codedVersion
+      }
+
   getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 
   getBlockHeaderByHeight (Bitcoin jsonRpc) blockHeight = do
@@ -222,3 +229,10 @@ instance BlockChain Bitcoin where
           transactionHash@(J.String {}) -> jsonRpcRequest jsonRpc "getrawtransaction" ([transactionHash, J.Number 1] :: V.Vector J.Value)
           _ -> fail "wrong tx hash"
         fmap unwrapBitcoinBlock $ either fail return $ J.parseEither J.parseJSON $ J.Object $ HM.insert "tx" (J.Array transactions) blockJson
+
+getVersionString :: Int -> T.Text
+getVersionString n = T.pack $ showsPrec 0 v4 $ '.' : (showsPrec 0 v3 $ '.' : (showsPrec 0 v2 $ '.' : show v1)) where
+  (p1, v1) = n `quotRem` 100
+  (p2, v2) = p1 `quotRem` 100
+  (p3, v3) = p2 `quotRem` 100
+  v4 = p3 `rem` 100

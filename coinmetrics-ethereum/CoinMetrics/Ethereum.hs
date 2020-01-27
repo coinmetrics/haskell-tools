@@ -302,6 +302,22 @@ instance BlockChain Ethereum where
       in f . mconcat . map flatten
     }
 
+  getBlockChainNodeInfo Ethereum
+    { ethereum_jsonRpc = jsonRpc
+    } = do
+    let
+      parseVersionString = J.parseEither $ \obj -> do
+        version <- obj J..: "version"
+        major <- version J..: "major"
+        minor <- version J..: "minor"
+        patch <- version J..: "patch"
+        return $ T.pack $ showsPrec 0 (major :: Int) $ '.' : (showsPrec 0 (minor :: Int) $ '.' : show (patch :: Int))
+    networkInfoJson <- jsonRpcRequest jsonRpc "parity_versionInfo" ([] :: V.Vector J.Value)
+    version <- either fail return $ parseVersionString networkInfoJson
+    return BlockChainNodeInfo
+      { bcni_version = version
+      }
+
   getCurrentBlockHeight Ethereum
     { ethereum_jsonRpc = jsonRpc
     } = do

@@ -3,6 +3,7 @@
 module Main(main) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
 import Data.Default
@@ -160,7 +161,7 @@ run Options
     , optionBlockchain_apis = apisByUser
     } -> do
     -- register metrics
-    let register = P.register . P.vector (ArrayLabel $ "blockchain" : "url" : map fst labels)
+    let register = P.register . P.vector (ArrayLabel $ "blockchain" : "url" : "version" : map fst labels)
     heightMetric <- register $ P.gauge P.Info
       { P.metricName = heightMetricName
       , P.metricHelp = "Blockchain node's sync height"
@@ -211,7 +212,14 @@ run Options
           , bcp_threadsCount = 1
           }
 
+      -- labels which can change
+      volatileLabelsVar <- newTVarIO []
+
       forever $ do
+        -- get node info
+        maybeNodeInfo <- errorHandler <=< try $ evaluate =<< getBlockChainNodeInfo blockChain
+        let
+          version = fromMaybe T.empty $ bcni_version <$> maybeNodeInfo
         -- get height
         maybeBlockHeight <- errorHandler <=< try $ evaluate =<< getCurrentBlockHeight blockChain
         -- get timestamp
@@ -219,11 +227,24 @@ run Options
           Just blockHeight -> evaluate . utcTimeToPOSIXSeconds . bh_timestamp =<< getBlockHeaderByHeight blockChain blockHeight
           Nothing -> fail "height is not known"
 
+        -- construct label
+        let
+          labelFunc volatileLabels = ArrayLabel $ blockchainType : T.pack apiUrl : volatileLabels ++ map snd labels
+          curVolatileLabels = [version]
+          curLabel = labelFunc curVolatileLabels
+
+        -- process volatile labels
+        maybeOldLabel <- atomically $ do
+          oldVolatileLabels <- readTVar volatileLabelsVar
+          let
+            changed = oldVolatileLabels /= curVolatileLabels
+          when changed $ writeTVar volatileLabelsVar curVolatileLabels
+          return $ if changed then Just $ labelFunc oldVolatileLabels else Nothing
+
         -- update metrics
-        let label = ArrayLabel $ blockchainType : T.pack apiUrl : map snd labels
-        setGauge heightMetric label $ fromIntegral <$> maybeBlockHeight
-        setGauge timeMetric label $ realToFrac <$> maybeBlockTimestamp
-        setGauge upMetric label $ Just $ if isJust maybeBlockHeight && isJust maybeBlockTimestamp then 1 else 0
+        setGauge heightMetric curLabel maybeOldLabel $ fromIntegral <$> maybeBlockHeight
+        setGauge timeMetric curLabel maybeOldLabel $ realToFrac <$> maybeBlockTimestamp
+        setGauge upMetric curLabel maybeOldLabel $ Just $ if isJust maybeBlockHeight && isJust maybeBlockTimestamp then 1 else 0
 
         -- pause
         threadDelay $ interval * 1000000
@@ -237,8 +258,12 @@ run Options
 parseLabels :: [T.Text] -> [(T.Text, T.Text)]
 parseLabels = map $ \(T.breakOn "=" -> (key, value)) -> (key, fromMaybe "1" $ T.stripPrefix "=" value)
 
-setGauge :: P.Label l => P.Vector l P.Gauge -> l -> Maybe Double -> IO ()
-setGauge metric label = maybe (P.removeLabel metric label) (P.withLabel metric label . flip P.setGauge)
+setGauge :: P.Label l => P.Vector l P.Gauge -> l -> Maybe l -> Maybe Double -> IO ()
+setGauge metric label maybeOldLabel maybeValue = do
+  when (isJust maybeOldLabel || isNothing maybeValue) $ P.removeLabel metric $ fromMaybe label maybeOldLabel
+  case maybeValue of
+    Just value -> P.withLabel metric label $ flip P.setGauge value
+    Nothing -> return ()
 
 errorHandler :: Either SomeException a -> IO (Maybe a)
 errorHandler = either printError (return . Just) where

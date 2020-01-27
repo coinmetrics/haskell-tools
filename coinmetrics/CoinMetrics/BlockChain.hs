@@ -5,6 +5,7 @@ module CoinMetrics.BlockChain
   , HasBlockHeader(..)
   , BlockChainParams(..)
   , BlockChainInfo(..)
+  , BlockChainNodeInfo(..)
   , BlockHeader(..)
   , BlockHash()
   , BlockHeight()
@@ -32,6 +33,11 @@ class (HasBlockHeader (Block a), Schemable (Block a), A.ToAvro (Block a), ToPost
   type Block a :: *
 
   getBlockChainInfo :: Proxy a -> BlockChainInfo a
+
+  getBlockChainNodeInfo :: a -> IO BlockChainNodeInfo
+  getBlockChainNodeInfo _ = return BlockChainNodeInfo
+    { bcni_version = T.empty
+    }
 
   getCurrentBlockHeight :: a -> IO BlockHeight
 
@@ -69,6 +75,11 @@ data BlockChainInfo a = BlockChainInfo
   , bci_flattenSuffixes :: [T.Text]
   -- | Flatten block function.
   , bci_flattenPack :: [Block a] -> [SomeBlocks]
+  }
+
+-- | Information about blockchain node.
+data BlockChainNodeInfo = BlockChainNodeInfo
+  { bcni_version :: !T.Text
   }
 
 -- | Information about block.
