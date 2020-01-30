@@ -1,27 +1,5 @@
 stages:
 - build
-- package
-
-binaries:
-  stage: build
-  image: gcc:latest
-  script:
-  - mkdir -p bin cache
-  - export PATH=$HOME/.local/bin:$PATH
-  - apt-get install -y --no-install-recommends libpq-dev
-  - curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C /usr/bin '*/stack'
-  - stack --stack-root $(readlink -f cache/.stack) --no-terminal --install-ghc test --haddock --no-haddock-deps --copy-bins --local-bin-path bin
-  cache:
-    key: haskell-tools
-    paths:
-    - cache/
-  artifacts:
-    name: "haskell-tools-$CI_BUILD_ID"
-    paths:
-    - bin
-  tags:
-  - linux
-  - docker
 
 nix-image:
   stage: build
@@ -43,22 +21,3 @@ nix-image-mr:
   - coinmetrics-nix-build-runner
   only:
   - merge_requests
-
-docker-image:
-  stage: package
-  image: docker:latest
-  services:
-  - docker:dind
-  dependencies:
-  - binaries
-  script:
-  - cp Dockerfile bin/
-  - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA -t $CI_REGISTRY_IMAGE:latest bin
-  - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
-  - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-  - docker push $CI_REGISTRY_IMAGE:latest
-  tags:
-  - linux
-  - docker
-  only:
-  - master
