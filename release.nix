@@ -4,7 +4,12 @@ let
   package = import ./default.nix {
     pkgs = nixpkgs;
   };
+  tools = with nixpkgs; {
+    inherit skopeo;
+  };
 in with package; {
-  inherit bins image;
-  touch = bins // { image = image {}; };
+  inherit bins image tools;
+  touch = bins // {
+    image = image {};
+  } // tools;
 }
