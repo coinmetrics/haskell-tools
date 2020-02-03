@@ -206,7 +206,7 @@ instance BlockChain Bitcoin where
       { bcni_version = getVersionString codedVersion
       }
 
-  getCurrentBlockHeight (Bitcoin jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
+  getCurrentBlockHeight (Bitcoin jsonRpc) = jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 
   getBlockHeaderByHeight (Bitcoin jsonRpc) blockHeight = do
     blockHash <- jsonRpcRequest jsonRpc "getblockhash" ([J.Number $ fromIntegral blockHeight] :: V.Vector J.Value)
