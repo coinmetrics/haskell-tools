@@ -213,11 +213,19 @@ run Options
           }
 
       -- labels which can change
+      maybeNodeInfoVar <- newTVarIO Nothing
       volatileLabelsVar <- newTVarIO []
 
       forever $ do
         -- get node info
-        maybeNodeInfo <- errorHandler <=< try $ evaluate =<< getBlockChainNodeInfo blockChain
+        let
+          updateNodeInfo maybeNodeInfo = atomically $ do
+            case maybeNodeInfo of
+              Just _ -> do
+                writeTVar maybeNodeInfoVar maybeNodeInfo
+                return maybeNodeInfo
+              Nothing -> readTVar maybeNodeInfoVar
+        maybeNodeInfo <- updateNodeInfo <=< errorHandler <=< try $ evaluate =<< getBlockChainNodeInfo blockChain
         let
           version = fromMaybe T.empty $ bcni_version <$> maybeNodeInfo
         -- get height
