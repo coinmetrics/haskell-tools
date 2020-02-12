@@ -650,7 +650,7 @@ run Options
       -- put milestones into queue
       mapM_ addHash milestones
       -- get hashes to retry, and re-put them into queue
-      mapM_ addHash <=< atomically $ takeHashes 10 retryHashQueue retryHashQueueSizeVar
+      mapM_ addHash <=< atomically $ takeHashes 100 retryHashQueue retryHashQueueSizeVar
       -- output queues sizes
       hashQueueSize <- readTVarIO hashQueueSizeVar
       retryHashQueueSize <- readTVarIO retryHashQueueSizeVar
