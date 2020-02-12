@@ -545,9 +545,11 @@ run Options
 
     -- simple multithreaded pipeline
     hashQueue <- newTQueueIO
+    retryHashQueue <- newTQueueIO
     transactionQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
 
-    queueSizeVar <- newTVarIO 0 :: IO (TVar Int)
+    hashQueueSizeVar <- newTVarIO 0 :: IO (TVar Int)
+    retryHashQueueSizeVar <- newTVarIO 0 :: IO (TVar Int)
 
     -- thread working with sync db
     syncDbActionsQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
@@ -585,20 +587,20 @@ run Options
         unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
         return connection
 
-      addHash hash = checkHash hash $ atomically $ do
+      addHash hash = unless (hash == iotaEmptyHash) $ checkHash hash $ atomically $ do
         writeTQueue hashQueue hash
-        modifyTVar' queueSizeVar (+ 1)
+        modifyTVar' hashQueueSizeVar (+ 1)
 
       addTransaction transaction@IotaTransaction
         { it_hash = hash
         } = checkHash hash $ atomically $ writeTBQueue transactionQueue transaction
 
-      takeHashes limit = let
+      takeHashes limit queue sizeVar = let
         step n hashes = if n <= (0 :: Int) then return hashes else do
-          maybeHash <- tryReadTQueue hashQueue
+          maybeHash <- tryReadTQueue queue
           case maybeHash of
             Just hash -> do
-              modifyTVar' queueSizeVar (subtract 1)
+              modifyTVar' sizeVar (subtract 1)
               step (n - 1) (hash : hashes)
             Nothing -> return hashes
         in step limit []
@@ -609,7 +611,10 @@ run Options
         maybeLine <- either (\SomeException {} -> return Nothing) (return . Just) =<< try T.getLine
         case maybeLine of
           Just (T.splitOn "," -> [transactionHash@(T.length -> 81), transactionData@(T.length -> 2673)]) -> do
-            transaction <- either (fail "failed to parse transaction from dump") return $ S.runGet (deserIotaTransaction transactionHash) $ T.encodeUtf8 transactionData
+            transaction <-
+              either (fail "failed to parse transaction from dump")
+              (maybe (fail "invalid transaction from dump") return) $
+              S.runGet (deserIotaTransaction transactionHash) $ T.encodeUtf8 transactionData
             addTransaction transaction
             step $ i + 1
           Nothing -> logStrLn $ "read " <> show i <> " transactions from dump"
@@ -637,33 +642,40 @@ run Options
         in step 0
       PQ.finish connection
 
-    -- thread adding milestones to hash queue
+    -- thread adding milestones and retried hashes to hash queue
     unless readDump $ void $ forkIO $ forever $ do
       -- get milestone
       milestones <- iotaGetMilestones iota
       logStrLn $ "milestones: " <> show milestones
       -- put milestones into queue
       mapM_ addHash milestones
-      -- output queue size
-      queueSize <- readTVarIO queueSizeVar
-      logStrLn $ "queue size: " <> show queueSize
+      -- get hashes to retry, and re-put them into queue
+      mapM_ addHash <=< atomically $ takeHashes 10 retryHashQueue retryHashQueueSizeVar
+      -- output queues sizes
+      hashQueueSize <- readTVarIO hashQueueSizeVar
+      retryHashQueueSize <- readTVarIO retryHashQueueSizeVar
+      logStrLn $ "queue size: hashes " <> show hashQueueSize <> ", hashes to retry " <> show retryHashQueueSize
       -- pause
       threadDelay 10000000
 
     -- work threads getting transactions from blockchain
     unless readDump $ forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
       hashes <- atomically $ do
-        hashes <- V.fromList <$> takeHashes 10
+        hashes <- V.fromList <$> takeHashes 10 hashQueue hashQueueSizeVar
         when (V.null hashes) retry
         return hashes
-      transactions <- iotaGetTransactions iota hashes
-      forM_ transactions $ \transaction@IotaTransaction
-        { it_trunkTransaction = trunkTransaction
-        , it_branchTransaction = branchTransaction
-        } -> do
-        atomically $ writeTBQueue transactionQueue transaction
-        addHash trunkTransaction
-        addHash branchTransaction
+      maybeTransactions <- iotaGetTransactions iota hashes
+      let
+        processTransaction hash maybeTransaction = case maybeTransaction of
+          Just transaction@IotaTransaction
+            { it_trunkTransaction = trunkTransaction
+            , it_branchTransaction = branchTransaction
+            } -> do
+            atomically $ writeTBQueue transactionQueue transaction
+            addHash trunkTransaction
+            addHash branchTransaction
+          Nothing -> atomically $ writeTQueue retryHashQueue hash
+        in V.zipWithM_ processTransaction hashes maybeTransactions
 
     -- write blocks into outputs, using lazy IO
     let

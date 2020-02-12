@@ -8,6 +8,7 @@ module CoinMetrics.Iota
   , iotaGetMilestones
   , iotaGetTransactions
   , deserIotaTransaction
+  , iotaEmptyHash
   ) where
 
 import Control.Monad
@@ -46,8 +47,8 @@ data IotaTransaction = IotaTransaction
 genSchemaInstances [''IotaTransaction]
 
 -- | Deserialize transaction.
-deserIotaTransaction :: T.Text -> S.Get IotaTransaction
-deserIotaTransaction hash = IotaTransaction hash
+deserIotaTransaction :: T.Text -> S.Get (Maybe IotaTransaction)
+deserIotaTransaction hash = fmap filterOutMissingTransaction $ IotaTransaction hash
   <$> (T.decodeUtf8 <$> S.getByteString 2187)
   <*> (T.decodeUtf8 <$> S.getByteString 81)
   <*> deserInt 11
@@ -153,9 +154,20 @@ iotaGetMilestones iota = iotaRequest iota parseMilestones $ J.Object
     solidMilestone <- o J..: "latestSolidSubtangleMilestone"
     return $ V.fromList [milestone, solidMilestone]
 
-iotaGetTransactions :: Iota -> V.Vector T.Text -> IO (V.Vector IotaTransaction)
+iotaGetTransactions :: Iota -> V.Vector T.Text -> IO (V.Vector (Maybe IotaTransaction))
 iotaGetTransactions iota hashes = f <$> iotaRequest iota (J..: "trytes") (J.Object
   [ ("command", "getTrytes")
   , ("hashes", J.toJSON hashes)
   ])
   where f = V.zipWith (\hash trytes -> fromRight (error "wrong transaction") $ S.runGet (deserIotaTransaction hash) $ T.encodeUtf8 trytes) hashes
+
+filterOutMissingTransaction :: IotaTransaction -> Maybe IotaTransaction
+filterOutMissingTransaction tx@IotaTransaction
+  { it_trunkTransaction = trunkTransaction
+  , it_branchTransaction = branchTransaction
+  } = if trunkTransaction == iotaEmptyHash && branchTransaction == iotaEmptyHash
+  then Nothing
+  else Just tx
+
+iotaEmptyHash :: T.Text
+iotaEmptyHash = "999999999999999999999999999999999999999999999999999999999999999999999999999999999"
