@@ -674,7 +674,9 @@ run Options
             atomically $ writeTBQueue transactionQueue transaction
             addHash trunkTransaction
             addHash branchTransaction
-          Nothing -> atomically $ writeTQueue retryHashQueue hash
+          Nothing -> atomically $ do
+            writeTQueue retryHashQueue hash
+            modifyTVar' retryHashQueueSizeVar (+ 1)
         in V.zipWithM_ processTransaction hashes maybeTransactions
 
     -- write blocks into outputs, using lazy IO
