@@ -587,7 +587,9 @@ run Options
         unless (connectionStatus == PQ.ConnectionOk) $ fail $ "postgres connection failed: " <> show connectionStatus
         return connection
 
-      addHash hash = unless (hash == iotaEmptyHash) $ checkHash hash $ atomically $ do
+      addHash hash = unless (hash == iotaEmptyHash) $ checkHash hash $ addHashNoCheck hash
+
+      addHashNoCheck hash = atomically $ do
         writeTQueue hashQueue hash
         modifyTVar' hashQueueSizeVar (+ 1)
 
@@ -650,7 +652,7 @@ run Options
       -- put milestones into queue
       mapM_ addHash milestones
       -- get hashes to retry, and re-put them into queue
-      mapM_ addHash <=< atomically $ takeHashes 100 retryHashQueue retryHashQueueSizeVar
+      mapM_ addHashNoCheck <=< atomically $ takeHashes 100 retryHashQueue retryHashQueueSizeVar
       -- output queues sizes
       hashQueueSize <- readTVarIO hashQueueSizeVar
       retryHashQueueSize <- readTVarIO retryHashQueueSizeVar
