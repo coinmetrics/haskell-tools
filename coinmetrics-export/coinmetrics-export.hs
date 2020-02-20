@@ -613,7 +613,7 @@ run Options
       step i = do
         maybeLine <- either (\SomeException {} -> return Nothing) (return . Just) =<< try T.getLine
         case maybeLine of
-          Just (T.splitOn "," -> [transactionHash@(T.length -> 81), transactionData@(T.length -> 2673)]) -> do
+          Just (T.splitOn "," -> transactionHash@(T.length -> 81) : transactionData@(T.length -> 2673) : _) -> do
             transaction <-
               either (fail "failed to parse transaction from dump") return $
               S.runGet (deserIotaTransaction transactionHash) $ T.encodeUtf8 transactionData
