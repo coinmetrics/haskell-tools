@@ -14,6 +14,8 @@ module CoinMetrics.Iota
 import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
+import qualified Data.ByteString as B
+import Data.Char
 import Data.Either
 import Data.Int
 import qualified Data.Serialize as S
@@ -47,8 +49,8 @@ data IotaTransaction = IotaTransaction
 genSchemaInstances [''IotaTransaction]
 
 -- | Deserialize transaction.
-deserIotaTransaction :: T.Text -> S.Get (Maybe IotaTransaction)
-deserIotaTransaction hash = fmap filterOutMissingTransaction $ IotaTransaction hash
+deserIotaTransaction :: T.Text -> S.Get IotaTransaction
+deserIotaTransaction hash = IotaTransaction hash
   <$> (T.decodeUtf8 <$> S.getByteString 2187)
   <*> (T.decodeUtf8 <$> S.getByteString 81)
   <*> deserInt 11
@@ -159,15 +161,10 @@ iotaGetTransactions iota hashes = f <$> iotaRequest iota (J..: "trytes") (J.Obje
   [ ("command", "getTrytes")
   , ("hashes", J.toJSON hashes)
   ])
-  where f = V.zipWith (\hash trytes -> fromRight (error "wrong transaction") $ S.runGet (deserIotaTransaction hash) $ T.encodeUtf8 trytes) hashes
+  where f = V.zipWith (\hash trytes -> (fromRight (error "wrong transaction") . S.runGet (deserIotaTransaction hash)) <$> filterOutMissingTransaction (T.encodeUtf8 trytes)) hashes
 
-filterOutMissingTransaction :: IotaTransaction -> Maybe IotaTransaction
-filterOutMissingTransaction tx@IotaTransaction
-  { it_trunkTransaction = trunkTransaction
-  , it_branchTransaction = branchTransaction
-  } = if trunkTransaction == iotaEmptyHash && branchTransaction == iotaEmptyHash
-  then Nothing
-  else Just tx
+filterOutMissingTransaction :: B.ByteString -> Maybe B.ByteString
+filterOutMissingTransaction trytes = if B.any (/= fromIntegral (ord '9')) trytes then Just trytes else Nothing
 
 iotaEmptyHash :: T.Text
 iotaEmptyHash = "999999999999999999999999999999999999999999999999999999999999999999999999999999999"

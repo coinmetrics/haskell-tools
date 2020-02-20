@@ -547,6 +547,7 @@ run Options
     hashQueue <- newTQueueIO
     retryHashQueue <- newTQueueIO
     transactionQueue <- newTBQueueIO $ fromIntegral $ threadsCount * 2
+    transactionQueueEndedVar <- newTVarIO False -- set to True to signify there will be no more transactions
 
     hashQueueSizeVar <- newTVarIO 0 :: IO (TVar Int)
     retryHashQueueSizeVar <- newTVarIO 0 :: IO (TVar Int)
@@ -614,12 +615,13 @@ run Options
         case maybeLine of
           Just (T.splitOn "," -> [transactionHash@(T.length -> 81), transactionData@(T.length -> 2673)]) -> do
             transaction <-
-              either (fail "failed to parse transaction from dump")
-              (maybe (fail "invalid transaction from dump") return) $
+              either (fail "failed to parse transaction from dump") return $
               S.runGet (deserIotaTransaction transactionHash) $ T.encodeUtf8 transactionData
             addTransaction transaction
             step $ i + 1
-          Nothing -> logStrLn $ "read " <> show i <> " transactions from dump"
+          Nothing -> do
+            logStrLn $ "read " <> show i <> " transactions from dump"
+            atomically $ writeTBQueue syncDbActionsQueue $ const $ atomically $ writeTVar transactionQueueEndedVar True
           _ -> fail "wrong line in transaction dump"
       in step (0 :: Int)
 
@@ -684,9 +686,19 @@ run Options
     -- write blocks into outputs, using lazy IO
     let
       step i = unsafeInterleaveIO $ do
-        transaction <- atomically $ readTBQueue transactionQueue
+        maybeTransaction <- atomically $ do
+          maybeTransaction <- tryReadTBQueue transactionQueue
+          case maybeTransaction of
+            Just _ -> return maybeTransaction
+            Nothing -> do
+              transactionQueueEnded <- readTVar transactionQueueEndedVar
+              if transactionQueueEnded
+                then return Nothing
+                else retry
         when (i `rem` 100 == 0) $ logStrLn $ "synced transactions: " <> show i
-        (transaction :) <$> step (i + 1)
+        case maybeTransaction of
+          Just transaction -> (transaction :) <$> step (i + 1)
+          Nothing -> return []
       in writeToOutputStorages outputStorages (pure . SomeBlocks) 0 =<< step (0 :: Int)
 
   OptionPrintSchemaCommand
