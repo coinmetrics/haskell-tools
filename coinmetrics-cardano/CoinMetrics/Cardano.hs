@@ -54,7 +54,7 @@ data CardanoBlock = CardanoBlock
   , cb_timeIssued :: {-# UNPACK #-} !Int64
   , cb_totalSent :: !Integer
   , cb_size :: {-# UNPACK #-} !Int64
-  , cb_blockLead :: {-# UNPACK #-} !HexString
+  , cb_blockLead :: !(Maybe HexString)
   , cb_fees :: !Integer
   , cb_transactions :: !(V.Vector CardanoTransaction)
   }
@@ -84,7 +84,7 @@ instance J.FromJSON CardanoBlockWrapper where
     <*> (fields J..: "cbeTimeIssued")
     <*> (decodeValue =<< fields J..: "cbeTotalSent")
     <*> (fields J..: "cbeSize")
-    <*> (fields J..: "cbeBlockLead")
+    <*> (fields J..:? "cbeBlockLead")
     <*> (decodeValue =<< fields J..: "cbeFees")
     <*> (V.map unwrapCardanoTransaction <$> fields J..: "transactions")
 
