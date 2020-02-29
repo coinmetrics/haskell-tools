@@ -43,7 +43,7 @@ rec {
     });
   };
 
-  bins = with packages; {
+  bins = with (builtins.mapAttrs (name: pkg: pkgs.haskell.lib.justStaticExecutables pkg) packages); {
     inherit coinmetrics-export coinmetrics-monitor;
   };
 
