@@ -132,7 +132,7 @@ genFlattenedTypes rootKeyName rootKeyExp types@(map snd -> typesNames) = do
         ]
         <>
         [ instanceD (pure []) [t| Flattenable $(conT typeName) |]
-          [ tySynInstD ''Flattened (tySynEqn [conT typeName] flattenedType)
+          [ tySynInstD (tySynEqn Nothing [t| Flattened $(conT typeName) |] flattenedType)
           , funD 'flatten [clause [] (normalB lambda) []]
           ]
         | isRoot

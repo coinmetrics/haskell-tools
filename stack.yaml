@@ -1,4 +1,4 @@
-resolver: lts-14.5
+resolver: lts-15.2
 
 packages:
 - coinmetrics
@@ -25,6 +25,7 @@ packages:
 - coinmetrics-waves
 
 extra-deps:
+- protobuf-0.2.1.3
 - diskhash-0.0.4.0
 - git: https://github.com/quyse/hanalytics.git
   commit: dbe294c4c1524268683764c3cd3ec947105359c9
