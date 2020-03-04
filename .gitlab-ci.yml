@@ -14,7 +14,7 @@ nix-image:
 nix-image-mr:
   stage: build
   script:
-  - nix build -Lf ./release.nix nix image
+  - nix build -Lf ./release.nix image
   tags:
   - coinmetrics-nix-build-runner
   only:

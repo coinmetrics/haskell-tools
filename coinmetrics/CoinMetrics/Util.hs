@@ -18,7 +18,6 @@ import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
 import qualified Data.Avro as A
-import qualified Data.Avro.Schema as A
 import qualified Data.ByteArray.Encoding as BA
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as BS
@@ -47,7 +46,7 @@ newtype HexString = HexString
 instance SchemableField HexString where
   schemaFieldTypeOf _ = SchemaFieldType_bytes
 instance A.HasAvroSchema HexString where
-  schema = Tag.Tagged $ Tag.unTagged (A.schema :: Tag.Tagged B.ByteString A.Type)
+  schema = Tag.Tagged $ Tag.unTagged (A.schema :: Tag.Tagged B.ByteString A.Schema)
 instance A.ToAvro HexString where
   toAvro = A.toAvro . BS.fromShort . unHexString
 instance ToPostgresText HexString where
