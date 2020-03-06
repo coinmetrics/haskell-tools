@@ -6,7 +6,7 @@ let
   };
 
   image = package.image {};
-  imagePlus = package.image { additionalContents = [ nixpkgs.google-cloud-sdk ]; };
+  imagePlus = package.image { additionalContents = with nixpkgs; [ bash google-cloud-sdk ]; };
 
   # script to push images to registry
   # depends on runtime vars DOCKERHUB_USERNAME, DOCKERHUB_PASSWORD, and DOCKERHUB_IMAGE
