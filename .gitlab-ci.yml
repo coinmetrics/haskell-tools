@@ -4,8 +4,7 @@ stages:
 nix-image:
   stage: build
   script:
-  - nix build -Lf ./release.nix image
-  - $(nix-build --no-out-link -QA tools.skopeo ./release.nix)/bin/skopeo --insecure-policy copy --dest-creds $DOCKERHUB_USERNAME:$DOCKERHUB_PASSWORD docker-archive:result docker://$DOCKERHUB_IMAGE
+  - $(nix-build --no-out-link -QA pushImagesScript ./release.nix)
   tags:
   - coinmetrics-nix-build-runner
   only:
@@ -14,7 +13,7 @@ nix-image:
 nix-image-mr:
   stage: build
   script:
-  - nix build -Lf ./release.nix image
+  - nix-build --no-out-link -QA pushImagesScript ./release.nix
   tags:
   - coinmetrics-nix-build-runner
   only:

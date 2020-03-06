@@ -52,9 +52,9 @@ rec {
     paths = builtins.attrValues bins;
   };
 
-  image = { name ? "coinmetrics/haskell-tools", tag ? "latest" }: pkgs.dockerTools.buildImage {
+  image = { name ? "coinmetrics/haskell-tools", tag ? "latest", additionalContents ? [] }: pkgs.dockerTools.buildImage {
     inherit name tag;
-    contents = [ pkgs.cacert ];
+    contents = [ pkgs.cacert ] ++ additionalContents;
     config = {
       Env = [ "PATH=${env}/bin" ];
       User = "1000:1000";
