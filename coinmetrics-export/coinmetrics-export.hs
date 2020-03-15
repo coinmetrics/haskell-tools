@@ -135,6 +135,10 @@ main = do
               (  O.long "read-dump"
               <> O.help "Read transaction dump from stdin"
               )
+            <*> O.switch
+              (  O.long "fill-holes"
+              <> O.help "Detect missing transactions from database"
+              )
             <*> optionOutput
             <*> O.option O.auto
               (  O.long "threads"
@@ -299,6 +303,7 @@ data OptionCommand
     { options_apiUrl :: !String
     , options_syncDbFile :: !String
     , options_readDump :: !Bool
+    , options_fillHoles :: !Bool
     , options_output :: !Output
     , options_threadsCount :: !Int
     , options_requestTimeout ::  !Int
@@ -527,6 +532,7 @@ run Options
     { options_apiUrl = apiUrl
     , options_syncDbFile = syncDbFile
     , options_readDump = readDump
+    , options_fillHoles = fillHoles
     , options_output = output@Output
       { output_postgres = maybeOutputPostgres
       , output_postgresTable = maybePostgresTable
@@ -628,7 +634,7 @@ run Options
       in step (0 :: Int)
 
     -- initial hashes (ones pointed by other hashes, but not in the database)
-    unless readDump $ case maybeConnectDb of
+    when fillHoles $ case maybeConnectDb of
       Just connectDb -> do
         connection <- connectDb
         let tableName = maybe "iota" T.pack maybePostgresTable

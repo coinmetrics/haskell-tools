@@ -75,7 +75,7 @@ coinmetrics-export export-iota \
 	--output-postgres "host=127.0.0.1 user=postgres"
 ```
 
-The tool can be safely interrupted as it resumes synchronization upon restart. It maintains a small single-file internal helper database (denoted by `--sync-db`) which is not needed to be persisted as it is recreated from scratch on every restart. On start the tool performs special one-time discovery query against PostgreSQL in order to get a list of non-synchronized transactions (i.e. ones referenced by other transactions but not yet existing in database), so it is able to "fill holes" left after interruption.
+The tool can be safely interrupted as it resumes synchronization upon restart. It maintains a small single-file internal helper database (denoted by `--sync-db`) which is not needed to be persisted as it is recreated from scratch on every restart. On start the tool can perform (if given `--fill-holes` flag) special one-time discovery query against PostgreSQL in order to get a list of non-synchronized transactions (i.e. ones referenced by other transactions but not yet existing in database), so it is able to "fill holes" left after interruption.
 
 Normally IOTA node is able to only return transactions happened after latest snapshot. If you have a textual dump file with previous transactions, you can import it using `--read-dump` switch:
 
