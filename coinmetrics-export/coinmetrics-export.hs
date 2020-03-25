@@ -110,6 +110,12 @@ main = do
               <> O.help "Ignore errors when getting blocks"
               )
             <*> O.option O.auto
+              (  O.long "poll-delay"
+              <> O.value 10 <> O.showDefault
+              <> O.metavar "POLL_DELAY"
+              <> O.help "Delay between full nodes poll attempts"
+              )
+            <*> O.option O.auto
               (  O.long "request-timeout"
               <> O.value 60 <> O.showDefault
               <> O.metavar "REQUEST_TIMEOUT"
@@ -145,6 +151,12 @@ main = do
               <> O.value 1 <> O.showDefault
               <> O.metavar "THREADS"
               <> O.help "Threads count"
+              )
+            <*> O.option O.auto
+              (  O.long "poll-delay"
+              <> O.value 10 <> O.showDefault
+              <> O.metavar "POLL_DELAY"
+              <> O.help "Delay between full nodes poll attempts"
               )
             <*> O.option O.auto
               (  O.long "request-timeout"
@@ -297,7 +309,8 @@ data OptionCommand
     , options_output :: !Output
     , options_threadsCount :: !Int
     , options_ignoreMissingBlocks :: !Bool
-    , options_requestTimeout ::  !Int
+    , options_pollDelay :: !Int
+    , options_requestTimeout :: !Int
     }
   | OptionExportIotaCommand
     { options_apiUrl :: !String
@@ -306,7 +319,8 @@ data OptionCommand
     , options_fillHoles :: !Bool
     , options_output :: !Output
     , options_threadsCount :: !Int
-    , options_requestTimeout ::  !Int
+    , options_pollDelay :: !Int
+    , options_requestTimeout :: !Int
     }
   | OptionPrintSchemaCommand
     { options_schema :: !T.Text
@@ -355,6 +369,7 @@ run Options
     , options_output = output
     , options_threadsCount = threadsCount
     , options_ignoreMissingBlocks = ignoreMissingBlocks
+    , options_pollDelay = pollDelay
     , options_requestTimeout = requestTimeout
     } -> do
     -- get blockchain info by name
@@ -463,7 +478,7 @@ run Options
                 in f
             Left (SomeException err) -> logPrint err
           -- pause
-          threadDelay 10000000
+          threadDelay $ pollDelay * 1000000
           -- repeat
           step
         in step
@@ -538,6 +553,7 @@ run Options
       , output_postgresTable = maybePostgresTable
       }
     , options_threadsCount = threadsCount
+    , options_pollDelay = pollDelay
     , options_requestTimeout = requestTimeout
     } -> do
     httpManager <- H.newTlsManagerWith H.tlsManagerSettings
@@ -670,7 +686,7 @@ run Options
       retryHashQueueSize <- readTVarIO retryHashQueueSizeVar
       logStrLn $ "queue size: hashes " <> show hashQueueSize <> ", hashes to retry " <> show retryHashQueueSize
       -- pause
-      threadDelay 10000000
+      threadDelay $ pollDelay * 1000000
 
     -- work threads getting transactions from blockchain
     unless readDump $ forM_ [1..threadsCount] $ const $ forkIO $ forever $ do
