@@ -15,7 +15,7 @@ import qualified Data.Text.Lazy.Builder as TL
 import CoinMetrics.Export.Storage
 import CoinMetrics.Export.Storage.PostgresFile
 
-newtype PostgresExportStorage = PostgresExportStorage ExportStorageOptions
+newtype PostgresExportStorage a = PostgresExportStorage (ExportStorageOptions a)
 
 instance ExportStorage PostgresExportStorage where
   initExportStorage = return . PostgresExportStorage

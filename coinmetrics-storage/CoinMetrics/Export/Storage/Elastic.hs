@@ -15,7 +15,7 @@ import qualified Network.HTTP.Client as H
 
 import CoinMetrics.Export.Storage
 
-newtype ElasticExportStorage = ElasticExportStorage ExportStorageOptions
+newtype ElasticExportStorage a = ElasticExportStorage (ExportStorageOptions a)
 
 instance ExportStorage ElasticExportStorage where
   initExportStorage = return . ElasticExportStorage
@@ -73,7 +73,7 @@ instance ExportStorage ElasticExportStorage where
         else fail "too many retries when exporting to ElasticSearch"
     mapM_ (exportPack 0) packs
 
-newtype ElasticFileExportStorage = ElasticFileExportStorage ExportStorageOptions
+newtype ElasticFileExportStorage a = ElasticFileExportStorage (ExportStorageOptions a)
 
 instance ExportStorage ElasticFileExportStorage where
   initExportStorage = return . ElasticFileExportStorage
@@ -82,18 +82,17 @@ instance ExportStorage ElasticFileExportStorage where
     { esp_destination = destination
     } = BL.writeFile destination . mconcat . map (elasticExportStoragePack options)
 
-elasticExportStoragePack :: J.ToJSON a => ExportStorageOptions -> [a] -> BL.ByteString
+elasticExportStoragePack :: J.ToJSON a => ExportStorageOptions a -> [a] -> BL.ByteString
 elasticExportStoragePack ExportStorageOptions
   { eso_tables = (head -> table)
-  , eso_primaryField = primaryField
+  , eso_getPrimaryField = getPrimaryField
   , eso_upsert = upsert
   } = mconcat . map elasticLine
   where
     elasticLine block = let
-      J.Object (J.parseEither (J..: primaryField) -> Right key) = J.toJSON block
       in J.encode (J.Object
         [ (if upsert then "index" else "create", J.Object
           [ ("_index", J.toJSON table)
-          , ("_id", key)
+          , ("_id", J.toJSON $ getPrimaryField block)
           ])
         ]) <> "\n" <> J.encode block <> "\n"

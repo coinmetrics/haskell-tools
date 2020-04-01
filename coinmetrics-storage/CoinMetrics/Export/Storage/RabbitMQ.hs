@@ -14,7 +14,7 @@ import Data.Maybe
 import CoinMetrics.Export.Storage
 import CoinMetrics.BlockChain
 
-newtype RabbitMQExportStorage = RabbitMQExportStorage ExportStorageOptions
+newtype RabbitMQExportStorage a = RabbitMQExportStorage (ExportStorageOptions a)
 
 
 instance ExportStorage RabbitMQExportStorage where

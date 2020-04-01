@@ -18,24 +18,25 @@ import Hanalytics.Schema.Postgres
 
 class ExportStorage s where
 
-  initExportStorage :: ExportStorageOptions -> IO s
+  initExportStorage :: ExportStorageOptions a -> IO (s a)
 
-  getExportStorageMaxBlock :: s -> ExportStorageParams -> Maybe (IO (Maybe BlockHeight))
+  getExportStorageMaxBlock :: s a -> ExportStorageParams -> Maybe (IO (Maybe BlockHeight))
   getExportStorageMaxBlock _ _ = Nothing
 
-  writeExportStorage :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => s -> ExportStorageParams -> [[a]] -> IO ()
+  writeExportStorage :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => s a -> ExportStorageParams -> [[a]] -> IO ()
   writeExportStorage s params = writeExportStorageSomeBlocks s params . map (\pack -> [SomeBlocks pack])
 
-  writeExportStorageSomeBlocks :: s -> ExportStorageParams -> [[SomeBlocks]] -> IO ()
+  writeExportStorageSomeBlocks :: s a -> ExportStorageParams -> [[SomeBlocks]] -> IO ()
   writeExportStorageSomeBlocks _ _ _ = fail "this storage does not support flattened output"
 
-data SomeExportStorage where
-  SomeExportStorage :: ExportStorage a => a -> SomeExportStorage
+data SomeExportStorage a where
+  SomeExportStorage :: ExportStorage s => s a -> SomeExportStorage a
 
-data ExportStorageOptions = ExportStorageOptions
+data ExportStorageOptions a = ExportStorageOptions
   { eso_httpManager :: !H.Manager
   , eso_tables :: [T.Text]
   , eso_primaryField :: !T.Text
+  , eso_getPrimaryField :: !(a -> T.Text)
   , eso_upsert :: !Bool
   }
 

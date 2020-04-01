@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, OverloadedStrings, ViewPatterns, TypeApplications #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings, TypeApplications, ViewPatterns #-}
 
 module Main(main) where
 
@@ -429,7 +429,7 @@ run Options
 
     -- init output storages and begin block
     (outputStorages, beginBlock) <- do
-      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName flattenSuffixes
+      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName (T.pack . show . bh_height . getBlockHeader) flattenSuffixes
       let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
       if continue
         then initContinuingOutputStorages outputStorages specifiedBeginBlock
@@ -563,7 +563,7 @@ run Options
     httpRequest <- H.parseRequest apiUrl
     let iota = newIota httpManager httpRequest
 
-    outputStorages <- initOutputStorages httpManager output "iota" "hash" []
+    outputStorages <- initOutputStorages httpManager output "iota" "hash" it_hash []
 
     -- simple multithreaded pipeline
     hashQueue <- newTQueueIO
@@ -745,22 +745,22 @@ run Options
       _ -> fail "wrong pair schema+storage"
 
 -- | Helper struct for output storage.
-data OutputStorage = OutputStorage
-  { os_storage :: !SomeExportStorage
+data OutputStorage a = OutputStorage
+  { os_storage :: !(SomeExportStorage a)
   , os_skipBlocks :: {-# UNPACK #-} !Int
   , os_destFunc :: !(BlockHeight -> String)
   , os_fileExec :: !(String -> IO ())
   }
 
 -- | Helper struct for output storages.
-data OutputStorages = OutputStorages
-  { oss_storages :: ![OutputStorage]
+data OutputStorages a = OutputStorages
+  { oss_storages :: ![OutputStorage a]
   , oss_packSize :: {-# UNPACK #-} !Int
   , oss_fileSize :: {-# UNPACK #-} !Int
   , oss_flat :: !Bool
   }
 
-initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text -> [T.Text] -> IO OutputStorages
+initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text -> (a -> T.Text) -> [T.Text] -> IO (OutputStorages a)
 initOutputStorages httpManager Output
   { output_avroFile = maybeOutputAvroFile
   , output_postgresFile = maybeOutputPostgresFile
@@ -777,7 +777,7 @@ initOutputStorages httpManager Output
   , output_fileExec = maybeFileExec
   , output_upsert = upsert
   , output_flat = flat
-  } defaultTableName primaryField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
+  } defaultTableName primaryField getPrimaryField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
   [ case maybeOutputAvroFile of
     Just outputAvroFile -> initStorage (Proxy @AvroFileExportStorage) mempty (mkFileDestFunc outputAvroFile)
     Nothing -> return []
@@ -798,9 +798,9 @@ initOutputStorages httpManager Output
     Nothing -> return []
   ]
   where
-    initStorage :: ExportStorage s => Proxy s -> T.Text -> (BlockHeight -> String) -> IO [(SomeExportStorage, BlockHeight -> String)]
+    -- initStorage :: ExportStorage s => Proxy s -> T.Text -> (BlockHeight -> String) -> IO [(SomeExportStorage a, BlockHeight -> String)]
     initStorage p table destFunc = let
-      f :: ExportStorage s => Proxy s -> ExportStorageOptions -> IO s
+      f :: ExportStorage s => Proxy s -> ExportStorageOptions a -> IO (s a)
       f Proxy = initExportStorage
       in do
         storage <- f p ExportStorageOptions
@@ -809,6 +809,7 @@ initOutputStorages httpManager Output
             then map ((table <> "_") <>) flattenSuffixes
             else [table]
           , eso_primaryField = primaryField
+          , eso_getPrimaryField = getPrimaryField
           , eso_upsert = upsert
           }
         return [(SomeExportStorage storage, destFunc)]
@@ -841,7 +842,7 @@ initOutputStorages httpManager Output
 
 -- | Get minimum begin block among storages, and initialize them with skip blocks values.
 -- All storages must support getting max block.
-initContinuingOutputStorages :: OutputStorages -> BlockHeight -> IO (OutputStorages, BlockHeight)
+initContinuingOutputStorages :: OutputStorages a -> BlockHeight -> IO (OutputStorages a, BlockHeight)
 initContinuingOutputStorages outputStorages@OutputStorages
   { oss_storages = storages
   } defaultBeginBlock = do
@@ -865,7 +866,7 @@ initContinuingOutputStorages outputStorages@OutputStorages
     , beginBlock
     )
 
-writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => OutputStorages -> ([a] -> [SomeBlocks]) -> BlockHeight -> [a] -> IO ()
+writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => OutputStorages a -> ([a] -> [SomeBlocks]) -> BlockHeight -> [a] -> IO ()
 writeToOutputStorages OutputStorages
   { oss_storages = storages
   , oss_packSize = packSize

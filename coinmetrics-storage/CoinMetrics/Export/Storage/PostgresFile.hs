@@ -13,7 +13,7 @@ import CoinMetrics.BlockChain
 import CoinMetrics.Export.Storage
 import Hanalytics.Schema.Postgres
 
-newtype PostgresFileExportStorage = PostgresFileExportStorage ExportStorageOptions
+newtype PostgresFileExportStorage a = PostgresFileExportStorage (ExportStorageOptions a)
 
 instance ExportStorage PostgresFileExportStorage where
   initExportStorage = return . PostgresFileExportStorage
@@ -22,7 +22,7 @@ instance ExportStorage PostgresFileExportStorage where
     { esp_destination = destination
     } = BL.writeFile destination . TL.encodeUtf8 . TL.toLazyText . mconcat . map (postgresExportStorageSql options)
 
-postgresExportStorageSql :: ExportStorageOptions -> [SomeBlocks] -> TL.Builder
+postgresExportStorageSql :: ExportStorageOptions a -> [SomeBlocks] -> TL.Builder
 postgresExportStorageSql ExportStorageOptions
   { eso_tables = tables
   , eso_primaryField = primaryField

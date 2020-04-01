@@ -8,7 +8,7 @@ import qualified Data.ByteString.Lazy as BL
 
 import CoinMetrics.Export.Storage
 
-newtype AvroFileExportStorage = AvroFileExportStorage ExportStorageOptions
+newtype AvroFileExportStorage a = AvroFileExportStorage (ExportStorageOptions a)
 
 instance ExportStorage AvroFileExportStorage where
   initExportStorage = return . AvroFileExportStorage
