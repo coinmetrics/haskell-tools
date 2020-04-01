@@ -73,7 +73,7 @@ instance ExportStorage ElasticExportStorage where
               else [block]
           exportPack (i + 1) packToRetry
         else fail "too many retries when exporting to ElasticSearch"
-    mapM_ (wrapOperation . exportPack 0 . evaluatePack) packs
+    mapM_ (wrapOperation . exportPack 0 <=< evaluatePack) packs
 
 newtype ElasticFileExportStorage a = ElasticFileExportStorage (ExportStorageOptions a)
 

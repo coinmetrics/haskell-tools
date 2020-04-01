@@ -8,6 +8,7 @@ module CoinMetrics.Export.Storage
   , evaluatePack
   ) where
 
+import Control.Exception
 import qualified Data.Aeson as J
 import qualified Data.Avro as A
 import qualified Data.Text as T
@@ -48,7 +49,7 @@ data ExportStorageParams = ExportStorageParams
   }
 
 -- | Return pack only when it's complete. Does not evaluate items.
-evaluatePack :: [a] -> [a]
-evaluatePack pack = f pack where
+evaluatePack :: [a] -> IO [a]
+evaluatePack pack = evaluate $ f pack where
   f (_:xs) = f xs
   f [] = pack
