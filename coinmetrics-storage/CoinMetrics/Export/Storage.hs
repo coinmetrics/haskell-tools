@@ -5,6 +5,7 @@ module CoinMetrics.Export.Storage
   , SomeExportStorage(..)
   , ExportStorageOptions(..)
   , ExportStorageParams(..)
+  , evaluatePack
   ) where
 
 import qualified Data.Aeson as J
@@ -45,3 +46,9 @@ data ExportStorageParams = ExportStorageParams
   -- | Function to wrap operations, for time measuring/etc
   , esp_wrapOperation :: !(forall a. IO a -> IO a)
   }
+
+-- | Return pack only when it's complete. Does not evaluate items.
+evaluatePack :: [a] -> [a]
+evaluatePack pack = f pack where
+  f (_:xs) = f xs
+  f [] = pack

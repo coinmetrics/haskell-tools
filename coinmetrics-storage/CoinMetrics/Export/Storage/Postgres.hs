@@ -39,10 +39,11 @@ instance ExportStorage PostgresExportStorage where
   writeExportStorageSomeBlocks (PostgresExportStorage options) ExportStorageParams
     { esp_destination = destination
     , esp_wrapOperation = wrapOperation
-    } = mapM_ $ \pack -> wrapOperation $ withConnection destination $ \connection -> do
-    let query = TL.toStrict $ TL.toLazyText $ postgresExportStorageSql options pack
-    resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus =<< PQ.exec connection (T.encodeUtf8 query)
-    unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus
+    } = mapM_ (wrapOperation . exportPack . evaluatePack) where
+    exportPack pack = withConnection destination $ \connection -> do
+      let query = TL.toStrict $ TL.toLazyText $ postgresExportStorageSql options pack
+      resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus =<< PQ.exec connection (T.encodeUtf8 query)
+      unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus
 
 withConnection :: String -> (PQ.Connection -> IO a) -> IO a
 withConnection destination = bracket (connectDestination destination) PQ.finish
