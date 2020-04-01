@@ -25,7 +25,8 @@ instance ExportStorage PostgresExportStorage where
     , eso_primaryField = primaryField
     }) ExportStorageParams
     { esp_destination = destination
-    } = Just $ withConnection destination $ \connection -> do
+    , esp_wrapOperation = wrapOperation
+    } = Just $ wrapOperation $ withConnection destination $ \connection -> do
     let query = "SELECT MAX(\"" <> primaryField <> "\") FROM \"" <> table <> "\""
     result <- maybe (fail "cannot get latest block from postgres") return =<< PQ.execParams connection (T.encodeUtf8 query) [] PQ.Text
     resultStatus <- PQ.resultStatus result
@@ -37,7 +38,8 @@ instance ExportStorage PostgresExportStorage where
 
   writeExportStorageSomeBlocks (PostgresExportStorage options) ExportStorageParams
     { esp_destination = destination
-    } = mapM_ $ \pack -> withConnection destination $ \connection -> do
+    , esp_wrapOperation = wrapOperation
+    } = mapM_ $ \pack -> wrapOperation $ withConnection destination $ \connection -> do
     let query = TL.toStrict $ TL.toLazyText $ postgresExportStorageSql options pack
     resultStatus <- maybe (return PQ.FatalError) PQ.resultStatus =<< PQ.exec connection (T.encodeUtf8 query)
     unless (resultStatus == PQ.CommandOk) $ fail $ "command failed: " <> show resultStatus

@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, RankNTypes #-}
 
 module CoinMetrics.Export.Storage
   ( ExportStorage(..)
@@ -40,6 +40,8 @@ data ExportStorageOptions a = ExportStorageOptions
   , eso_upsert :: !Bool
   }
 
-newtype ExportStorageParams = ExportStorageParams
-  { esp_destination :: String
+data ExportStorageParams = ExportStorageParams
+  { esp_destination :: !String
+  -- | Function to wrap operations, for time measuring/etc
+  , esp_wrapOperation :: !(forall a. IO a -> IO a)
   }

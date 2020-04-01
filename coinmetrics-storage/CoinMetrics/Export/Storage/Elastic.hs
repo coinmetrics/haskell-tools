@@ -26,7 +26,8 @@ instance ExportStorage ElasticExportStorage where
     , eso_primaryField = primaryField
     }) ExportStorageParams
     { esp_destination = destination
-    } = Just $ do
+    , esp_wrapOperation = wrapOperation
+    } = Just $ wrapOperation $ do
     httpRequest <- H.parseRequest destination
     response <- H.responseBody <$> H.httpLbs httpRequest
       { H.method = "GET"
@@ -51,6 +52,7 @@ instance ExportStorage ElasticExportStorage where
     , eso_upsert = upsert
     }) ExportStorageParams
     { esp_destination = destination
+    , esp_wrapOperation = wrapOperation
     } packs = do
     httpRequest <- H.parseRequest destination
     let
@@ -71,7 +73,7 @@ instance ExportStorage ElasticExportStorage where
               else [block]
           exportPack (i + 1) packToRetry
         else fail "too many retries when exporting to ElasticSearch"
-    mapM_ (exportPack 0) packs
+    mapM_ (wrapOperation . exportPack 0) packs
 
 newtype ElasticFileExportStorage a = ElasticFileExportStorage (ExportStorageOptions a)
 

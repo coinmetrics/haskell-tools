@@ -29,6 +29,7 @@ import qualified Network.Connection as NC
 import qualified Network.HTTP.Client as H
 import qualified Network.HTTP.Client.TLS as H
 import qualified Options.Applicative as O
+import qualified Prometheus as P
 import System.Directory
 import System.IO
 import System.IO.Unsafe
@@ -43,6 +44,7 @@ import CoinMetrics.Export.Storage.Postgres
 import CoinMetrics.Export.Storage.PostgresFile
 import CoinMetrics.Export.Storage.RabbitMQ
 import CoinMetrics.Iota
+import CoinMetrics.Prometheus
 import Hanalytics.Schema
 import Hanalytics.Schema.BigQuery
 import Hanalytics.Schema.Postgres
@@ -121,6 +123,7 @@ main = do
               <> O.metavar "REQUEST_TIMEOUT"
               <> O.help "Timeout for requests to full nodes"
               )
+            <*> optionPrometheus
           )) (O.fullDesc <> O.progDesc "Export blockchain")
         )
       <> O.command "export-iota"
@@ -311,6 +314,7 @@ data OptionCommand
     , options_ignoreMissingBlocks :: !Bool
     , options_pollDelay :: !Int
     , options_requestTimeout :: !Int
+    , options_prometheus :: !OptionPrometheus
     }
   | OptionExportIotaCommand
     { options_apiUrl :: !String
@@ -371,6 +375,7 @@ run Options
     , options_ignoreMissingBlocks = ignoreMissingBlocks
     , options_pollDelay = pollDelay
     , options_requestTimeout = requestTimeout
+    , options_prometheus = prometheusOption
     } -> do
     -- get blockchain info by name
     SomeBlockChainInfo BlockChainInfo
@@ -437,6 +442,9 @@ run Options
 
     let endBlock = if maybeEndBlock == 0 then defaultEndBlock else maybeEndBlock
 
+    -- start prometheus metrics server if requested
+    forkPrometheusMetricsServer prometheusOption
+
     -- simple multithreaded pipeline
     let queueSize = apisCount * threadsCount * 2
     blockIndexQueue <- newTBQueueIO $ fromIntegral queueSize -- queue of (index, nextIndex) items
@@ -459,7 +467,7 @@ run Options
       forM_ (zip blockchains blockchainsLimitVars) $ \(blockchain, blockchainLimitVar) -> forkIO $ let
         step = do
           -- determine current (known) block index
-          eitherCurrentBlockIndex <- try $ getCurrentBlockHeight blockchain
+          eitherCurrentBlockIndex <- try $ measureTime prometheusGetCurrentBlockHeightLatencyMetric $ getCurrentBlockHeight blockchain
           case eitherCurrentBlockIndex of
             Right currentBlockIndex -> do
               -- insert indices up to this index minus offset
@@ -506,7 +514,7 @@ run Options
           case maybeBlockIndex of
             Just (blockIndex, nextBlockIndex) -> do
               -- get block from blockchain
-              eitherBlock <- try $ getBlockByHeight blockchain blockIndex
+              eitherBlock <- try $ measureTime prometheusGetBlockLatencyMetric $ getBlockByHeight blockchain blockIndex
               case eitherBlock of
                 Right block ->
                   -- insert block into block queue ensuring order
@@ -852,6 +860,7 @@ initContinuingOutputStorages outputStorages@OutputStorages
     } -> do
     getBeginBlockFunc <- maybe (fail "output storage does not support getting max block") return $ getExportStorageMaxBlock storage ExportStorageParams
       { esp_destination = destFunc defaultBeginBlock
+      , esp_wrapOperation = measureTime prometheusExportGetMaxBlockLatencyMetric
       }
     return $ maybe defaultBeginBlock (max defaultBeginBlock . (+ 1)) <$> getBeginBlockFunc
   beginBlocks <- sequence getBeginBlockFuncs
@@ -898,6 +907,7 @@ writeToOutputStorages OutputStorages
         destination = destFunc fileBeginBlock
         storageParams = ExportStorageParams
           { esp_destination = destination
+          , esp_wrapOperation = measureTime prometheusExportPackLatencyMetric
           }
       if flat
         then writeExportStorageSomeBlocks storage storageParams $ map flattenPack packs
@@ -932,3 +942,31 @@ prepare :: IO ()
 prepare = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
+
+{-# NOINLINE prometheusGetCurrentBlockHeightLatencyMetric #-}
+prometheusGetCurrentBlockHeightLatencyMetric :: P.Histogram
+prometheusGetCurrentBlockHeightLatencyMetric = P.unsafeRegister $ P.histogram P.Info
+  { P.metricName = "haskell_tools_get_current_block_height_latency"
+  , P.metricHelp = ""
+  } P.defaultBuckets
+
+{-# NOINLINE prometheusGetBlockLatencyMetric #-}
+prometheusGetBlockLatencyMetric :: P.Histogram
+prometheusGetBlockLatencyMetric = P.unsafeRegister $ P.histogram P.Info
+  { P.metricName = "haskell_tools_get_block_latency"
+  , P.metricHelp = ""
+  } P.defaultBuckets
+
+{-# NOINLINE prometheusExportGetMaxBlockLatencyMetric #-}
+prometheusExportGetMaxBlockLatencyMetric :: P.Histogram
+prometheusExportGetMaxBlockLatencyMetric = P.unsafeRegister $ P.histogram P.Info
+  { P.metricName = "haskell_tools_export_get_max_block_latency"
+  , P.metricHelp = ""
+  } P.defaultBuckets
+
+{-# NOINLINE prometheusExportPackLatencyMetric #-}
+prometheusExportPackLatencyMetric :: P.Histogram
+prometheusExportPackLatencyMetric = P.unsafeRegister $ P.histogram P.Info
+  { P.metricName = "haskell_tools_export_pack_latency"
+  , P.metricHelp = ""
+  } P.defaultBuckets

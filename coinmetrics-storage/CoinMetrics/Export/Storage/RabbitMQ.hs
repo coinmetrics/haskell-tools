@@ -19,13 +19,16 @@ newtype RabbitMQExportStorage a = RabbitMQExportStorage (ExportStorageOptions a)
 
 instance ExportStorage RabbitMQExportStorage where
   initExportStorage = return . RabbitMQExportStorage
-  writeExportStorageSomeBlocks (RabbitMQExportStorage ExportStorageOptions{..}) params blocks = do
+  writeExportStorageSomeBlocks (RabbitMQExportStorage ExportStorageOptions{..}) ExportStorageParams
+    { esp_destination = destination
+    , esp_wrapOperation = wrapOperation
+    } blocks = do
     when (length queueExchange < 2) cantGetNames
     let queueName = queueExchange !! 0
         exchangeName = queueExchange !! 1
     mapM_ (handleBlock queueName exchangeName) blocks
     where
-      handleBlock queueName exchangeName someBlocks = do
+      handleBlock queueName exchangeName someBlocks = wrapOperation $ do
         let encoded = (\(SomeBlocks b) -> J.encode b) <$> someBlocks
             connect = connectToBroker connOpts
             mkMessage block = AMQP.newMsg { AMQP.msgBody = block,  AMQP.msgDeliveryMode = Just AMQP.Persistent}
@@ -39,7 +42,7 @@ instance ExportStorage RabbitMQExportStorage where
               mapM_ (AMQP.publishMsg chan exchangeName "export-block" . mkMessage) encoded
         bracket connect (uncurry close) (uncurry send)
       cantGetNames = error "Can't get queue and exchange name"
-      connOpts =  parseConnectionOpts . T.pack . esp_destination $ params
+      connOpts =  parseConnectionOpts $ T.pack destination
       queueExchange = maybe cantGetNames (T.splitOn ":") (listToMaybe eso_tables)
 
 -- format is: amqp://user:pass@host:10000/vhost

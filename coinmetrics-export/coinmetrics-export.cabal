@@ -37,6 +37,7 @@ executable coinmetrics-export
     , optparse-applicative
     , postgresql-libpq
     , process
+    , prometheus-client
     , stm
     , text
     , unordered-containers
