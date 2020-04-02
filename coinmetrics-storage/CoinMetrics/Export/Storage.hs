@@ -51,5 +51,5 @@ data ExportStorageParams = ExportStorageParams
 -- | Return pack only when it's complete. Does not evaluate items.
 evaluatePack :: [a] -> IO [a]
 evaluatePack pack = evaluate $ f pack where
-  f (_:xs) = f xs
+  f (x:xs) = x `seq` f xs
   f [] = pack
