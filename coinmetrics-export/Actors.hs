@@ -58,7 +58,7 @@ topChainExplorer endBlock globalM (nodeM, blockchain) = do
           SetLocalTop limit `sendSTM` nodeM
           SetGlobalTop limit `sendSTM` globalM
       Left (SomeException err) -> print err
-    threadDelay 10000000
+    threadDelay 1000000
 
 nodeManager :: Inbox NodeMsg -> IO ()
 nodeManager nodeI = do
@@ -297,4 +297,4 @@ blockHashExporterSingle ::
   -> IO ()
 blockHashExporterSingle blockchains isBlockStored writer _ = forever $ do
   mapM_ (exploreBlockchain isBlockStored writer) blockchains
-  threadDelay 10000000 -- 10 secs
+  threadDelay 1000000 -- 1 sec
