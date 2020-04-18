@@ -17,6 +17,7 @@ import qualified Data.HashMap.Lazy as HML
 import Data.Maybe
 import Data.Int
 import Data.Proxy
+import Data.Scientific
 import qualified Data.Text.Encoding as T
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
@@ -77,7 +78,7 @@ instance J.FromJSON MoneroBlockWrapper where
 data MoneroTransaction = MoneroTransaction
   { mt_hash :: !(Maybe HexString)
   , mt_version :: {-# UNPACK #-} !Int64
-  , mt_unlock_time :: {-# UNPACK #-} !Int64
+  , mt_unlock_time :: !Scientific
   , mt_vin :: !(V.Vector MoneroTransactionInput)
   , mt_vout :: !(V.Vector MoneroTransactionOutput)
   , mt_extra :: {-# UNPACK #-} !HexString

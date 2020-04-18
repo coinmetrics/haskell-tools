@@ -20,6 +20,7 @@ library
     , bytestring
     , coinmetrics
     , hanalytics-base
+    , scientific
     , text
     , time
     , unordered-containers
