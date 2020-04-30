@@ -93,10 +93,10 @@ run Options
         }
 
     -- init output storages and begin block
-    (outputStorages, _) <- do
+    outputStorages <- do
       outputStorages <- initOutputStorages httpSecureManager output blockchainType hashFieldName flattenSuffixes
       let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
-      initContinuingOutputStorages outputStorages specifiedBeginBlock
+      initRealtimeOutputStorages outputStorages specifiedBeginBlock
 
     let subChainWriter = writeToOutputStorages outputStorages flattenPack
     let isBlockSaved = head $ map os_isBlockStored $ oss_storages outputStorages

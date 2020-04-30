@@ -9,6 +9,7 @@ module Options
   , OutputStorages(..)
   , initOutputStorages
   , initContinuingOutputStorages
+  , initRealtimeOutputStorages
   , writeToOutputStorages
   , logStrLn
   , logPrint
@@ -222,6 +223,21 @@ initContinuingOutputStorages outputStorages@OutputStorages
       }
     , beginBlock
     )
+
+initRealtimeOutputStorages :: OutputStorages -> BlockHeight -> IO OutputStorages
+initRealtimeOutputStorages outputStorages@OutputStorages
+  { oss_storages = storages
+  } defaultBeginBlock = do
+  isBlockStoredFuncs <- forM storages $ \OutputStorage
+    { os_storage = SomeExportStorage storage
+    , os_destFunc = destFunc
+    } -> maybe (fail "output storage does not support isBlockStored") return $ isBlockStored storage ExportStorageParams
+           { esp_destination = destFunc defaultBeginBlock }
+  return outputStorages
+    { oss_storages = zipWith (\storage iBS -> storage
+      { os_isBlockStored = iBS
+      }) storages isBlockStoredFuncs
+    }
 
 writeToOutputStorages :: (Schemable a, A.ToAvro a, ToPostgresText a, J.ToJSON a) => OutputStorages -> ([a] -> [SomeBlocks]) -> BlockHeight -> [a] -> IO ()
 writeToOutputStorages OutputStorages
