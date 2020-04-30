@@ -45,7 +45,6 @@ run Options
       , bci_defaultApiUrls = defaultApiUrls
       , bci_defaultBeginBlock = defaultBeginBlock
       , bci_defaultEndBlock = _
-      , bci_heightFieldName = heightFieldName
       , bci_hashFieldName = hashFieldName
       , bci_flattenSuffixes = flattenSuffixes
       , bci_flattenPack = flattenPack
@@ -95,7 +94,7 @@ run Options
 
     -- init output storages and begin block
     (outputStorages, _) <- do
-      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName hashFieldName flattenSuffixes
+      outputStorages <- initOutputStorages httpSecureManager output blockchainType hashFieldName flattenSuffixes
       let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
       initContinuingOutputStorages outputStorages specifiedBeginBlock
 

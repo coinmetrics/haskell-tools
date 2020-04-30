@@ -109,7 +109,7 @@ data OutputStorages = OutputStorages
   , oss_flat     :: !Bool
   }
 
-initOutputStorages :: H.Manager -> Output -> T.Text -> T.Text ->  T.Text -> [T.Text] -> IO OutputStorages
+initOutputStorages :: H.Manager -> Output -> T.Text ->  T.Text -> [T.Text] -> IO OutputStorages
 initOutputStorages httpManager Output
   { output_avroFile = maybeOutputAvroFile
   , output_postgresFile = maybeOutputPostgresFile
@@ -126,7 +126,7 @@ initOutputStorages httpManager Output
   , output_fileExec = maybeFileExec
   , output_upsert = upsert
   , output_flat = flat
-  } defaultTableName primaryField hashField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
+  } defaultTableName primaryField flattenSuffixes = mkOutputStorages . map mkOutputStorage . concat <$> sequence
   [ case maybeOutputAvroFile of
     Just outputAvroFile -> initStorage (Proxy @AvroFileExportStorage) mempty (mkFileDestFunc outputAvroFile)
     Nothing -> return []
@@ -158,7 +158,6 @@ initOutputStorages httpManager Output
             then map ((table <> "_") <>) flattenSuffixes
             else [table]
           , eso_primaryField = primaryField
-          , eso_hashField = hashField
           , eso_upsert = upsert
           }
         return [(SomeExportStorage storage, destFunc)]

@@ -49,23 +49,20 @@ instance ExportStorage PostgresExportStorage where
   isBlockStored (PostgresExportStorage ExportStorageOptions
     { eso_tables = (head -> table)
     , eso_primaryField = primaryField
-    , eso_hashField = hashField
     }) ExportStorageParams
     { esp_destination = destination
     } = Just isStored
     where 
-      toBool :: [PQS.Only (Maybe Integer)] -> Bool
+      toBool :: [PQS.Only Integer] -> Bool
       toBool [] = False
-      toBool xs = isJust $ PQS.fromOnly $ head xs
+      toBool xs = ( > 0) $ PQS.fromOnly $ head xs
       isStored :: BlockHash -> IO Bool
       isStored blockHash =
         withDB destination $ \connection -> do
-          let query = "SELECT \""
-                    <> TL.fromText primaryField
-                    <> "\" FROM  \""
+          let query = "SELECT COUNT(*) FROM \""
                     <> TL.fromText table
                     <> "\" WHERE \""
-                    <> TL.fromText hashField
+                    <> TL.fromText primaryField
                     <> "\"=?"
           let hash = PQST.Binary $ DBS.fromShort $ unHexString blockHash
           result <- PQS.query connection

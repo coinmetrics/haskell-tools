@@ -70,7 +70,6 @@ run Options
       , bci_defaultBeginBlock = defaultBeginBlock
       , bci_defaultEndBlock = defaultEndBlock
       , bci_heightFieldName = heightFieldName
-      , bci_hashFieldName = hashFieldName
       , bci_flattenSuffixes = flattenSuffixes
       , bci_flattenPack = flattenPack
       } <- maybe (fail "wrong blockchain type") return $ getSomeBlockChainInfo blockchainType
@@ -119,7 +118,7 @@ run Options
 
     -- init output storages and begin block
     (outputStorages, beginBlock) <- do
-      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName hashFieldName flattenSuffixes
+      outputStorages <- initOutputStorages httpSecureManager output blockchainType heightFieldName flattenSuffixes
       let specifiedBeginBlock = if maybeBeginBlock >= 0 then maybeBeginBlock else defaultBeginBlock
       if continue
         then initContinuingOutputStorages outputStorages specifiedBeginBlock
@@ -258,7 +257,7 @@ run Options
     httpRequest <- H.parseRequest apiUrl
     let iota = newIota httpManager httpRequest
 
-    outputStorages <- initOutputStorages httpManager output "iota" "hash" "hash" []
+    outputStorages <- initOutputStorages httpManager output "iota" "hash" []
 
     -- simple multithreaded pipeline
     hashQueue <- newTQueueIO

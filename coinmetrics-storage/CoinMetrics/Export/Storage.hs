@@ -39,7 +39,6 @@ data ExportStorageOptions = ExportStorageOptions
   { eso_httpManager :: !H.Manager
   , eso_tables :: [T.Text]
   , eso_primaryField :: !T.Text
-  , eso_hashField :: !T.Text
   , eso_upsert :: !Bool
   }
 
