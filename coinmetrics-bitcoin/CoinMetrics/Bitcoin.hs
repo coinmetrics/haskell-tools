@@ -42,7 +42,7 @@ data BitcoinBlock = BitcoinBlock
   , bb_time :: {-# UNPACK #-} !Int64
   , bb_nonce :: {-# UNPACK #-} !Int64
   , bb_difficulty :: {-# UNPACK #-} !Double
-  , bb_prevHash :: {-# UNPACK #-} !HexString
+  , bb_prevHash :: !(Maybe HexString)
   }
 
 instance HasBlockHeader BitcoinBlock where
@@ -54,7 +54,7 @@ instance HasBlockHeader BitcoinBlock where
     } = BlockHeader
     { bh_height = height
     , bh_hash = hash
-    , bh_prevHash = Just prevHash
+    , bh_prevHash = prevHash
     , bh_timestamp = posixSecondsToUTCTime $ fromIntegral time
     }
 
@@ -74,7 +74,7 @@ instance J.FromJSON BitcoinBlockWrapper where
     <*> (fields J..: "time")
     <*> (parseNonce =<< fields J..: "nonce")
     <*> (fields J..: "difficulty")
-    <*> (fields J..: "previousblockhash")
+    <*> (fields J..:? "previousblockhash")
 
 data BitcoinBlockHeader = BitcoinBlockHeader
   { bbh_hash :: {-# UNPACK #-} !HexString
