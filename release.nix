@@ -2,7 +2,7 @@
 }:
 let
   package = import ./default.nix {
-    pkgs = nixpkgs;
+    inherit nixpkgs;
   };
 
   image = package.image {};
