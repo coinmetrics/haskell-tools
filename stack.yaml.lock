@@ -19,6 +19,13 @@ packages:
   original:
     hackage: diskhash-0.0.4.0
 - completed:
+    hackage: avro-0.4.7.0@sha256:22685c55833bee1dbb08e93a1cab5c866254d8c877a0c0ad667cbffa1972b9d8,12403
+    pantry-tree:
+      size: 6566
+      sha256: 86dd3c331759e2dc56f623571e2387a82c775c7a2f246c07c6e256d578f2db56
+  original:
+    hackage: avro-0.4.7.0
+- completed:
     subdir: hanalytics-avro
     name: hanalytics-avro
     version: 0.1.0.0
@@ -72,7 +79,7 @@ packages:
     commit: dbe294c4c1524268683764c3cd3ec947105359c9
 snapshots:
 - completed:
-    size: 491372
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/15/2.yaml
-    sha256: a98d091d911606d0d8adccbeb811b81bbd8cc2d888f99ef9e273350e8e9692a8
-  original: lts-15.2
+    size: 531674
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/16/2.yaml
+    sha256: 4b08fb9338ca297de7ade8318f4be1216f14dff8c0426c001fb7886ee88cb84a
+  original: lts-16.2

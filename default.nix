@@ -40,6 +40,7 @@ rec {
         hanalytics-bigquery = "${hanalytics}/hanalytics-bigquery";
         hanalytics-postgres = "${hanalytics}/hanalytics-postgres";
 
+        avro = "0.4.7.0";
         diskhash = "0.0.4.0";
       };
 
