@@ -124,19 +124,19 @@ struct JsonArchive
         stream << "\\\\";
         break;
       case '\b':
-        stream << "\\\b";
+        stream << "\\b";
         break;
       case '\f':
-        stream << "\\\f";
+        stream << "\\f";
         break;
       case '\n':
-        stream << "\\\n";
+        stream << "\\n";
         break;
       case '\r':
-        stream << "\\\r";
+        stream << "\\r";
         break;
       case '\t':
-        stream << "\\\t";
+        stream << "\\t";
         break;
       default:
         if(c >= '\x00' && c <= '\x1f')
