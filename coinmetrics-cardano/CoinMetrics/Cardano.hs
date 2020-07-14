@@ -111,8 +111,8 @@ instance J.FromJSON CardanoTransactionWrapper where
 data CardanoInput = CardanoInput
   { ci_address :: !T.Text
   , ci_value :: !Integer
-  , ci_txid :: !(Maybe HexString)
-  , ci_output :: !(Maybe Int64)
+  , ci_txid :: !HexString
+  , ci_output :: !Int64
   }
 
 newtype CardanoInputWrapper = CardanoInputWrapper
@@ -120,20 +120,11 @@ newtype CardanoInputWrapper = CardanoInputWrapper
   }
 
 instance J.FromJSON CardanoInputWrapper where
-  parseJSON = J.withArray "cardano input" $ \fields -> fmap CardanoInputWrapper $ case V.length fields of
-    -- official node
-    2 -> CardanoInput
-      <$> J.parseJSON (fields V.! 0)
-      <*> decodeValue (fields V.! 1)
-      <*> return Nothing
-      <*> return Nothing
-    -- forked node
-    4 -> CardanoInput
-      <$> J.parseJSON (fields V.! 2)
-      <*> decodeValue (fields V.! 3)
-      <*> (Just <$> J.parseJSON (fields V.! 0))
-      <*> (Just <$> J.parseJSON (fields V.! 1))
-    _ -> fail "wrong cardano input array"
+  parseJSON = J.withObject "cardano input" $ \fields -> fmap CardanoInputWrapper $ CardanoInput
+    <$> (fields J..: "ctaAddress")
+    <*> (decodeValue =<< fields J..: "ctaAmount")
+    <*> (fields J..: "ctaTxHash")
+    <*> (fields J..: "ctaTxIndex")
 
 data CardanoOutput = CardanoOutput
   { co_address :: !T.Text
@@ -145,11 +136,9 @@ newtype CardanoOutputWrapper = CardanoOutputWrapper
   }
 
 instance J.FromJSON CardanoOutputWrapper where
-  parseJSON = J.withArray "cardano output" $ \fields -> do
-    unless (V.length fields == 2) $ fail "wrong cardano output array"
-    fmap CardanoOutputWrapper $ CardanoOutput
-      <$> J.parseJSON (fields V.! 0)
-      <*> decodeValue (fields V.! 1)
+  parseJSON = J.withObject "cardano output" $ \fields -> fmap CardanoOutputWrapper $ CardanoOutput
+    <$> (fields J..: "ctaAddress")
+    <*> (decodeValue =<< fields J..: "ctaAmount")
 
 decodeValue :: J.Value -> J.Parser Integer
 decodeValue = J.withObject "cardano value" $ \fields -> read . T.unpack <$> fields J..: "getCoin"
@@ -209,7 +198,12 @@ instance BlockChain Cardano where
       \((V.! 1) -> blocksObjectsObject) ->
       J.withArray "blocks" (J.parseJSON . reverseGet (fromIntegral blockIndexOnPage)) blocksObjectsObject
     blockHashText <- either fail return $ J.parseEither (J..: "cbeBlkHash") blockObject
-    blockTxsBriefObjects <- either fail return =<< cardanoRequest cardano ("/api/blocks/txs/" <> blockHashText) [("limit", Just "1000000000000000000")]
+    blockTxsBriefObjects <- either (\err ->
+      if err == "No block found"
+        then return V.empty -- working around https://github.com/input-output-hk/cardano-rest/issues/41
+        else fail err
+      ) return
+      =<< cardanoRequest cardano ("/api/blocks/txs/" <> blockHashText) [("limit", Just "1000000000000000000")]
     blockTxs <- forM blockTxsBriefObjects $ \txBriefObject -> do
       txIdText <- either fail return $ J.parseEither (J..: "ctbId") txBriefObject
       txInputs <- either fail return $ J.parseEither (J..: "ctbInputs") txBriefObject
