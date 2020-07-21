@@ -108,6 +108,12 @@ main = run =<< O.execParser parser where
           )
         )
       )
+    <*> O.option O.auto
+      (  O.long "request-timeout"
+      <> O.value 60 <> O.showDefault
+      <> O.metavar "REQUEST_TIMEOUT"
+      <> O.help "Timeout for requests to full nodes"
+      )
 
 data Options = Options
   { options_host :: !String
@@ -118,6 +124,7 @@ data Options = Options
   , options_upMetric :: !T.Text
   , options_labels :: [T.Text]
   , options_blockchains :: [OptionBlockchain]
+  , options_requestTimeout :: !Int
   }
 
 data OptionBlockchain = OptionBlockchain
@@ -143,15 +150,18 @@ run Options
   , options_upMetric = upMetricName
   , options_labels = parseLabels -> globalLabels
   , options_blockchains = blockchains
+  , options_requestTimeout = requestTimeout
   } = do
   -- init http managers
-  httpManager <- H.newTlsManagerWith H.tlsManagerSettings
+  httpSecureManager <- H.newTlsManagerWith H.tlsManagerSettings
     { H.managerConnCount = length blockchains * 2 + 2
+    , H.managerResponseTimeout = H.responseTimeoutMicro $ requestTimeout * 1000000
     }
   httpInsecureManager <- H.newTlsManagerWith (H.mkManagerSettings def
     { NC.settingDisableCertificateValidation = True
     } Nothing)
     { H.managerConnCount = length blockchains * 2 + 2
+    , H.managerResponseTimeout = H.responseTimeoutMicro $ requestTimeout * 1000000
     }
 
   -- run continuous updates of metrics
@@ -205,7 +215,7 @@ run Options
             then H.applyBasicAuth (fromString apiUrlUserName) (fromString apiUrlPassword) httpRequest
             else httpRequest
         initBlockChain BlockChainParams
-          { bcp_httpManager = if apiUrlInsecure then httpInsecureManager else httpManager
+          { bcp_httpManager = if apiUrlInsecure then httpInsecureManager else httpSecureManager
           , bcp_httpRequest = httpRequest
           , bcp_trace = False
           , bcp_excludeUnaccountedActions = False
