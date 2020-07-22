@@ -23,7 +23,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Short as BS
 import qualified Data.ByteString.Unsafe as B
-import qualified Data.Text.Foreign as T
+import qualified Data.Text.Encoding.Error as T
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
@@ -326,7 +326,10 @@ productionNetworkId = unsafePerformIO $ hash . fromString . fromMaybe "Public Gl
     hash networkId = BA.convert (C.hash (networkId :: B.ByteString) :: C.Digest C.SHA256)
 
 export_encodeJson :: Ptr CChar -> CSize -> IO (StablePtr J.Value)
-export_encodeJson ptr len = either fail newStablePtr . J.eitherDecode . BL.fromStrict . T.encodeUtf8 =<< T.peekCStringLen (ptr, fromIntegral len)
+export_encodeJson ptr len =
+  either fail newStablePtr . J.eitherDecode' . BL.fromStrict
+  . T.encodeUtf8 . T.decodeUtf8With T.lenientDecode
+  =<< B.unsafePackCStringLen (ptr, fromIntegral len)
 
 export_hash :: Ptr CChar -> CSize -> IO (StablePtr HexString)
 export_hash ptr len = do
