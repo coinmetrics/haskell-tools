@@ -444,6 +444,8 @@ instance BlockChain Ethereum where
       transactionHash <- either fail return $ J.parseEither (J..: "hash") rawTransaction
       receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" ([transactionHash] :: V.Vector J.Value)
       either fail return $ flip J.parseEither receiptFields $ \receiptFields' -> do
+        transactionBlockHash <- decode0xHexBytes =<< receiptFields' J..: "blockHash"
+        unless (blockHash == transactionBlockHash) $ fail "wrong transaction hash (possibly due to reorg)"
         gasUsed <- receiptFields' J..: "gasUsed"
         contractAddress <- receiptFields' J..: "contractAddress"
         logs <- receiptFields' J..: "logs"
