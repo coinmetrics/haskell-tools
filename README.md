@@ -49,18 +49,28 @@ docker run -it --rm --net host coinmetrics/haskell-tools coinmetrics-export <arg
 
 ## Building from source
 
+Building with Nix is recommended, because dependencies are fetched and built automatically.
+
 ### With Nix
 
 ```bash
 nix build -Lf ./release.nix bins
 ```
 
+### With Stack + Nix
+
+```bash
+stack build --nix
+```
+
 ### With Stack
 
-Get [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
+```bash
+stack build
+```
 
-Run `stack build --install-ghc --copy-bins --local-bin-path <path for executables>`. Executables will be built and placed by specified path.
+Required dependencies: `zlib`, `libpq`.
 
-Note: Stellar support requires additional dependencies ([xdrpp](https://github.com/xdrpp/xdrpp) and Stellar XDR headers built with XDR compiler). Without them the build will fail by default. You can either disable Stellar support with Stack command-line option `--flag coinmetrics-all-blockchains:-stellar`, or build with Nix which fetches and builds all dependencies automatically.
+Stellar export also requires [xdrpp](https://github.com/xdrpp/xdrpp) and Stellar XDR headers built with XDR compiler, which may be hard to build manually. By default Stellar support is enabled, so build will fail without them. You can disable Stellar support if you don't need it: `stack build --flag coinmetrics-all-blockchains:-stellar`. If you do need it, please use one of the Nix build methods above (with Stack or without).
 
 The code is only tested on Linux (but maybe works on other OSes too).

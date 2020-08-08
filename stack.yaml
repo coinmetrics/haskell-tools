@@ -35,3 +35,6 @@ extra-deps:
   - hanalytics-base
   - hanalytics-bigquery
   - hanalytics-postgres
+
+nix:
+  shell-file: stack-shell.nix
