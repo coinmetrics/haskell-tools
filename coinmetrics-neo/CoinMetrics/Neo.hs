@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Neo
   ( Neo(..)
@@ -9,6 +9,7 @@ module CoinMetrics.Neo
   ) where
 
 import qualified Data.Aeson as J
+import qualified Data.Aeson.Types as J
 import Data.Int
 import Data.Proxy
 import Data.Scientific
@@ -144,6 +145,12 @@ instance BlockChain Neo where
         ]
       in f . mconcat . map flatten
     }
+
+  getBlockChainNodeInfo (Neo jsonRpc) = do
+    (T.splitOn "/" -> [_, T.splitOn ":" -> [_, version], _]) <- either fail return . J.parseEither (J..: "useragent") =<< jsonRpcRequest jsonRpc "getversion" ([] :: V.Vector J.Value)
+    return BlockChainNodeInfo
+      { bcni_version = version
+      }
 
   getCurrentBlockHeight (Neo jsonRpc) = (+ (-1)) <$> jsonRpcRequest jsonRpc "getblockcount" ([] :: V.Vector J.Value)
 
