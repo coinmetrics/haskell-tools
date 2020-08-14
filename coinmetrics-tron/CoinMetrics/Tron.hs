@@ -188,6 +188,18 @@ instance BlockChain Tron where
       in f . mconcat . map flatten
     }
 
+  getBlockChainNodeInfo Tron
+    { tron_httpManager = httpManager
+    , tron_httpRequest = httpRequest
+    } = do
+    response <- tryWithRepeat $ H.httpLbs httpRequest
+      { H.path = "/wallet/getnodeinfo"
+      } httpManager
+    version <- either fail return $ J.parseEither ((J..: "codeVersion") <=< (J..: "configNodeInfo")) =<< J.eitherDecode' (H.responseBody response)
+    return BlockChainNodeInfo
+      { bcni_version = version
+      }
+
   getCurrentBlockHeight Tron
     { tron_httpManager = httpManager
     , tron_httpRequest = httpRequest
