@@ -173,11 +173,17 @@ instance BlockChain Monero where
       in f . mconcat . map flatten
     }
 
+  getBlockChainNodeInfo (Monero jsonRpc) = do
+    version <- either fail return . J.parseEither (J..: "version") =<< jsonRpcRequest jsonRpc "get_info" J.Null
+    return BlockChainNodeInfo
+      { bcni_version = version
+      }
+
   getCurrentBlockHeight (Monero jsonRpc) =
-    either fail (return . (+ (-1))) . J.parseEither (J..: "count") =<< jsonRpcRequest jsonRpc "getblockcount" J.Null
+    either fail (return . (+ (-1))) . J.parseEither (J..: "count") =<< jsonRpcRequest jsonRpc "get_block_count" J.Null
 
   getBlockByHeight (Monero jsonRpc) blockHeight = do
-    blockInfo <- jsonRpcRequest jsonRpc "getblock" (J.Object [("height", J.toJSON blockHeight)])
+    blockInfo <- jsonRpcRequest jsonRpc "get_block" (J.Object [("height", J.toJSON blockHeight)])
     J.Object blockHeaderFields <- either fail return $ J.parseEither (J..: "block_header") blockInfo
     Just (J.Bool False) <- return $ HML.lookup "orphan_status" blockHeaderFields
     Just blockHash <- return $ HML.lookup "hash" blockHeaderFields
@@ -189,7 +195,7 @@ instance BlockChain Monero where
     transactions <- if V.null txHashes
       then return V.empty
       else do
-        transactionsJsons <- either fail return . J.parseEither (J..: "txs_as_json") =<< nonJsonRpcRequest jsonRpc "/gettransactions" (J.Object [("txs_hashes", J.Array txHashes), ("decode_as_json", J.Bool True)])
+        transactionsJsons <- either fail return . J.parseEither (J..: "txs_as_json") =<< nonJsonRpcRequest jsonRpc "/get_transactions" (J.Object [("txs_hashes", J.Array txHashes), ("decode_as_json", J.Bool True)])
         V.forM (V.zip txHashes transactionsJsons) $ \(txHash, transactionJson) -> do
           transactionFields <- either fail return $ J.eitherDecode' $ BL.fromStrict $ T.encodeUtf8 transactionJson
           return $ J.Object $ HML.insert "hash" txHash transactionFields
