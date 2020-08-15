@@ -173,6 +173,12 @@ instance BlockChain Nem where
       "CREATE TABLE \"nem\" OF \"NemBlock\" (PRIMARY KEY (\"height\"));"
     }
 
+  getBlockChainNodeInfo nem = do
+    version <- either fail return . J.parseEither ((J..: "version") <=< (J..: "metaData")) =<< nemRequest nem "/node/info" Nothing []
+    return BlockChainNodeInfo
+      { bcni_version = version
+      }
+
   getCurrentBlockHeight nem = tryWithRepeat $ either fail return
     . J.parseEither (J..: "height")
     =<< nemRequest nem "/chain/height" Nothing []
