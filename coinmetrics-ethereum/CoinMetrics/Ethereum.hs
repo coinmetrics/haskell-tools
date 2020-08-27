@@ -403,6 +403,8 @@ instance BlockChain Ethereum where
         jsonActions <- jsonRpcRequest jsonRpc "trace_block" ([encode0xHexNumber number] :: V.Vector J.Value)
         -- add valid and succeeded fields, and note transaction indices
         indexedActions <- forM jsonActions $ \jsonAction -> either fail return $ flip J.parseEither jsonAction $ J.withObject "ethereum action" $ \actionFields -> do
+          actionBlockHash <- decode0xHexBytes =<< actionFields J..: "blockHash"
+          unless (blockHash == actionBlockHash) $ fail "wrong action's block hash (possibly due to reorg)"
           let valid = not $ HML.member "error" actionFields
           succeeded <- let
             isObject = \case
@@ -445,7 +447,7 @@ instance BlockChain Ethereum where
       receiptFields <- jsonRpcRequest jsonRpc "eth_getTransactionReceipt" ([transactionHash] :: V.Vector J.Value)
       either fail return $ flip J.parseEither receiptFields $ \receiptFields' -> do
         transactionBlockHash <- decode0xHexBytes =<< receiptFields' J..: "blockHash"
-        unless (blockHash == transactionBlockHash) $ fail "wrong transaction hash (possibly due to reorg)"
+        unless (blockHash == transactionBlockHash) $ fail "wrong transaction's block hash (possibly due to reorg)"
         gasUsed <- receiptFields' J..: "gasUsed"
         contractAddress <- receiptFields' J..: "contractAddress"
         logs <- receiptFields' J..: "logs"
@@ -461,7 +463,7 @@ instance BlockChain Ethereum where
           { et_actions = V.map snd $ V.filter ((== i) . fst) blockActions
           }
     uncles <- flip V.imapM unclesHashes $ \i _uncleHash ->
-      unwrapEthereumUncleBlock <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockNumberAndIndex" ([encode0xHexNumber number, encode0xHexNumber i] :: V.Vector J.Value)
+      unwrapEthereumUncleBlock <$> jsonRpcRequest jsonRpc "eth_getUncleByBlockHashAndIndex" ([encode0xHexBytes blockHash, encode0xHexNumber i] :: V.Vector J.Value)
     block <- either fail (return . unwrapEthereumBlock) $ J.parseEither J.parseJSON $ J.Object
       $ HML.insert "transactions" (J.Array [])
       $ HML.insert "uncles" (J.Array [])
