@@ -25,10 +25,11 @@ Supported blockchains:
 * [NEM](https://nem.io/)
 * [NEO](https://neo.org/)
 * [Ripple](https://ripple.com/)
+* Generic [Rosetta API](https://www.rosetta-api.org/) (WIP)
 * [Stellar](https://www.stellar.org/)
 * Generic [Tendermint](https://tendermint.com/)
 * [Tezos](https://tezos.com/)
-* [Tron](https://tron.network/) (WIP)
+* [Tron](https://tron.network/)
 * [Waves](https://wavesplatform.com/)
 
 ## Binaries

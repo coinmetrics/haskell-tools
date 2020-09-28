@@ -46,6 +46,9 @@ import CoinMetrics.Neo
 #if defined(CM_SUPPORT_RIPPLE)
 import CoinMetrics.Ripple
 #endif
+#if defined(CM_SUPPORT_ROSETTA)
+import CoinMetrics.Rosetta
+#endif
 #if defined(CM_SUPPORT_STELLAR)
 import CoinMetrics.Stellar
 #endif
@@ -109,6 +112,10 @@ allBlockChainInfos = HM.fromList infos
 
 #if defined(CM_SUPPORT_RIPPLE)
       ("ripple",   SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Ripple)) :
+#endif
+
+#if defined(CM_SUPPORT_ROSETTA)
+      ("rosetta",   SomeBlockChainInfo $ getBlockChainInfo (Proxy :: Proxy Rosetta)) :
 #endif
 
 #if defined(CM_SUPPORT_STELLAR)

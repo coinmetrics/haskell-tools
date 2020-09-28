@@ -66,6 +66,11 @@ flag ripple
   default:             True
   manual:              True
 
+flag rosetta
+  description:         Support Rosetta
+  default:             True
+  manual:              True
+
 flag stellar
   description:         Support Stellar
   default:             True
@@ -143,6 +148,10 @@ library
   if flag(ripple)
     build-depends:       coinmetrics-ripple
     cpp-options:         -DCM_SUPPORT_RIPPLE
+
+  if flag(rosetta)
+    build-depends:       coinmetrics-rosetta
+    cpp-options:         -DCM_SUPPORT_ROSETTA
 
   if flag(stellar)
     build-depends:       coinmetrics-stellar

@@ -28,6 +28,7 @@ rec {
         coinmetrics-nem = ./coinmetrics-nem;
         coinmetrics-neo = ./coinmetrics-neo;
         coinmetrics-ripple = ./coinmetrics-ripple;
+        coinmetrics-rosetta = ./coinmetrics-rosetta;
         coinmetrics-stellar = ./coinmetrics-stellar;
         coinmetrics-storage = ./coinmetrics-storage;
         coinmetrics-tendermint = ./coinmetrics-tendermint;

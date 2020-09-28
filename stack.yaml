@@ -17,6 +17,7 @@ packages:
 - coinmetrics-nem
 - coinmetrics-neo
 - coinmetrics-ripple
+- coinmetrics-rosetta
 - coinmetrics-stellar
 - coinmetrics-storage
 - coinmetrics-tendermint
