@@ -232,6 +232,7 @@ instance BlockChain Tron where
         , H.method = "POST"
         } httpManager
       txRawInfo <- either fail return $ J.eitherDecode' (H.responseBody txRawInfoResponse)
+      when (txRawInfo == J.Object [] || txRawInfo == J.Null) $ fail "bad tx raw info"
       return transaction
         { tt_raw_info = txRawInfo
         }
