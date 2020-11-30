@@ -740,7 +740,7 @@ requestEosArchiveBlock EosArchiveClient
 
 -- | Just an arbitrary timeout (in microseconds).
 networkTimeout :: Int
-networkTimeout = 30000000
+networkTimeout = 300000000
 
 data EosArchiveException
   = EosArchiveTimeout
