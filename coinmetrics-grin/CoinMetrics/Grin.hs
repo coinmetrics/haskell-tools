@@ -1,45 +1,29 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric, OverloadedLists, OverloadedStrings, StandaloneDeriving, TemplateHaskell, TypeFamilies, ViewPatterns #-}
 
 module CoinMetrics.Grin
   ( Grin(..)
   , GrinBlock(..)
   ) where
 
-import Control.Monad
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Types as J
-import qualified Data.ByteString as B
 import Data.Int
 import Data.Proxy
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import Data.Time.Clock.POSIX
 import Data.Time.ISO8601
 import qualified Data.Vector as V
-import qualified Network.HTTP.Client as H
 
 import CoinMetrics.BlockChain
+import CoinMetrics.JsonRpc
 import CoinMetrics.Schema.Flatten
 import CoinMetrics.Schema.Util
 import CoinMetrics.Util
 import Hanalytics.Schema
 
-data Grin = Grin
-  { grin_httpManager :: !H.Manager
-  , grin_httpRequest :: !H.Request
-  }
+newtype Grin = Grin JsonRpc
 
-grinRequest :: J.FromJSON r => Grin -> T.Text -> [(B.ByteString, Maybe B.ByteString)] -> IO r
-grinRequest Grin
-  { grin_httpManager = httpManager
-  , grin_httpRequest = httpRequest
-  } path params = do
-  body <- H.responseBody <$> tryWithRepeat (H.httpLbs (H.setQueryString params httpRequest
-    { H.path = T.encodeUtf8 path
-    }) httpManager)
-  either fail return $ J.eitherDecode body
-
--- API: https://github.com/mimblewimble/grin/blob/master/doc/api/node_api.md
+-- API: https://docs.grin.mw/grin-rfcs/text/0007-node-api-v2/
 
 data GrinBlock = GrinBlock
   { gb_hash :: {-# UNPACK #-} !HexString
@@ -92,6 +76,30 @@ data GrinOutput = GrinOutput
   , go_commit :: {-# UNPACK #-} !HexString
   }
 
+data GrinVersion = GrinVersion
+  { gvBlockHeaderVersion :: {-# UNPACK #-} !Int
+  , gvNodeVersion        :: {-# UNPACK #-} !T.Text
+  }
+
+instance J.FromJSON GrinVersion where
+  parseJSON = J.withObject "grin version response" $ \response ->
+    GrinVersion <$> response J..: "block_header_version"
+                <*> response J..: "node_version"
+
+data GrinTip = GrinTip
+  { gtrHeight          :: {-# UNPACK #-} !BlockHeight
+  , gtrLastBlockPushed :: {-# UNPACK #-} !HexString
+  , gtrPrevBlockToLast :: {-# UNPACK #-} !HexString
+  , gtrTotalDifficulty :: {-# UNPACK #-} !Double
+  }
+
+instance J.FromJSON GrinTip where
+  parseJSON = J.withObject "grin tip response" $ \response ->
+    GrinTip <$> response J..: "height"
+            <*> response J..: "last_block_pushed"
+            <*> response J..: "prev_block_to_last"
+            <*> response J..: "total_difficulty"
+
 newtype GrinOutputWrapper = GrinOutputWrapper
   { unwrapGrinOutput :: GrinOutput
   }
@@ -111,6 +119,12 @@ data GrinKernel = GrinKernel
 newtype GrinKernelWrapper = GrinKernelWrapper
   { unwrapGrinKernel :: GrinKernel
   }
+
+newtype GrinRPCResponse a = GrinRPCResponse { unwrapGrinRPCResponse :: a }
+
+-- TODO Implement more graceful error handling
+instance J.FromJSON a => J.FromJSON (GrinRPCResponse a) where
+  parseJSON = J.withObject "grin RPC response" $ \response -> GrinRPCResponse <$> (J.parseJSON =<< response J..: "Ok")
 
 instance J.FromJSON GrinKernelWrapper where
   parseJSON = J.withObject "grin kernel" $ \fields -> fmap GrinKernelWrapper $ GrinKernel
@@ -134,11 +148,8 @@ instance BlockChain Grin where
     { bci_init = \BlockChainParams
       { bcp_httpManager = httpManager
       , bcp_httpRequest = httpRequest
-      } -> return Grin
-        { grin_httpManager = httpManager
-        , grin_httpRequest = httpRequest
-        }
-    , bci_defaultApiUrls = ["http://127.0.0.1:3413/"]
+      } -> return $ Grin $ newJsonRpc httpManager httpRequest Nothing
+    , bci_defaultApiUrls = ["http://127.0.0.1:3413/v2/foreign"]
     , bci_defaultBeginBlock = 0
     , bci_defaultEndBlock = -60
     , bci_heightFieldName = "height"
@@ -158,6 +169,10 @@ instance BlockChain Grin where
       in f . mconcat . map flatten
     }
 
-  getCurrentBlockHeight grin = either fail return . J.parseEither ((J..: "height") <=< (J..: "tip")) =<< grinRequest grin "/v1/status" []
+  getBlockChainNodeInfo (Grin jsonRpc) =
+    BlockChainNodeInfo . gvNodeVersion . unwrapGrinRPCResponse <$> jsonRpcRequest jsonRpc "get_version" ([] :: V.Vector J.Value)
 
-  getBlockByHeight grin blockHeight = unwrapGrinBlock <$> grinRequest grin ("/v1/blocks/" <> T.pack (show blockHeight)) []
+  getCurrentBlockHeight (Grin jsonRpc) = gtrHeight . unwrapGrinRPCResponse <$> jsonRpcRequest jsonRpc "get_tip" ([] :: V.Vector J.Value)
+
+  getBlockByHeight (Grin jsonRpc) blockHeight =
+    unwrapGrinBlock . unwrapGrinRPCResponse <$> jsonRpcRequest jsonRpc "get_block" ([J.Number $ fromIntegral blockHeight, J.Null, J.Null] :: V.Vector J.Value)
