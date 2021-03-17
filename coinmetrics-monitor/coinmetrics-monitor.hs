@@ -106,6 +106,12 @@ main = run =<< O.execParser parser where
           (  O.long "api-url-insecure"
           <> O.help "Do not validate HTTPS certificate"
           )
+        <*> O.strOption
+          (  O.long "api-flavor"
+          <> O.value "" <> O.showDefault
+          <> O.metavar "FLAVOR"
+          <> O.help "Specify flavor of API. Used to differentiate between blockchains with only minor API differences"
+          )
         )
       )
     <*> O.option O.auto
@@ -138,6 +144,7 @@ data OptionApi = OptionApi
   , optionApi_apiUrlUserName :: !String
   , optionApi_apiUrlPassword :: !String
   , optionApi_apiUrlInsecure :: !Bool
+  , optionApi_apiFlavor :: !T.Text
   }
 
 run :: Options -> IO ()
@@ -198,6 +205,7 @@ run Options
           , optionApi_apiUrlUserName = ""
           , optionApi_apiUrlPassword = ""
           , optionApi_apiUrlInsecure = False
+          , optionApi_apiFlavor = ""
           }) defaultApiUrls
         else apisByUser
 
@@ -206,6 +214,7 @@ run Options
       , optionApi_apiUrlUserName = apiUrlUserName
       , optionApi_apiUrlPassword = apiUrlPassword
       , optionApi_apiUrlInsecure = apiUrlInsecure
+      , optionApi_apiFlavor = apiFlavor
       } -> void $ forkIO $ do
       -- init blockchain
       blockChain <- do
@@ -219,6 +228,7 @@ run Options
           , bcp_httpRequest = httpRequest
           , bcp_trace = False
           , bcp_excludeUnaccountedActions = False
+          , bcp_apiFlavor = apiFlavor
           , bcp_threadsCount = 1
           }
 

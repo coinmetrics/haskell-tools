@@ -207,6 +207,12 @@ main = do
       (  O.long "api-url-insecure"
       <> O.help "Do not validate HTTPS certificate"
       )
+    <*> O.strOption
+      (  O.long "api-flavor"
+      <> O.value "" <> O.showDefault
+      <> O.metavar "FLAVOR"
+      <> O.help "Specify flavor of API. Used to differentiate between blockchains with only minor API differences"
+      )
   optionOutput = Output
     <$> O.option (O.maybeReader (Just . Just))
       (  O.long "output-avro-file"
@@ -336,6 +342,7 @@ data Api = Api
   , api_apiUrlUserName :: !String
   , api_apiUrlPassword :: !String
   , api_apiUrlInsecure :: !Bool
+  , api_apiFlavor :: !T.Text
   }
 
 data Output = Output
@@ -395,6 +402,7 @@ run Options
           , api_apiUrlUserName = ""
           , api_apiUrlPassword = ""
           , api_apiUrlInsecure = False
+          , api_apiFlavor = ""
           }) defaultApiUrls
         else apisByUser
       apisCount = length apis
@@ -418,6 +426,7 @@ run Options
       , api_apiUrlUserName = apiUrlUserName
       , api_apiUrlPassword = apiUrlPassword
       , api_apiUrlInsecure = apiUrlInsecure
+      , api_apiFlavor = apiFlavor
       } -> do
       httpRequest <- do
         httpRequest <- H.parseRequest apiUrl
@@ -429,6 +438,7 @@ run Options
         , bcp_httpRequest = httpRequest
         , bcp_trace = trace
         , bcp_excludeUnaccountedActions = excludeUnaccountedActions
+        , bcp_apiFlavor = apiFlavor
         , bcp_threadsCount = threadsCount
         }
 

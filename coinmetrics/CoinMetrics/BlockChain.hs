@@ -58,6 +58,8 @@ data BlockChainParams = BlockChainParams
   , bcp_trace :: !Bool
   -- | Exclude unaccounted actions from trace information.
   , bcp_excludeUnaccountedActions :: !Bool
+  -- | Specify API flavor. Used to when two blockchains only have minor differences in their API.
+  , bcp_apiFlavor :: !T.Text
   -- | Number of threads working with blockchain.
   , bcp_threadsCount :: {-# UNPACK #-} !Int
   }
