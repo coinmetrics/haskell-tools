@@ -33,7 +33,6 @@ data Ethereum = Ethereum
   { ethereum_jsonRpc :: !JsonRpc
   , ethereum_enableTrace :: !Bool
   , ethereum_excludeUnaccountedActions :: !Bool
-  , ethereum_classic :: !Bool
   }
 
 data EthereumBlock = EthereumBlock
@@ -274,12 +273,10 @@ instance BlockChain Ethereum where
       , bcp_httpRequest = httpRequest
       , bcp_trace = trace
       , bcp_excludeUnaccountedActions = excludeUnaccountedActions
-      , bcp_apiFlavor = apiFlavor
       } -> return Ethereum
       { ethereum_jsonRpc = newJsonRpc httpManager httpRequest Nothing
       , ethereum_enableTrace = trace
       , ethereum_excludeUnaccountedActions = excludeUnaccountedActions
-      , ethereum_classic = apiFlavor == "classic"
       }
     , bci_defaultApiUrls = ["http://127.0.0.1:8545/"]
     , bci_defaultBeginBlock = 0
@@ -307,27 +304,9 @@ instance BlockChain Ethereum where
 
   getBlockChainNodeInfo Ethereum
     { ethereum_jsonRpc = jsonRpc
-    , ethereum_classic = classic
     } = do
-    if classic then do
       version <- jsonRpcRequest jsonRpc "web3_clientVersion" ([] :: V.Vector J.Value)
-      return BlockChainNodeInfo
-        { bcni_version = version
-        }
-    else do
-      let
-        parseVersionString = J.parseEither $ \obj -> do
-          version <- obj J..: "version"
-          major <- version J..: "major"
-          minor <- version J..: "minor"
-          patch <- version J..: "patch"
-          return $ T.pack $ showsPrec 0 (major :: Int) $ '.' : (showsPrec 0 (minor :: Int) $ '.' : show (patch :: Int))
-      networkInfoJson <- jsonRpcRequest jsonRpc "parity_versionInfo" ([] :: V.Vector J.Value)
-      version <- either fail return $ parseVersionString networkInfoJson
-      return BlockChainNodeInfo
-        { bcni_version = version
-        }
-
+      return BlockChainNodeInfo { bcni_version = version }
   getCurrentBlockHeight Ethereum
     { ethereum_jsonRpc = jsonRpc
     } = do
