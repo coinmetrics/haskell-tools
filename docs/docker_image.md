@@ -4,4 +4,4 @@ These tools are used by CoinMetrics.io team for exporting data from blockchains 
 
 This image is Nix-based and built on Coin Metrics infrastructure.
 
-See full documentation here: https://github.com/coinmetrics-io/haskell-tools
+See full documentation here: https://github.com/coinmetrics/haskell-tools

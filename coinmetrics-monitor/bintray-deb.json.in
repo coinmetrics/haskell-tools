@@ -4,8 +4,8 @@
 	, "subject": "coinmetrics"
 	, "desc": "Utility monitoring blockchain nodes"
 	, "website_url": "https://coinmetrics.io/"
-	, "issue_tracker_url": "https://github.com/coinmetrics-io/haskell-tools/issues"
-	, "vcs_url": "https://github.com/coinmetrics-io/haskell-tools.git"
+	, "issue_tracker_url": "https://github.com/coinmetrics/haskell-tools/issues"
+	, "vcs_url": "https://github.com/coinmetrics/haskell-tools.git"
 	, "licenses": ["MIT"]
 	, "public_download_numbers": true
 	, "public_stats": true
