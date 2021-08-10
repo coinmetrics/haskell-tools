@@ -15,6 +15,7 @@ import Data.Int
 import Data.Maybe
 import Data.Proxy
 import qualified Data.Text as T
+import qualified Data.Text.Lazy.Encoding as TE
 import Data.Time.Clock.POSIX
 import qualified Data.Vector as V
 import qualified Network.HTTP.Client as H
@@ -220,7 +221,7 @@ instance BlockChain Tron where
         ]
       , H.method = "POST"
       } httpManager
-    block <- either fail (return . unwrapTronBlock) $ J.eitherDecode' $ H.responseBody response
+    block <- either fail (return . unwrapTronBlock) . J.eitherDecode' . TE.encodeUtf8 . TE.decodeLatin1 . H.responseBody $ response
     transactions <- forM (tb_transactions block) $ \transaction@TronTransaction
       { tt_hash = txid
       } -> do
